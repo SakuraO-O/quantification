@@ -67,28 +67,28 @@
   {
     "name": "恒生指数",
     "code": "HSI",
-    "close": 25962.73,
-    "ma10": 26272.32,
-    "ma20": 26164.12,
-    "ma60": 25908.6,
+    "close": 25675.18,
+    "ma10": 26230.25,
+    "ma20": 26139.86,
+    "ma60": 25885.98,
     "historical_high": 33484.08,
-    "drop_from_high": 22.5,
+    "drop_from_high": 23.3,
     "pe_percentile": null,
     "signals": [
       "⚠️注意下跌可能",
       "⚠️下跌趋势形成中",
-      "⚠️上涨趋势确认"
+      "⚠️下跌趋势确认"
     ]
   },
   {
     "name": "恒生科技指数",
     "code": "HSTECH",
-    "close": 4941.14,
-    "ma10": 5038.77,
-    "ma20": 4991.88,
-    "ma60": 4985.21,
+    "close": 4844.94,
+    "ma10": 5025.59,
+    "ma20": 4981.99,
+    "ma60": 4975.81,
     "historical_high": 11001.78,
-    "drop_from_high": 55.1,
+    "drop_from_high": 56.0,
     "pe_percentile": null,
     "signals": [
       "⚠️注意下跌可能",

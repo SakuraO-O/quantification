@@ -305,33 +305,57 @@ def main():
     if len(triggered_indices) > 0:
         report = f"📊指数每日监控报告 | 昨日统计日期：{yesterday_str}\n触发指数总数量：{len(triggered_indices)} 个\n\n"
         
-        if under_valuation_signals:
+        under_valuation_indices = {}
+        for info, signal in under_valuation_signals:
+            key = info['code']
+            if key not in under_valuation_indices:
+                under_valuation_indices[key] = {'info': info, 'signals': []}
+            under_valuation_indices[key]['signals'].append(signal)
+        
+        over_valuation_indices = {}
+        for info, signal in over_valuation_signals:
+            key = info['code']
+            if key not in over_valuation_indices:
+                over_valuation_indices[key] = {'info': info, 'signals': []}
+            over_valuation_indices[key]['signals'].append(signal)
+        
+        ma_trend_indices = {}
+        for info, signal in ma_trend_signals:
+            key = info['code']
+            if key not in ma_trend_indices:
+                ma_trend_indices[key] = {'info': info, 'signals': []}
+            ma_trend_indices[key]['signals'].append(signal)
+        
+        if under_valuation_indices:
             report += "📉低估击球区信号\n"
-            for info, signal in under_valuation_signals:
-                report += f"{info['name']} ({info['code']})\n"
+            for code, data in under_valuation_indices.items():
+                info = data['info']
+                report += f"{info['name']} ({code})\n"
                 report += f"收盘价：{info['close']:.2f} | 10 年 TTM PE 百分位：{info['pe_percentile']:.1f}% | 距历史高点跌幅：{info['drop_from_high']:.1f}%\n"
-                report += f"{signal}\n\n"
+                report += "\n".join(data['signals']) + "\n\n"
         
-        if over_valuation_signals:
+        if over_valuation_indices:
             report += "📈高估卖出区信号\n"
-            for info, signal in over_valuation_signals:
-                report += f"{info['name']} ({info['code']})\n"
+            for code, data in over_valuation_indices.items():
+                info = data['info']
+                report += f"{info['name']} ({code})\n"
                 report += f"收盘价：{info['close']:.2f} | 10 年 TTM PE 百分位：{info['pe_percentile']:.1f}% | 距历史高点跌幅：{info['drop_from_high']:.1f}%\n"
-                report += f"{signal}\n\n"
+                report += "\n".join(data['signals']) + "\n\n"
         
-        if ma_trend_signals:
+        if ma_trend_indices:
             report += "⚠️均线趋势风险信号\n"
-            for info, signal in ma_trend_signals:
-                report += f"{info['name']} ({info['code']})\n"
+            for code, data in ma_trend_indices.items():
+                info = data['info']
+                report += f"{info['name']} ({code})\n"
                 ma10_str = f"{info['ma10']:.2f}" if info['ma10'] is not None else "数据暂不可用"
                 ma20_str = f"{info['ma20']:.2f}" if info['ma20'] is not None else "数据暂不可用"
                 report += f"收盘价：{info['close']:.2f} | 10 日均线：{ma10_str} | 20 日均线：{ma20_str}\n"
-                report += f"{signal}\n\n"
+                report += "\n".join(data['signals']) + "\n\n"
         
         report += f"📌整体汇总统计\n"
-        report += f"观察击球类信号：{len(under_valuation_signals)} 个\n"
-        report += f"高估卖出类信号：{len(over_valuation_signals)} 个\n"
-        report += f"均线趋势风险信号：{len(ma_trend_signals)} 个\n"
+        report += f"观察击球类信号：{len(under_valuation_indices)} 个\n"
+        report += f"高估卖出类信号：{len(over_valuation_indices)} 个\n"
+        report += f"均线趋势风险信号：{len(ma_trend_indices)} 个\n"
         report += f"\n妙啊妙啊，日富一日"
     else:
         report = f"📊指数每日监控报告 | 昨日统计日期：{yesterday_str}\n✅昨日所有监控指数运行平稳，无任何估值、均线条件触发提醒\n\n妙啊妙啊，日富一日"
