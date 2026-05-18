@@ -67,9 +67,7 @@ def is_trading_day(date):
 
 
 def get_yesterday():
-    today = datetime.now()
-    yesterday = today - timedelta(days=1)
-    return yesterday
+    return datetime(2025, 5, 16)
 
 
 def fetch_with_retry(func, max_retries=3, *args, **kwargs):
@@ -85,16 +83,28 @@ def fetch_with_retry(func, max_retries=3, *args, **kwargs):
 def get_csi_index_data(code):
     try:
         df = fetch_with_retry(ak.stock_zh_index_daily_em, symbol=f"sh{code}" if code.startswith("000") or code.startswith("0006") else f"sz{code}")
+        print(f"✅ 获取到 {code} 指数数据，共 {len(df)} 条")
+        print(f"   最后5条记录:")
+        print(df.tail())
         return df
-    except:
+    except Exception as e1:
+        print(f"⚠️ 方法1失败: {e1}")
         try:
             df = fetch_with_retry(ak.stock_zh_index_hist_csindex, symbol=code)
+            print(f"✅ 获取到 {code} 指数数据，共 {len(df)} 条")
+            print(f"   最后5条记录:")
+            print(df.tail())
             return df
-        except:
+        except Exception as e2:
+            print(f"⚠️ 方法2失败: {e2}")
             try:
                 df = fetch_with_retry(ak.stock_zh_index_daily, symbol=code)
+                print(f"✅ 获取到 {code} 指数数据，共 {len(df)} 条")
+                print(f"   最后5条记录:")
+                print(df.tail())
                 return df
-            except:
+            except Exception as e3:
+                print(f"❌ 获取 {code} 指数数据失败: {e3}")
                 return None
 
 
@@ -102,16 +112,27 @@ def get_hk_index_data(code):
     try:
         if code == "HSI":
             df = fetch_with_retry(ak.stock_hk_index_daily_em, symbol="HSI")
+            print(f"✅ 获取到 {code} 指数数据，共 {len(df)} 条")
+            print(f"   最后5条记录:")
+            print(df.tail())
             return df
         elif code == "HSTECH":
             df = fetch_with_retry(ak.stock_hk_index_daily_em, symbol="HSTECH")
+            print(f"✅ 获取到 {code} 指数数据，共 {len(df)} 条")
+            print(f"   最后5条记录:")
+            print(df.tail())
             return df
         return None
-    except:
+    except Exception as e1:
+        print(f"⚠️ 方法1失败: {e1}")
         try:
             df = fetch_with_retry(ak.stock_hk_index_daily_sina, symbol=code)
+            print(f"✅ 获取到 {code} 指数数据，共 {len(df)} 条")
+            print(f"   最后5条记录:")
+            print(df.tail())
             return df
-        except:
+        except Exception as e2:
+            print(f"❌ 获取 {code} 指数数据失败: {e2}")
             return None
 
 
@@ -119,19 +140,29 @@ def get_index_pe(code, market):
     try:
         if market == "csi":
             df = fetch_with_retry(ak.stock_zh_index_value_csindex, symbol=code)
+            print(f"✅ 获取到 {code} PE数据，共 {len(df)} 条")
+            print(f"   最后5条记录:")
+            print(df.tail())
             return df
         else:
+            print(f"⚠️ 无 {code} PE数据获取方法")
             return None
-    except:
+    except Exception as e1:
+        print(f"⚠️ 方法1失败: {e1}")
         try:
             df = fetch_with_retry(ak.stock_index_pe_lg, symbol=code)
+            print(f"✅ 获取到 {code} PE数据，共 {len(df)} 条")
+            print(f"   最后5条记录:")
+            print(df.tail())
             return df
-        except:
+        except Exception as e2:
+            print(f"❌ 获取 {code} PE数据失败: {e2}")
             return None
 
 
 def calculate_indicators(index_data, pe_data):
     if index_data is None or len(index_data) == 0:
+        print("❌ 指数数据为空，无法计算指标")
         return None
     
     latest = index_data.iloc[-1]
@@ -164,8 +195,9 @@ def calculate_indicators(index_data, pe_data):
             if len(all_pes) > 0:
                 percentile = (all_pes < latest_pe).mean() * 100
                 pe_percentile = round(percentile, 1)
+                print(f"✅ PE计算: 最新PE={latest_pe}, 百分位={pe_percentile}%")
     
-    return {
+    result = {
         "close": close_price,
         "ma10": ma10,
         "ma20": ma20,
@@ -174,6 +206,8 @@ def calculate_indicators(index_data, pe_data):
         "drop_from_high": drop_from_high,
         "pe_percentile": pe_percentile
     }
+    print(f"✅ 指标计算结果: {result}")
+    return result
 
 
 def check_conditions(indicators):
@@ -217,6 +251,7 @@ def check_conditions(indicators):
     elif indicators["ma60"] is not None and indicators["close"] > indicators["ma60"]:
         signals.append("⚠️上涨趋势确认")
     
+    print(f"✅ 信号生成: {signals}")
     return signals
 
 
@@ -242,6 +277,7 @@ def save_daily_data(date_str, all_data):
     filename = os.path.join(DATA_DIR, f"index_data_{date_str}.json")
     with open(filename, "w", encoding="utf-8") as f:
         json.dump(all_data, f, ensure_ascii=False, indent=2)
+    print(f"✅ 数据已保存到 {filename}")
 
 
 def main():
@@ -249,11 +285,13 @@ def main():
     yesterday = get_yesterday()
     yesterday_str = yesterday.strftime("%Y-%m-%d")
     
+    print(f"📅 调试日期: {yesterday_str}")
+    print(f"📅 是交易日? {is_trading_day(yesterday)}")
+    print("-" * 80)
+    
     if not is_trading_day(yesterday):
         msg = "妙啊妙啊，日富一日"
         print(msg)
-        if config.get("feishu_webhook"):
-            send_feishu_message(config["feishu_webhook"], msg)
         return
     
     all_index_data = []
@@ -263,6 +301,9 @@ def main():
     ma_trend_signals = []
     
     for idx in INDEX_LIST:
+        print(f"\n{'='*80}")
+        print(f"处理指数: {idx['name']} ({idx['code']})")
+        print(f"{'='*80}")
         try:
             if idx["market"] == "csi":
                 index_data = get_csi_index_data(idx["code"])
@@ -273,6 +314,7 @@ def main():
             indicators = calculate_indicators(index_data, pe_data)
             
             if indicators is None:
+                print("❌ 指标计算失败，跳过此指数")
                 continue
             
             signals = check_conditions(indicators)
@@ -298,9 +340,16 @@ def main():
                         ma_trend_signals.append((index_info, signal))
         
         except Exception as e:
+            print(f"❌ 处理 {idx['name']} 时发生异常: {e}")
+            import traceback
+            traceback.print_exc()
             continue
     
     save_daily_data(yesterday_str, all_index_data)
+    print(f"\n{'='*80}")
+    print(f"✅ 处理完成，共获取 {len(all_index_data)} 个指数数据")
+    print(f"✅ 触发信号的指数: {len(triggered_indices)} 个")
+    print(f"{'='*80}")
     
     if len(triggered_indices) > 0:
         report = f"📊指数每日监控报告 | 昨日统计日期：{yesterday_str}\n触发指数总数量：{len(triggered_indices)} 个\n\n"
@@ -336,9 +385,7 @@ def main():
     else:
         report = f"📊指数每日监控报告 | 昨日统计日期：{yesterday_str}\n✅昨日所有监控指数运行平稳，无任何估值、均线条件触发提醒\n\n妙啊妙啊，日富一日"
     
-    print(report)
-    if config.get("feishu_webhook"):
-        send_feishu_message(config["feishu_webhook"], report)
+    print("\n" + report)
 
 
 if __name__ == "__main__":
