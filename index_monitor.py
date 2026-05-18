@@ -242,7 +242,7 @@ def main():
     yesterday_str = yesterday.strftime("%Y-%m-%d")
     
     if not is_trading_day(yesterday):
-        msg = "昨日非交易日，跳过监控，终止全部流程\n秒啊妙啊，日复一日"
+        msg = "妙啊妙啊，日富一日"
         print(msg)
         if config.get("feishu_webhook"):
             send_feishu_message(config["feishu_webhook"], msg)
@@ -324,8 +324,9 @@ def main():
         report += f"观察击球类信号：{len(under_valuation_signals)} 个\n"
         report += f"高估卖出类信号：{len(over_valuation_signals)} 个\n"
         report += f"均线趋势风险信号：{len(ma_trend_signals)} 个\n"
+        report += f"\n妙啊妙啊，日富一日"
     else:
-        report = f"📊指数每日监控报告 | 昨日统计日期：{yesterday_str}\n✅昨日所有监控指数运行平稳，无任何估值、均线条件触发提醒"
+        report = f"📊指数每日监控报告 | 昨日统计日期：{yesterday_str}\n✅昨日所有监控指数运行平稳，无任何估值、均线条件触发提醒\n\n妙啊妙啊，日富一日"
     
     print(report)
     if config.get("feishu_webhook"):
