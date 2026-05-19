@@ -4,6 +4,7 @@ import numpy as np
 import requests
 import json
 import os
+import sys
 from datetime import datetime, timedelta
 import time
 
@@ -66,36 +67,26 @@ def is_trading_day(date):
     return True
 
 
-def get_yesterday():
-    today = datetime.now()
-    yesterday = today - timedelta(days=1)
-    return yesterday
-
-
 def fetch_with_retry(func, max_retries=3, *args, **kwargs):
     for i in range(max_retries):
         try:
             return func(*args, **kwargs)
-        except Exception as e:
+        except Exception:
             if i == max_retries - 1:
-                raise e
+                raise
             time.sleep(1)
 
 
 def get_csi_index_data(code):
     try:
-        df = fetch_with_retry(ak.stock_zh_index_daily_em, symbol=f"sh{code}" if code.startswith("000") or code.startswith("0006") else f"sz{code}")
+        df = fetch_with_retry(ak.stock_zh_index_hist_csindex, symbol=code)
         return df
-    except:
+    except Exception:
         try:
-            df = fetch_with_retry(ak.stock_zh_index_hist_csindex, symbol=code)
+            df = fetch_with_retry(ak.stock_zh_index_daily_em, symbol=f"sh{code}" if code.startswith("000") or code.startswith("0006") else f"sz{code}")
             return df
-        except:
-            try:
-                df = fetch_with_retry(ak.stock_zh_index_daily, symbol=code)
-                return df
-            except:
-                return None
+        except Exception:
+            return None
 
 
 def get_hk_index_data(code):
@@ -107,115 +98,235 @@ def get_hk_index_data(code):
             df = fetch_with_retry(ak.stock_hk_index_daily_em, symbol="HSTECH")
             return df
         return None
-    except:
+    except Exception:
         try:
             df = fetch_with_retry(ak.stock_hk_index_daily_sina, symbol=code)
             return df
-        except:
+        except Exception:
             return None
 
 
-def get_index_pe(code, market):
+def get_index_valuation(code, market):
     try:
         if market == "csi":
             df = fetch_with_retry(ak.stock_zh_index_value_csindex, symbol=code)
             return df
         else:
             return None
-    except:
+    except Exception:
         try:
             df = fetch_with_retry(ak.stock_index_pe_lg, symbol=code)
             return df
-        except:
+        except Exception:
             return None
 
 
-def calculate_indicators(index_data, pe_data):
-    if index_data is None or len(index_data) == 0:
-        return None
-    
-    latest = index_data.iloc[-1]
-    close_price = round(float(latest["收盘"]) if "收盘" in latest else float(latest["close"]), 2)
-    
-    ma10 = None
-    ma20 = None
-    ma60 = None
-    
-    if len(index_data) >= 10:
-        ma10 = round(index_data["收盘"].iloc[-10:].mean() if "收盘" in index_data.columns else index_data["close"].iloc[-10:].mean(), 2)
-    if len(index_data) >= 20:
-        ma20 = round(index_data["收盘"].iloc[-20:].mean() if "收盘" in index_data.columns else index_data["close"].iloc[-20:].mean(), 2)
-    if len(index_data) >= 60:
-        ma60 = round(index_data["收盘"].iloc[-60:].mean() if "收盘" in index_data.columns else index_data["close"].iloc[-60:].mean(), 2)
-    
-    historical_high = round(index_data["最高"].max() if "最高" in index_data.columns else index_data["high"].max(), 2)
-    drop_from_high = round((historical_high - close_price) / historical_high * 100, 1)
-    
-    pe_percentile = None
-    if pe_data is not None and len(pe_data) > 0:
-        pe_col = None
-        for col in pe_data.columns:
-            if "市盈率" in col or "PE" in col:
-                pe_col = col
-                break
-        if pe_col:
-            latest_pe = float(pe_data.iloc[-1][pe_col])
-            all_pes = pd.to_numeric(pe_data[pe_col], errors="coerce").dropna()
-            if len(all_pes) > 0:
-                percentile = (all_pes < latest_pe).mean() * 100
-                pe_percentile = round(percentile, 1)
-    
-    return {
-        "close": close_price,
-        "ma10": ma10,
-        "ma20": ma20,
-        "ma60": ma60,
-        "historical_high": historical_high,
-        "drop_from_high": drop_from_high,
-        "pe_percentile": pe_percentile
+def format_value(val, decimals=2):
+    if val is None or np.isnan(val):
+        return "None"
+    if isinstance(val, str):
+        return val
+    return f"{val:.{decimals}f}"
+
+
+def calculate_indicators(index_data, valuation_data):
+    result = {
+        "date": None,
+        "close": "None",
+        "ma10": "-",
+        "ma20": "-",
+        "ma60": "-",
+        "10year_high": "None",
+        "drop_from_high": "-",
+        "pe": "None",
+        "pe_percentile": "None",
+        "pe_data_span": "",
+        "pb": "None",
+        "pb_percentile": "None",
+        "pb_data_span": "",
+        "errors": []
     }
+    
+    if index_data is None or len(index_data) == 0:
+        result["errors"].append("指数行情数据获取失败")
+        return result
+    
+    try:
+        latest = index_data.iloc[-1]
+        result["date"] = latest.get("日期", latest.get("date"))
+        if isinstance(result["date"], pd.Timestamp):
+            result["date"] = result["date"].strftime("%Y-%m-%d")
+        
+        close_col = "收盘" if "收盘" in latest else "close"
+        if close_col in latest:
+            result["close"] = format_value(float(latest[close_col]))
+        
+        if len(index_data) >= 10:
+            ma10 = index_data[close_col].iloc[-10:].mean()
+            result["ma10"] = format_value(ma10)
+        if len(index_data) >= 20:
+            ma20 = index_data[close_col].iloc[-20:].mean()
+            result["ma20"] = format_value(ma20)
+        if len(index_data) >= 60:
+            ma60 = index_data[close_col].iloc[-60:].mean()
+            result["ma60"] = format_value(ma60)
+        
+        high_col = "最高" if "最高" in index_data.columns else "high"
+        if high_col in index_data.columns:
+            ten_years_ago = datetime.now() - timedelta(days=3650)
+            recent_data = index_data[index_data["日期" if "日期" in index_data.columns else "date"] >= ten_years_ago.strftime("%Y%m%d")]
+            if len(recent_data) > 0:
+                historical_high = recent_data[high_col].max()
+            else:
+                historical_high = index_data[high_col].max()
+            
+            result["10year_high"] = format_value(historical_high)
+            
+            if result["close"] != "None" and not np.isnan(historical_high):
+                close_val = float(result["close"])
+                drop_pct = (historical_high - close_val) / historical_high * 100
+                result["drop_from_high"] = format_value(drop_pct, 1)
+        
+    except Exception as e:
+        result["errors"].append(f"行情指标计算失败: {str(e)}")
+    
+    if valuation_data is not None and len(valuation_data) > 0:
+        try:
+            latest_val = valuation_data.iloc[-1]
+            pe_col = None
+            pb_col = None
+            for col in valuation_data.columns:
+                if "市盈率" in str(col) or "PE" in str(col):
+                    pe_col = col
+                if "市净率" in str(col) or "PB" in str(col):
+                    pb_col = col
+            
+            if pe_col is not None:
+                pe_val = pd.to_numeric(latest_val[pe_col], errors="coerce")
+                if not np.isnan(pe_val):
+                    result["pe"] = format_value(pe_val)
+                    
+                    all_pes = pd.to_numeric(valuation_data[pe_col], errors="coerce").dropna()
+                    if len(all_pes) > 0:
+                        percentile = (all_pes < pe_val).mean() * 100
+                        result["pe_percentile"] = format_value(percentile)
+                        
+                        start_date = valuation_data.iloc[0]["日期"] if "日期" in valuation_data.columns else valuation_data.iloc[0].get("date")
+                        if isinstance(start_date, pd.Timestamp):
+                            start_date = start_date.strftime("%Y-%m-%d")
+                        try:
+                            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+                        except Exception:
+                            try:
+                                start_dt = datetime.strptime(start_date, "%Y%m%d")
+                            except Exception:
+                                start_dt = datetime.now()
+                        
+                        days_span = (datetime.now() - start_dt).days
+                        years = days_span // 365
+                        months = (days_span % 365) // 30
+                        if years > 0:
+                            result["pe_data_span"] = f"({years}年{months}个月)"
+                        else:
+                            result["pe_data_span"] = f"({months}个月)"
+            
+            if pb_col is not None:
+                pb_val = pd.to_numeric(latest_val[pb_col], errors="coerce")
+                if not np.isnan(pb_val):
+                    result["pb"] = format_value(pb_val)
+                    
+                    all_pbs = pd.to_numeric(valuation_data[pb_col], errors="coerce").dropna()
+                    if len(all_pbs) > 0:
+                        percentile = (all_pbs < pb_val).mean() * 100
+                        result["pb_percentile"] = format_value(percentile)
+                        
+                        start_date = valuation_data.iloc[0]["日期"] if "日期" in valuation_data.columns else valuation_data.iloc[0].get("date")
+                        if isinstance(start_date, pd.Timestamp):
+                            start_date = start_date.strftime("%Y-%m-%d")
+                        try:
+                            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+                        except Exception:
+                            try:
+                                start_dt = datetime.strptime(start_date, "%Y%m%d")
+                            except Exception:
+                                start_dt = datetime.now()
+                        
+                        days_span = (datetime.now() - start_dt).days
+                        years = days_span // 365
+                        months = (days_span % 365) // 30
+                        if years > 0:
+                            result["pb_data_span"] = f"({years}年{months}个月)"
+                        else:
+                            result["pb_data_span"] = f"({months}个月)"
+        
+        except Exception as e:
+            result["errors"].append(f"估值指标计算失败: {str(e)}")
+    
+    return result
 
 
-def check_conditions(indicators):
-    signals = []
+def check_conditions(indicators, index_name):
+    signals = {
+        "valuation": None,
+        "ma": None,
+        "is_error": False,
+        "error_fields": []
+    }
     
-    if indicators["pe_percentile"] is not None:
-        pe_pct = indicators["pe_percentile"]
-        if pe_pct <= 7:
-            signals.append("📉跌幅进入最后一击")
-        elif pe_pct <= 13:
-            signals.append("📉跌幅进入击球区深处")
-        elif pe_pct <= 20:
-            signals.append("📉跌幅进入击球区")
-        elif pe_pct <= 25:
-            signals.append("📉跌幅进入观察区")
-        elif pe_pct >= 96:
-            signals.append("📈卖出全部")
-        elif pe_pct >= 91:
-            signals.append("📈卖出一中网")
-        elif pe_pct >= 85:
-            signals.append("📈卖出一中网")
-        elif pe_pct >= 78:
-            signals.append("📈卖出一小网")
-        elif pe_pct >= 70:
-            signals.append("📈卖出一小网")
-        elif pe_pct >= 65:
-            signals.append("📈涨幅进入警示区")
+    if len(indicators["errors"]) > 0:
+        signals["is_error"] = True
+        signals["error_fields"] = indicators["errors"]
+        return signals
     
-    if indicators["ma10"] is not None and indicators["close"] < indicators["ma10"]:
-        signals.append("⚠️注意下跌可能")
-    elif indicators["ma10"] is not None and indicators["close"] > indicators["ma10"]:
-        signals.append("⚠️注意上涨可能")
+    pe_pct = None
+    if indicators["pe_percentile"] != "None":
+        try:
+            pe_pct = float(indicators["pe_percentile"])
+        except Exception:
+            pass
     
-    if indicators["ma20"] is not None and indicators["close"] < indicators["ma20"]:
-        signals.append("⚠️下跌趋势形成中")
-    elif indicators["ma20"] is not None and indicators["close"] > indicators["ma20"]:
-        signals.append("⚠️上涨趋势形成中")
+    if pe_pct is not None:
+        if 0 <= pe_pct <= 7:
+            signals["valuation"] = "📉跌幅进入最后一击"
+        elif 7 < pe_pct <= 13:
+            signals["valuation"] = "📉跌幅进入击球区深处"
+        elif 13 < pe_pct <= 20:
+            signals["valuation"] = "📉跌幅进入击球区"
+        elif 20 < pe_pct <= 25:
+            signals["valuation"] = "📉跌幅进入观察区"
+        elif 65 < pe_pct <= 75:
+            signals["valuation"] = "📈涨幅进入警示区"
+        elif 75 < pe_pct <= 83:
+            signals["valuation"] = "📈涨幅考虑卖出一小网"
+        elif 83 < pe_pct <= 90:
+            signals["valuation"] = "📈涨幅考虑卖出一中网"
+        elif 90 < pe_pct <= 95:
+            signals["valuation"] = "📈涨幅考虑卖出一中网"
+        elif 95 < pe_pct <= 100:
+            signals["valuation"] = "📈涨幅考虑卖出全部"
     
-    if indicators["ma60"] is not None and indicators["close"] < indicators["ma60"]:
-        signals.append("⚠️下跌趋势确认")
-    elif indicators["ma60"] is not None and indicators["close"] > indicators["ma60"]:
-        signals.append("⚠️上涨趋势确认")
+    if indicators["close"] != "None" and indicators["ma10"] != "-" and indicators["ma20"] != "-" and indicators["ma60"] != "-":
+        try:
+            close = float(indicators["close"])
+            ma10 = float(indicators["ma10"])
+            ma20 = float(indicators["ma20"])
+            ma60 = float(indicators["ma60"])
+            
+            if close < ma10 and close > ma20 and close > ma60:
+                signals["ma"] = "⚠️注意下跌可能"
+            elif close < ma10 and close < ma20 and close > ma60:
+                signals["ma"] = "⚠️下跌趋势形成中"
+            elif close < ma10 and close < ma20 and close < ma60:
+                signals["ma"] = "⚠️下跌趋势确认"
+            elif close > ma10 and close < ma20 and close < ma60:
+                signals["ma"] = "⚠️注意上涨可能"
+            elif close > ma10 and close > ma20 and close < ma60:
+                signals["ma"] = "🌟上涨趋势形成中"
+            elif close > ma10 and close > ma20 and close > ma60:
+                signals["ma"] = "🌟上涨趋势确认"
+        
+        except Exception:
+            pass
     
     return signals
 
@@ -232,7 +343,7 @@ def send_feishu_message(webhook, content):
         }
         response = requests.post(webhook, json=data, timeout=10)
         return response.status_code == 200
-    except:
+    except Exception:
         return False
 
 
@@ -245,124 +356,117 @@ def save_daily_data(date_str, all_data):
 
 
 def main():
-    config = load_config()
-    yesterday = get_yesterday()
-    yesterday_str = yesterday.strftime("%Y-%m-%d")
-    
-    if not is_trading_day(yesterday):
-        msg = "妙啊妙啊，日富一日"
-        print(msg)
-        if config.get("feishu_webhook"):
-            send_feishu_message(config["feishu_webhook"], msg)
-        return
-    
-    all_index_data = []
-    triggered_indices = []
-    under_valuation_signals = []
-    over_valuation_signals = []
-    ma_trend_signals = []
-    
-    for idx in INDEX_LIST:
-        try:
-            if idx["market"] == "csi":
-                index_data = get_csi_index_data(idx["code"])
-            else:
-                index_data = get_hk_index_data(idx["code"])
-            
-            pe_data = get_index_pe(idx["code"], idx["market"])
-            indicators = calculate_indicators(index_data, pe_data)
-            
-            if indicators is None:
-                continue
-            
-            signals = check_conditions(indicators)
-            
-            index_info = {
-                "name": idx["name"],
-                "code": idx["code"],
-                **indicators,
-                "signals": signals
-            }
-            
-            all_index_data.append(index_info)
-            
-            if len(signals) > 0:
-                triggered_indices.append(index_info)
+    try:
+        config = load_config()
+        today = datetime.now()
+        yesterday = today - timedelta(days=1)
+        
+        today_is_trading = is_trading_day(today)
+        yesterday_is_trading = is_trading_day(yesterday)
+        
+        if not today_is_trading and not yesterday_is_trading:
+            msg = "日富一日，今天也要元气满满，秒啊妙啊🍻"
+            print(msg)
+            if config.get("feishu_webhook"):
+                send_feishu_message(config["feishu_webhook"], msg)
+            return
+        
+        all_data = []
+        under_valuation = []
+        over_valuation = []
+        ma_signals = []
+        error_indices = []
+        
+        for idx_info in INDEX_LIST:
+            try:
+                if idx_info["market"] == "csi":
+                    index_data = get_csi_index_data(idx_info["code"])
+                else:
+                    index_data = get_hk_index_data(idx_info["code"])
                 
-                for signal in signals:
-                    if "📉" in signal:
-                        under_valuation_signals.append((index_info, signal))
-                    elif "📈" in signal:
-                        over_valuation_signals.append((index_info, signal))
-                    elif "⚠️" in signal:
-                        ma_trend_signals.append((index_info, signal))
+                valuation_data = get_index_valuation(idx_info["code"], idx_info["market"])
+                indicators = calculate_indicators(index_data, valuation_data)
+                
+                record = {
+                    "name": idx_info["name"],
+                    "code": idx_info["code"],
+                    **indicators
+                }
+                all_data.append(record)
+                
+                signals = check_conditions(indicators, idx_info["name"])
+                
+                if signals["is_error"]:
+                    error_indices.append((record, signals))
+                else:
+                    if signals["valuation"]:
+                        if "📉" in signals["valuation"]:
+                            under_valuation.append((record, signals))
+                        elif "📈" in signals["valuation"]:
+                            over_valuation.append((record, signals))
+                    if signals["ma"] and not signals["valuation"]:
+                        ma_signals.append((record, signals))
+            
+            except Exception as e:
+                error_record = {
+                    "name": idx_info["name"],
+                    "code": idx_info["code"],
+                    "errors": [str(e)]
+                }
+                error_indices.append((error_record, {"is_error": True, "error_fields": [str(e)]}))
+                all_data.append(error_record)
         
-        except Exception as e:
-            continue
+        save_daily_data(today.strftime("%Y-%m-%d"), all_data)
+        
+        total_triggers = len(under_valuation) + len(over_valuation) + len(ma_signals) + len(error_indices)
+        
+        if total_triggers > 0:
+            report = f"📊A股指数每日监控报告 | 统计日期：{today.strftime('%Y-%m-%d')}\n"
+            report += f"📌触发提醒总数量：{total_triggers} 个丨估值提醒：{len(under_valuation)+len(over_valuation)}个，{len(under_valuation)}个低估，{len(over_valuation)}个高估丨获取异常：{len(error_indices)}个\n\n"
+            
+            if under_valuation:
+                report += f"📉低估信号：{len(under_valuation)}个\n"
+                for rec, sig in under_valuation:
+                    report += f"{rec['name']} ({rec['code']})收盘价：{rec['close']} | PE：{rec['pe']}丨10 年PE 百分位：{rec['pe_percentile']}%{rec['pe_data_span']} | PB：{rec['pb']}丨10年 PB百分位：{rec['pb_percentile']}%{rec['pb_data_span']}丨距历史高点跌幅：{rec['drop_from_high']}%丨10日均线：{rec['ma10']} | 20日均线：{rec['ma20']} | 60日均线：{rec['ma60']} {sig['valuation']}\n"
+                report += "\n"
+            
+            if over_valuation:
+                report += f"📈高估信号：{len(over_valuation)}个\n"
+                for rec, sig in over_valuation:
+                    report += f"{rec['name']} ({rec['code']})收盘价：{rec['close']} | PE：{rec['pe']}丨10 年PE 百分位：{rec['pe_percentile']}%{rec['pe_data_span']} | PB：{rec['pb']}丨10年 PB百分位：{rec['pb_percentile']}%{rec['pb_data_span']}丨距历史高点跌幅：{rec['drop_from_high']}%丨10日均线：{rec['ma10']} | 20日均线：{rec['ma20']} | 60日均线：{rec['ma60']} {sig['valuation']}\n"
+                report += "\n"
+            
+            if ma_signals:
+                report += f"⚠️均线趋势信号：{len(ma_signals)}个\n"
+                for rec, sig in ma_signals:
+                    report += f"{rec['name']} ({rec['code']})收盘价：{rec['close']} | PE：{rec['pe']}丨10 年PE 百分位：{rec['pe_percentile']}%{rec['pe_data_span']} | PB：{rec['pb']}丨10年 PB百分位：{rec['pb_percentile']}%{rec['pb_data_span']}丨距历史高点跌幅：{rec['drop_from_high']}%丨10日均线：{rec['ma10']} | 20日均线：{rec['ma20']} | 60日均线：{rec['ma60']} {sig['ma']}\n"
+                report += "\n"
+            
+            if error_indices:
+                report += f"🔔获取异常：{len(error_indices)}个\n"
+                for rec, sig in error_indices:
+                    error_desc = "、".join(sig["error_fields"])
+                    report += f"{rec['name']} ({rec['code']})丨获取异常字段：{error_desc}\n"
+                report += "\n"
+            
+            report += "日富一日，今天也要元气满满，秒啊妙啊🍻"
+        
+        else:
+            report = f"📊A股指数每日监控报告 | 统计日期：{today.strftime('%Y-%m-%d')}\n"
+            report += "✅所有监控指数运行平稳，无任何估值、均线条件触发提醒\n"
+            report += "日富一日，今天也要元气满满，秒啊妙啊🍻"
+        
+        print(report)
+        if config.get("feishu_webhook"):
+            send_feishu_message(config["feishu_webhook"], report)
     
-    save_daily_data(yesterday_str, all_index_data)
-    
-    if len(triggered_indices) > 0:
-        report = f"📊指数每日监控报告 | 昨日统计日期：{yesterday_str}\n触发指数总数量：{len(triggered_indices)} 个\n\n"
-        
-        under_valuation_indices = {}
-        for info, signal in under_valuation_signals:
-            key = info['code']
-            if key not in under_valuation_indices:
-                under_valuation_indices[key] = {'info': info, 'signals': []}
-            under_valuation_indices[key]['signals'].append(signal)
-        
-        over_valuation_indices = {}
-        for info, signal in over_valuation_signals:
-            key = info['code']
-            if key not in over_valuation_indices:
-                over_valuation_indices[key] = {'info': info, 'signals': []}
-            over_valuation_indices[key]['signals'].append(signal)
-        
-        ma_trend_indices = {}
-        for info, signal in ma_trend_signals:
-            key = info['code']
-            if key not in ma_trend_indices:
-                ma_trend_indices[key] = {'info': info, 'signals': []}
-            ma_trend_indices[key]['signals'].append(signal)
-        
-        if under_valuation_indices:
-            report += "📉低估击球区信号\n"
-            for code, data in under_valuation_indices.items():
-                info = data['info']
-                report += f"{info['name']} ({code})\n"
-                report += f"收盘价：{info['close']:.2f} | 10 年 TTM PE 百分位：{info['pe_percentile']:.1f}% | 距历史高点跌幅：{info['drop_from_high']:.1f}%\n"
-                report += "\n".join(data['signals']) + "\n\n"
-        
-        if over_valuation_indices:
-            report += "📈高估卖出区信号\n"
-            for code, data in over_valuation_indices.items():
-                info = data['info']
-                report += f"{info['name']} ({code})\n"
-                report += f"收盘价：{info['close']:.2f} | 10 年 TTM PE 百分位：{info['pe_percentile']:.1f}% | 距历史高点跌幅：{info['drop_from_high']:.1f}%\n"
-                report += "\n".join(data['signals']) + "\n\n"
-        
-        if ma_trend_indices:
-            report += "⚠️均线趋势风险信号\n"
-            for code, data in ma_trend_indices.items():
-                info = data['info']
-                report += f"{info['name']} ({code})\n"
-                ma10_str = f"{info['ma10']:.2f}" if info['ma10'] is not None else "数据暂不可用"
-                ma20_str = f"{info['ma20']:.2f}" if info['ma20'] is not None else "数据暂不可用"
-                report += f"收盘价：{info['close']:.2f} | 10 日均线：{ma10_str} | 20 日均线：{ma20_str}\n"
-                report += "\n".join(data['signals']) + "\n\n"
-        
-        report += f"📌整体汇总统计\n"
-        report += f"观察击球类信号：{len(under_valuation_indices)} 个\n"
-        report += f"高估卖出类信号：{len(over_valuation_indices)} 个\n"
-        report += f"均线趋势风险信号：{len(ma_trend_indices)} 个\n"
-        report += f"\n妙啊妙啊，日富一日"
-    else:
-        report = f"📊指数每日监控报告 | 昨日统计日期：{yesterday_str}\n✅昨日所有监控指数运行平稳，无任何估值、均线条件触发提醒\n\n妙啊妙啊，日富一日"
-    
-    print(report)
-    if config.get("feishu_webhook"):
-        send_feishu_message(config["feishu_webhook"], report)
+    except Exception as e:
+        try:
+            config = load_config()
+            if config.get("feishu_webhook"):
+                send_feishu_message(config["feishu_webhook"], "⚠️ 监控任务执行异常")
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":
