@@ -8,7 +8,7 @@
     "ma60": 3584.23,
     "historical_high": 5930.91,
     "drop_from_high": 39.0,
-    "pe_percentile": 45.0,
+    "pe_percentile": 50.0,
     "signals": [
       "⚠️注意下跌可能",
       "⚠️下跌趋势形成中",
@@ -24,7 +24,7 @@
     "ma60": 5375.84,
     "historical_high": 7688.6,
     "drop_from_high": 30.5,
-    "pe_percentile": 40.0,
+    "pe_percentile": 45.0,
     "signals": [
       "⚠️注意上涨可能",
       "⚠️下跌趋势形成中",
@@ -56,9 +56,9 @@
     "ma60": 764.24,
     "historical_high": 1639.19,
     "drop_from_high": 54.0,
-    "pe_percentile": 10.0,
+    "pe_percentile": 0.0,
     "signals": [
-      "📉跌幅进入击球区深处",
+      "📉跌幅进入最后一击",
       "⚠️注意上涨可能",
       "⚠️上涨趋势形成中",
       "⚠️下跌趋势确认"
@@ -105,7 +105,7 @@
     "ma60": 17785.06,
     "historical_high": 32504.28,
     "drop_from_high": 45.2,
-    "pe_percentile": 30.0,
+    "pe_percentile": 40.0,
     "signals": [
       "⚠️注意下跌可能",
       "⚠️下跌趋势形成中",
@@ -121,9 +121,9 @@
     "ma60": 8716.72,
     "historical_high": 16906.04,
     "drop_from_high": 49.3,
-    "pe_percentile": 95.0,
+    "pe_percentile": 80.0,
     "signals": [
-      "📈卖出一中网",
+      "📈卖出一小网",
       "⚠️注意上涨可能",
       "⚠️下跌趋势形成中",
       "⚠️下跌趋势确认"
@@ -138,7 +138,7 @@
     "ma60": 6809.89,
     "historical_high": 19992.0,
     "drop_from_high": 67.1,
-    "pe_percentile": 55.0,
+    "pe_percentile": 50.0,
     "signals": [
       "⚠️注意下跌可能",
       "⚠️下跌趋势形成中",
@@ -154,7 +154,7 @@
     "ma60": 526.41,
     "historical_high": NaN,
     "drop_from_high": NaN,
-    "pe_percentile": 95.0,
+    "pe_percentile": 90.0,
     "signals": [
       "📈卖出一中网",
       "⚠️注意上涨可能",
@@ -171,8 +171,9 @@
     "ma60": 1436.95,
     "historical_high": 3090.4,
     "drop_from_high": 53.0,
-    "pe_percentile": 50.0,
+    "pe_percentile": 90.0,
     "signals": [
+      "📈卖出一中网",
       "⚠️注意上涨可能",
       "⚠️上涨趋势形成中",
       "⚠️上涨趋势确认"
@@ -187,7 +188,7 @@
     "ma60": 1086.73,
     "historical_high": 1769.06,
     "drop_from_high": 43.2,
-    "pe_percentile": 50.0,
+    "pe_percentile": 45.0,
     "signals": [
       "⚠️注意下跌可能",
       "⚠️下跌趋势形成中",

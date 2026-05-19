@@ -361,8 +361,14 @@ def main():
         today = datetime.now()
         yesterday = today - timedelta(days=1)
         
+        print(f"📅 今日日期: {today.strftime('%Y-%m-%d')}")
+        print(f"📅 昨日日期: {yesterday.strftime('%Y-%m-%d')}")
+        
         today_is_trading = is_trading_day(today)
         yesterday_is_trading = is_trading_day(yesterday)
+        
+        print(f"📅 今日是否交易日: {today_is_trading}")
+        print(f"📅 昨日是否交易日: {yesterday_is_trading}")
         
         if not today_is_trading and not yesterday_is_trading:
             msg = "日富一日，今天也要元气满满，秒啊妙啊🍻"
