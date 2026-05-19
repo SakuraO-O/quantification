@@ -1,0 +1,606 @@
+{
+  "records": [
+    {
+      "date": "2026-05-19",
+      "pe": 30.87,
+      "pb": null,
+      "dividend": 0.68
+    },
+    {
+      "date": "2026-05-18",
+      "pe": 30.98,
+      "pb": null,
+      "dividend": 0.68
+    },
+    {
+      "date": "2026-05-15",
+      "pe": 31.85,
+      "pb": null,
+      "dividend": 0.66
+    },
+    {
+      "date": "2026-05-14",
+      "pe": 32.1,
+      "pb": null,
+      "dividend": 0.68
+    },
+    {
+      "date": "2026-05-13",
+      "pe": 32.82,
+      "pb": null,
+      "dividend": 0.67
+    },
+    {
+      "date": "2026-05-12",
+      "pe": 33.25,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-11",
+      "pe": 33.24,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-08",
+      "pe": 33.14,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-07",
+      "pe": 33.88,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-05-06",
+      "pe": 33.42,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-05",
+      "pe": 33.52,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-04",
+      "pe": 33.95,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-04-30",
+      "pe": 33.89,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-04-29",
+      "pe": 33.98,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-04-28",
+      "pe": 34.28,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-04-27",
+      "pe": 34.25,
+      "pb": null,
+      "dividend": 0.62
+    },
+    {
+      "date": "2026-04-24",
+      "pe": 34.59,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-04-23",
+      "pe": 34.35,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-04-22",
+      "pe": 35.58,
+      "pb": null,
+      "dividend": 0.58
+    },
+    {
+      "date": "2026-04-21",
+      "pe": 35.55,
+      "pb": null,
+      "dividend": 0.57
+    },
+    {
+      "date": "2026-05-19",
+      "pe": 30.87,
+      "pb": null,
+      "dividend": 0.68
+    },
+    {
+      "date": "2026-05-18",
+      "pe": 30.98,
+      "pb": null,
+      "dividend": 0.68
+    },
+    {
+      "date": "2026-05-15",
+      "pe": 31.85,
+      "pb": null,
+      "dividend": 0.66
+    },
+    {
+      "date": "2026-05-14",
+      "pe": 32.1,
+      "pb": null,
+      "dividend": 0.68
+    },
+    {
+      "date": "2026-05-13",
+      "pe": 32.82,
+      "pb": null,
+      "dividend": 0.67
+    },
+    {
+      "date": "2026-05-12",
+      "pe": 33.25,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-11",
+      "pe": 33.24,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-08",
+      "pe": 33.14,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-07",
+      "pe": 33.88,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-05-06",
+      "pe": 33.42,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-05",
+      "pe": 33.52,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-04",
+      "pe": 33.95,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-04-30",
+      "pe": 33.89,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-04-29",
+      "pe": 33.98,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-04-28",
+      "pe": 34.28,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-04-27",
+      "pe": 34.25,
+      "pb": null,
+      "dividend": 0.62
+    },
+    {
+      "date": "2026-04-24",
+      "pe": 34.59,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-04-23",
+      "pe": 34.35,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-04-22",
+      "pe": 35.58,
+      "pb": null,
+      "dividend": 0.58
+    },
+    {
+      "date": "2026-04-21",
+      "pe": 35.55,
+      "pb": null,
+      "dividend": 0.57
+    },
+    {
+      "date": "2026-05-19",
+      "pe": 30.87,
+      "pb": null,
+      "dividend": 0.68
+    },
+    {
+      "date": "2026-05-18",
+      "pe": 30.98,
+      "pb": null,
+      "dividend": 0.68
+    },
+    {
+      "date": "2026-05-15",
+      "pe": 31.85,
+      "pb": null,
+      "dividend": 0.66
+    },
+    {
+      "date": "2026-05-14",
+      "pe": 32.1,
+      "pb": null,
+      "dividend": 0.68
+    },
+    {
+      "date": "2026-05-13",
+      "pe": 32.82,
+      "pb": null,
+      "dividend": 0.67
+    },
+    {
+      "date": "2026-05-12",
+      "pe": 33.25,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-11",
+      "pe": 33.24,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-08",
+      "pe": 33.14,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-07",
+      "pe": 33.88,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-05-06",
+      "pe": 33.42,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-05",
+      "pe": 33.52,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-04",
+      "pe": 33.95,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-04-30",
+      "pe": 33.89,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-04-29",
+      "pe": 33.98,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-04-28",
+      "pe": 34.28,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-04-27",
+      "pe": 34.25,
+      "pb": null,
+      "dividend": 0.62
+    },
+    {
+      "date": "2026-04-24",
+      "pe": 34.59,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-04-23",
+      "pe": 34.35,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-04-22",
+      "pe": 35.58,
+      "pb": null,
+      "dividend": 0.58
+    },
+    {
+      "date": "2026-04-21",
+      "pe": 35.55,
+      "pb": null,
+      "dividend": 0.57
+    },
+    {
+      "date": "2026-05-19",
+      "pe": 30.87,
+      "pb": null,
+      "dividend": 0.68
+    },
+    {
+      "date": "2026-05-18",
+      "pe": 30.98,
+      "pb": null,
+      "dividend": 0.68
+    },
+    {
+      "date": "2026-05-15",
+      "pe": 31.85,
+      "pb": null,
+      "dividend": 0.66
+    },
+    {
+      "date": "2026-05-14",
+      "pe": 32.1,
+      "pb": null,
+      "dividend": 0.68
+    },
+    {
+      "date": "2026-05-13",
+      "pe": 32.82,
+      "pb": null,
+      "dividend": 0.67
+    },
+    {
+      "date": "2026-05-12",
+      "pe": 33.25,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-11",
+      "pe": 33.24,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-08",
+      "pe": 33.14,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-07",
+      "pe": 33.88,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-05-06",
+      "pe": 33.42,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-05",
+      "pe": 33.52,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-04",
+      "pe": 33.95,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-04-30",
+      "pe": 33.89,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-04-29",
+      "pe": 33.98,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-04-28",
+      "pe": 34.28,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-04-27",
+      "pe": 34.25,
+      "pb": null,
+      "dividend": 0.62
+    },
+    {
+      "date": "2026-04-24",
+      "pe": 34.59,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-04-23",
+      "pe": 34.35,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-04-22",
+      "pe": 35.58,
+      "pb": null,
+      "dividend": 0.58
+    },
+    {
+      "date": "2026-04-21",
+      "pe": 35.55,
+      "pb": null,
+      "dividend": 0.57
+    },
+    {
+      "date": "2026-05-19",
+      "pe": 30.87,
+      "pb": null,
+      "dividend": 0.68
+    },
+    {
+      "date": "2026-05-18",
+      "pe": 30.98,
+      "pb": null,
+      "dividend": 0.68
+    },
+    {
+      "date": "2026-05-15",
+      "pe": 31.85,
+      "pb": null,
+      "dividend": 0.66
+    },
+    {
+      "date": "2026-05-14",
+      "pe": 32.1,
+      "pb": null,
+      "dividend": 0.68
+    },
+    {
+      "date": "2026-05-13",
+      "pe": 32.82,
+      "pb": null,
+      "dividend": 0.67
+    },
+    {
+      "date": "2026-05-12",
+      "pe": 33.25,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-11",
+      "pe": 33.24,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-08",
+      "pe": 33.14,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-07",
+      "pe": 33.88,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-05-06",
+      "pe": 33.42,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-05",
+      "pe": 33.52,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-05-04",
+      "pe": 33.95,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-04-30",
+      "pe": 33.89,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-04-29",
+      "pe": 33.98,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-04-28",
+      "pe": 34.28,
+      "pb": null,
+      "dividend": 0.61
+    },
+    {
+      "date": "2026-04-27",
+      "pe": 34.25,
+      "pb": null,
+      "dividend": 0.62
+    },
+    {
+      "date": "2026-04-24",
+      "pe": 34.59,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-04-23",
+      "pe": 34.35,
+      "pb": null,
+      "dividend": 0.6
+    },
+    {
+      "date": "2026-04-22",
+      "pe": 35.58,
+      "pb": null,
+      "dividend": 0.58
+    },
+    {
+      "date": "2026-04-21",
+      "pe": 35.55,
+      "pb": null,
+      "dividend": 0.57
+    }
+  ],
+  "last_update": "2026-05-19",
+  "total_records": 100
+}
