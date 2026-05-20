@@ -1,0 +1,283 @@
+[
+  {
+    "name": "沪深300",
+    "code": "000300",
+    "date": "2024-06-04",
+    "close": "3615.67",
+    "ma10": "3616.48",
+    "ma20": "3637.95",
+    "ma60": "3584.23",
+    "historical_high": "5930.91",
+    "drop_from_high": "39.0",
+    "pe": "None",
+    "pe_percentile": "None",
+    "pe_data_source": "中证指数公司",
+    "pe_data_span": "",
+    "pb": "None",
+    "pb_percentile": "None",
+    "errors": [
+      "估值数据不足: 仅20条，需要至少60条（5年）"
+    ]
+  },
+  {
+    "name": "中证500",
+    "code": "000905",
+    "date": "2024-06-04",
+    "close": "5341.95",
+    "ma10": "5339.34",
+    "ma20": "5415.80",
+    "ma60": "5375.84",
+    "historical_high": "7688.60",
+    "drop_from_high": "30.5",
+    "pe": "None",
+    "pe_percentile": "None",
+    "pe_data_source": "中证指数公司",
+    "pe_data_span": "",
+    "pb": "None",
+    "pb_percentile": "None",
+    "errors": [
+      "估值数据不足: 仅20条，需要至少60条（5年）"
+    ]
+  },
+  {
+    "name": "中证2000",
+    "code": "932000",
+    "date": "2024-06-04",
+    "close": "1968.06",
+    "ma10": "2023.79",
+    "ma20": "2056.49",
+    "ma60": "2072.54",
+    "historical_high": "2700.24",
+    "drop_from_high": "27.1",
+    "pe": "None",
+    "pe_percentile": "None",
+    "pe_data_source": "中证指数公司",
+    "pe_data_span": "",
+    "pb": "None",
+    "pb_percentile": "None",
+    "errors": [
+      "估值数据不足: 仅20条，需要至少60条（5年）"
+    ]
+  },
+  {
+    "name": "创业板指100",
+    "code": "399102",
+    "date": null,
+    "close": "None",
+    "ma10": "-",
+    "ma20": "-",
+    "ma60": "-",
+    "historical_high": "None",
+    "drop_from_high": "-",
+    "pe": "None",
+    "pe_percentile": "None",
+    "pe_data_source": "",
+    "pe_data_span": "",
+    "pb": "None",
+    "pb_percentile": "None",
+    "errors": [
+      "指数行情数据获取失败"
+    ]
+  },
+  {
+    "name": "科创50",
+    "code": "000688",
+    "date": "2024-06-04",
+    "close": "753.64",
+    "ma10": "742.24",
+    "ma20": "750.31",
+    "ma60": "764.24",
+    "historical_high": "1639.19",
+    "drop_from_high": "54.0",
+    "pe": "None",
+    "pe_percentile": "None",
+    "pe_data_source": "中证指数公司",
+    "pe_data_span": "",
+    "pb": "None",
+    "pb_percentile": "None",
+    "errors": [
+      "行情数据不足: 仅1072条，需要至少1260条",
+      "估值数据不足: 仅20条，需要至少60条（5年）"
+    ]
+  },
+  {
+    "name": "恒生指数",
+    "code": "HSI",
+    "date": null,
+    "close": "None",
+    "ma10": "-",
+    "ma20": "-",
+    "ma60": "-",
+    "historical_high": "None",
+    "drop_from_high": "-",
+    "pe": "None",
+    "pe_percentile": "None",
+    "pe_data_source": "",
+    "pe_data_span": "",
+    "pb": "None",
+    "pb_percentile": "None",
+    "errors": [
+      "指数行情数据获取失败"
+    ]
+  },
+  {
+    "name": "恒生科技指数",
+    "code": "HSTECH",
+    "date": null,
+    "close": "None",
+    "ma10": "-",
+    "ma20": "-",
+    "ma60": "-",
+    "historical_high": "None",
+    "drop_from_high": "-",
+    "pe": "None",
+    "pe_percentile": "None",
+    "pe_data_source": "",
+    "pe_data_span": "",
+    "pb": "None",
+    "pb_percentile": "None",
+    "errors": [
+      "指数行情数据获取失败"
+    ]
+  },
+  {
+    "name": "中证消费",
+    "code": "000932",
+    "date": "2024-06-04",
+    "close": "17827.34",
+    "ma10": "17941.35",
+    "ma20": "18147.36",
+    "ma60": "17785.06",
+    "historical_high": "32504.28",
+    "drop_from_high": "45.2",
+    "pe": "None",
+    "pe_percentile": "None",
+    "pe_data_source": "中证指数公司",
+    "pe_data_span": "",
+    "pb": "None",
+    "pb_percentile": "None",
+    "errors": [
+      "估值数据不足: 仅20条，需要至少60条（5年）"
+    ]
+  },
+  {
+    "name": "全指医药",
+    "code": "000991",
+    "date": "2024-06-04",
+    "close": "8568.68",
+    "ma10": "8558.45",
+    "ma20": "8763.42",
+    "ma60": "8716.72",
+    "historical_high": "16906.04",
+    "drop_from_high": "49.3",
+    "pe": "None",
+    "pe_percentile": "None",
+    "pe_data_source": "中证指数公司",
+    "pe_data_span": "",
+    "pb": "None",
+    "pb_percentile": "None",
+    "errors": [
+      "估值数据不足: 仅20条，需要至少60条（5年）"
+    ]
+  },
+  {
+    "name": "中证医疗",
+    "code": "399989",
+    "date": "2024-06-04",
+    "close": "6570.42",
+    "ma10": "6607.19",
+    "ma20": "6775.60",
+    "ma60": "6809.89",
+    "historical_high": "19992.00",
+    "drop_from_high": "67.1",
+    "pe": "None",
+    "pe_percentile": "None",
+    "pe_data_source": "中证指数公司",
+    "pe_data_span": "",
+    "pb": "None",
+    "pb_percentile": "None",
+    "errors": [
+      "估值数据不足: 仅20条，需要至少60条（5年）"
+    ]
+  },
+  {
+    "name": "港股通创新药",
+    "code": "931250",
+    "date": "2024-06-04",
+    "close": "512.80",
+    "ma10": "506.34",
+    "ma20": "529.12",
+    "ma60": "526.41",
+    "historical_high": "None",
+    "drop_from_high": "-",
+    "pe": "None",
+    "pe_percentile": "None",
+    "pe_data_source": "中证指数公司",
+    "pe_data_span": "",
+    "pb": "None",
+    "pb_percentile": "None",
+    "errors": [
+      "估值数据不足: 仅20条，需要至少60条（5年）"
+    ]
+  },
+  {
+    "name": "中证环保",
+    "code": "000827",
+    "date": "2024-06-04",
+    "close": "1453.80",
+    "ma10": "1438.16",
+    "ma20": "1433.99",
+    "ma60": "1436.95",
+    "historical_high": "3090.40",
+    "drop_from_high": "53.0",
+    "pe": "None",
+    "pe_percentile": "None",
+    "pe_data_source": "中证指数公司",
+    "pe_data_span": "",
+    "pb": "None",
+    "pb_percentile": "None",
+    "errors": [
+      "估值数据不足: 仅20条，需要至少60条（5年）"
+    ]
+  },
+  {
+    "name": "中证传媒",
+    "code": "399971",
+    "date": "2024-06-04",
+    "close": "1005.19",
+    "ma10": "1012.72",
+    "ma20": "1036.48",
+    "ma60": "1086.73",
+    "historical_high": "1769.06",
+    "drop_from_high": "43.2",
+    "pe": "None",
+    "pe_percentile": "None",
+    "pe_data_source": "中证指数公司",
+    "pe_data_span": "",
+    "pb": "None",
+    "pb_percentile": "None",
+    "errors": [
+      "估值数据不足: 仅20条，需要至少60条（5年）"
+    ]
+  },
+  {
+    "name": "养老产业",
+    "code": "399481",
+    "date": null,
+    "close": "None",
+    "ma10": "-",
+    "ma20": "-",
+    "ma60": "-",
+    "historical_high": "None",
+    "drop_from_high": "-",
+    "pe": "None",
+    "pe_percentile": "None",
+    "pe_data_source": "",
+    "pe_data_span": "",
+    "pb": "None",
+    "pb_percentile": "None",
+    "errors": [
+      "指数行情数据获取失败"
+    ]
+  }
+]
