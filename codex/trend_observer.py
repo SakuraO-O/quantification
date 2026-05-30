@@ -47,6 +47,7 @@ SLOPE_DAYS = 20
 HTTP_TIMEOUT = (5, 10)
 MARKET_TIMEZONE = ZoneInfo("Asia/Shanghai")
 DISCLAIMER = "本结果仅用于趋势观察，不构成投资建议。均线信号存在滞后性和假突破风险。"
+FEISHU_KEYWORD = "妙啊"
 
 SIGNAL_PRIORITY = [
     "跌破年线",
@@ -362,7 +363,7 @@ def format_markdown(results):
 
 def format_feishu_message(results):
     generated_at = datetime.now(MARKET_TIMEZONE).strftime("%Y-%m-%d %H:%M")
-    lines = [f"均线趋势观察报告 | {generated_at}", ""]
+    lines = [f"{FEISHU_KEYWORD} | 均线趋势观察报告 | {generated_at}", ""]
     for row in results.to_dict("records"):
         close = "--" if pd.isna(row["close"]) else f"{row['close']:.2f}"
         lines.extend(
