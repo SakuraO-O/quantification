@@ -1,0 +1,43 @@
+name: Daily Trend Observer
+
+on:
+  schedule:
+    # GitHub Actions cron uses UTC; 00:00 UTC is 08:00 in Asia/Shanghai.
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  observe-and-notify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TZ: Asia/Shanghai
+      FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+      FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: python -m pip install -r codex/requirements.txt
+
+      - name: Generate report and send Feishu notification
+        run: python codex/trend_observer.py --notify
+
+      - name: Upload generated reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: trend-observer-report-${{ github.run_number }}
+          path: |
+            codex/trend_observer_report.csv
+            codex/trend_observer_report.md
+          retention-days: 30

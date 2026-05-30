@@ -1,0 +1,6 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+index_latest_ma.json
+trend_observer_report.csv
+trend_observer_report.md
