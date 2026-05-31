@@ -24,6 +24,7 @@ import requests
 # ------------------------------ 用户配置区 ------------------------------ #
 # provider:
 #   tencent: symbol 示例 sh000300, sz399102, hkHSI, hkHSTECH
+#   eastmoney: symbol 示例 2.930955, 0.980092, 2.931250
 #   xueqiu:  symbol 示例 CSI932000, CSI931250
 #   yfinance: 需自行安装 yfinance，symbol 示例 QQQ, 000300.SS
 ASSETS = [
@@ -33,10 +34,10 @@ ASSETS = [
     {"name": "创业板100", "symbol": "sz399006", "market": "CN", "asset_type": "指数", "provider": "tencent"},
     {"name": "科创50", "symbol": "sh000688", "market": "CN", "asset_type": "指数", "provider": "tencent"},
     {"name": "恒生指数", "symbol": "hkHSI", "market": "HK", "asset_type": "指数", "provider": "tencent"},
-    {"name": "红利低波", "symbol": "CSI930955", "market": "CN", "asset_type": "指数", "provider": "xueqiu"},
-    {"name": "国证现金流", "symbol": "SZ980092", "market": "CN", "asset_type": "指数", "provider": "xueqiu"},
+    {"name": "红利低波", "symbol": "2.930955", "market": "CN", "asset_type": "指数", "provider": "eastmoney"},
+    {"name": "国证现金流", "symbol": "0.980092", "market": "CN", "asset_type": "指数", "provider": "eastmoney"},
     {"name": "中证消费", "symbol": "sh000932", "market": "CN", "asset_type": "指数", "provider": "tencent"},
-    {"name": "港股通创新药", "symbol": "CSI931250", "market": "CN", "asset_type": "指数", "provider": "xueqiu"},
+    {"name": "港股通创新药", "symbol": "2.931250", "market": "CN", "asset_type": "指数", "provider": "eastmoney"},
 ]
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -193,6 +194,35 @@ def fetch_xueqiu(session, symbol):
     return normalize_frame(rows)
 
 
+def fetch_eastmoney(session, symbol):
+    url = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+    params = {
+        "secid": symbol,
+        "klt": "101",
+        "fqt": "1",
+        "lmt": str(LOOKBACK_ROWS),
+        "end": "20500101",
+        "fields1": "f1,f2,f3,f4,f5,f6",
+        "fields2": "f51,f52,f53,f54,f55,f56",
+    }
+    response = session.get(url, params=params, timeout=HTTP_TIMEOUT)
+    response.raise_for_status()
+    raw_rows = (response.json().get("data") or {}).get("klines") or []
+    rows = []
+    for raw_row in raw_rows:
+        row = raw_row.split(",")
+        rows.append(
+            {
+                "date": row[0],
+                "close": row[2],
+                "high": row[3],
+                "low": row[4],
+                "volume": row[5],
+            }
+        )
+    return normalize_frame(rows)
+
+
 def fetch_yfinance(symbol):
     try:
         import yfinance as yf
@@ -216,6 +246,8 @@ def fetch_history(session, asset):
         return fetch_tencent(session, asset["symbol"])
     if provider == "xueqiu":
         return fetch_xueqiu(session, asset["symbol"])
+    if provider == "eastmoney":
+        return fetch_eastmoney(session, asset["symbol"])
     if provider == "yfinance":
         return fetch_yfinance(asset["symbol"])
     raise ValueError(f"不支持的 provider: {provider}")
