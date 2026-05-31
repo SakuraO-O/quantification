@@ -4,3 +4,4 @@ __pycache__/
 index_latest_ma.json
 trend_observer_report.csv
 trend_observer_report.md
+dashboard_data.json

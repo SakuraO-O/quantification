@@ -10,6 +10,7 @@ import argparse
 import base64
 import hashlib
 import hmac
+import json
 import os
 import time
 from datetime import datetime, timedelta, timezone
@@ -45,6 +46,7 @@ ASSETS = [
 BASE_DIR = Path(__file__).resolve().parent
 CSV_OUTPUT = BASE_DIR / "trend_observer_report.csv"
 MARKDOWN_OUTPUT = BASE_DIR / "trend_observer_report.md"
+DASHBOARD_OUTPUT = BASE_DIR / "dashboard_data.json"
 LOOKBACK_ROWS = 300
 MIN_HISTORY_ROWS = 250
 SLOPE_DAYS = 20
@@ -471,6 +473,36 @@ def format_feishu_message(results):
     return "\n".join(lines)
 
 
+def export_dashboard_data(results):
+    records = []
+    for row in results.to_dict("records"):
+        records.append(
+            {
+                "name": row["name"],
+                "symbol": row["symbol"],
+                "date": row["date"],
+                "close": None if pd.isna(row["close"]) else row["close"],
+                "trend": row["trend_status"],
+                "signals": [tag.strip() for tag in row["signal_tags"].split(",")],
+                "action": row["action_category"],
+                "hint": row["action_hint"],
+                "MA20": None if pd.isna(row["MA20"]) else row["MA20"],
+                "MA50": None if pd.isna(row["MA50"]) else row["MA50"],
+                "MA60": None if pd.isna(row["MA60"]) else row["MA60"],
+                "MA120": None if pd.isna(row["MA120"]) else row["MA120"],
+                "MA200": None if pd.isna(row["MA200"]) else row["MA200"],
+            }
+        )
+    payload = {
+        "generated_at": datetime.now(MARKET_TIMEZONE).strftime("%Y-%m-%d %H:%M"),
+        "assets": records,
+    }
+    DASHBOARD_OUTPUT.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+
+
 def post_feishu_message(results):
     webhook_url = os.getenv("FEISHU_WEBHOOK_URL", "").strip()
     if not webhook_url:
@@ -516,8 +548,10 @@ def run(notify=False):
     output = pd.DataFrame(results)[REPORT_COLUMNS]
     output.to_csv(CSV_OUTPUT, index=False, encoding="utf-8-sig")
     MARKDOWN_OUTPUT.write_text(format_markdown(output), encoding="utf-8")
+    export_dashboard_data(output)
     print(f"\n已导出 CSV: {CSV_OUTPUT}")
     print(f"已导出 Markdown: {MARKDOWN_OUTPUT}\n")
+    print(f"已导出网页数据: {DASHBOARD_OUTPUT}\n")
     print(format_markdown(output))
     if notify:
         post_feishu_message(output)

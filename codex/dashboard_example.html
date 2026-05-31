@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>均线趋势观察台</title>
+  <style>
+    :root {
+      --bg: #f4f6f8;
+      --surface: #ffffff;
+      --surface-soft: #f8fafb;
+      --ink: #18212b;
+      --muted: #687684;
+      --line: #dde3e8;
+      --line-strong: #c8d1d9;
+      --green: #087a55;
+      --green-bg: #e8f6ef;
+      --red: #b42332;
+      --red-bg: #fbeaec;
+      --amber: #9a5b00;
+      --amber-bg: #fff2d9;
+      --blue: #1769aa;
+      --blue-bg: #e9f3fb;
+      --gray-bg: #edf1f4;
+      --shadow: 0 8px 22px rgba(27, 39, 51, 0.06);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+
+    .app-header {
+      background: #17232d;
+      color: #fff;
+      padding: 18px 28px 16px;
+    }
+    .header-inner, main { max-width: 1460px; margin: 0 auto; }
+    .header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+    h1 { margin: 0; font-size: 23px; font-weight: 700; }
+    .subtitle { margin: 6px 0 0; color: #b6c5d0; font-size: 13px; }
+    .as-of { color: #d7e1e8; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+    main { padding: 20px 22px 34px; }
+    .section-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 0 0 10px;
+    }
+    .section-title h2 { margin: 0; font-size: 16px; }
+    .section-note { color: var(--muted); font-size: 12px; }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+    .kpi {
+      display: block;
+      width: 100%;
+      min-height: 102px;
+      padding: 15px 16px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      box-shadow: var(--shadow);
+      color: inherit;
+      text-align: left;
+      transition: border-color 120ms ease, transform 120ms ease;
+    }
+    .kpi:hover { border-color: #9caab5; transform: translateY(-1px); }
+    .kpi:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+    .kpi-label { color: var(--muted); font-size: 13px; }
+    .kpi-value { margin-top: 7px; font-size: 30px; line-height: 1; font-weight: 750; font-variant-numeric: tabular-nums; }
+    .kpi-foot { margin-top: 9px; color: var(--muted); font-size: 12px; }
+    .kpi.good .kpi-value { color: var(--green); }
+    .kpi.warn .kpi-value { color: var(--amber); }
+    .kpi.risk .kpi-value { color: var(--red); }
+    .kpi.neutral .kpi-value { color: var(--blue); }
+
+    .focus-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 22px;
+    }
+    .focus-card {
+      padding: 14px 15px;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-left: 4px solid var(--amber);
+      border-radius: 6px;
+      text-align: left;
+      box-shadow: var(--shadow);
+    }
+    .focus-card.risk { border-left-color: var(--red); }
+    .focus-card.watch { border-left-color: var(--blue); }
+    .focus-top { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
+    .asset-name { font-weight: 700; font-size: 15px; }
+    .asset-symbol { display: block; color: var(--muted); margin-top: 3px; font-size: 12px; }
+    .focus-hint { margin-top: 10px; color: #3e4b57; line-height: 1.55; font-size: 13px; }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface-soft);
+    }
+    .segments { display: flex; flex-wrap: wrap; gap: 5px; }
+    .segment {
+      border: 1px solid var(--line-strong);
+      background: var(--surface);
+      color: #4c5a67;
+      padding: 7px 10px;
+      border-radius: 5px;
+      font-size: 12px;
+    }
+    .segment.active {
+      background: #263946;
+      border-color: #263946;
+      color: #fff;
+    }
+    .search {
+      width: min(270px, 100%);
+      border: 1px solid var(--line-strong);
+      border-radius: 5px;
+      background: #fff;
+      padding: 8px 10px;
+      color: var(--ink);
+    }
+
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; min-width: 1180px; }
+    th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+    th {
+      background: #f8fafb;
+      color: #60707e;
+      font-size: 12px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+    td { font-size: 13px; }
+    tbody tr { cursor: pointer; transition: background 120ms ease; }
+    tbody tr:hover { background: #f0f6fa; }
+    tbody tr:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
+    .number { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .hint-cell { color: #465563; min-width: 290px; line-height: 1.45; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 7px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+    .badge.good { background: var(--green-bg); color: var(--green); }
+    .badge.risk { background: var(--red-bg); color: var(--red); }
+    .badge.warn { background: var(--amber-bg); color: var(--amber); }
+    .badge.watch { background: var(--blue-bg); color: var(--blue); }
+    .badge.neutral { background: var(--gray-bg); color: #52616e; }
+    .tag-list { display: flex; flex-wrap: wrap; gap: 4px; min-width: 180px; }
+
+    dialog {
+      width: min(820px, calc(100vw - 32px));
+      border: 0;
+      border-radius: 7px;
+      padding: 0;
+      box-shadow: 0 20px 60px rgba(20, 34, 46, 0.28);
+    }
+    dialog::backdrop { background: rgba(17, 29, 38, 0.42); }
+    .modal-head {
+      display: flex; justify-content: space-between; align-items: start; gap: 12px;
+      padding: 17px 18px; border-bottom: 1px solid var(--line);
+    }
+    .modal-head h3 { margin: 0; font-size: 18px; }
+    .modal-actions { display: flex; align-items: center; gap: 7px; }
+    .modal-position { color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .nav-btn,
+    .close-btn {
+      width: 30px; height: 30px; border: 1px solid var(--line-strong);
+      border-radius: 5px; background: #fff; font-size: 18px; line-height: 1;
+    }
+    .nav-btn:disabled {
+      cursor: not-allowed;
+      color: #b6c0c8;
+      background: #f2f4f6;
+      border-color: var(--line);
+    }
+    .nav-btn:not(:disabled):hover, .close-btn:hover { border-color: #8797a4; background: #f7fafb; }
+    .modal-body { padding: 17px 18px 20px; }
+    .decision {
+      padding: 12px 13px; margin-bottom: 18px; border-left: 4px solid var(--blue);
+      background: var(--surface-soft); line-height: 1.6;
+    }
+    .detail-grid {
+      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px; margin-bottom: 20px;
+    }
+    .detail-item { padding: 10px; background: var(--surface-soft); border: 1px solid var(--line); border-radius: 5px; }
+    .detail-label { color: var(--muted); font-size: 11px; }
+    .detail-value { margin-top: 5px; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+    .range-title { margin: 0 0 10px; font-size: 14px; }
+    .ma-scale { position: relative; height: 174px; border: 1px solid var(--line); border-radius: 5px; background: #fbfcfd; }
+    .ma-axis { position: absolute; left: 18px; right: 18px; top: 96px; height: 2px; background: #c9d2da; }
+    .ma-point { position: absolute; transform: translateX(-50%); text-align: center; }
+    .ma-dot { width: 12px; height: 12px; margin: 0 auto 4px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px #8393a1; background: #718393; }
+    .ma-point.close .ma-dot { background: var(--red); width: 15px; height: 15px; }
+    .ma-point.close .ma-caption { color: var(--red); font-weight: 700; }
+    .ma-caption { font-size: 11px; color: #52616e; white-space: nowrap; }
+    .disclaimer { margin: 16px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+
+    @media (max-width: 900px) {
+      .app-header { padding: 16px 18px; }
+      .header-row { align-items: start; flex-direction: column; gap: 8px; }
+      main { padding: 16px 12px 28px; }
+      .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .focus-grid { grid-template-columns: 1fr; }
+      .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .search { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="header-row">
+        <div>
+          <h1>均线趋势观察台</h1>
+          <p class="subtitle">中长期趋势观察与仓位管理参考</p>
+        </div>
+        <div class="as-of" id="as-of">正在载入最新行情...</div>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section>
+      <div class="section-title">
+        <h2>决策概览</h2>
+        <span class="section-note" id="asset-count">按操作优先级汇总</span>
+      </div>
+      <div class="kpis" id="kpis"></div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <h2>优先关注</h2>
+        <span class="section-note">需要控制仓位或避免追高的指数</span>
+      </div>
+      <div class="focus-grid" id="focus-grid"></div>
+    </section>
+
+    <section>
+      <div class="section-title">
+        <h2>完整观察列表</h2>
+        <span class="section-note">点击任意数据行查看全部均线位置</span>
+      </div>
+      <div class="panel">
+        <div class="toolbar">
+          <div class="segments" id="segments"></div>
+          <input class="search" id="search" type="search" placeholder="搜索指数名称或代码">
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>指数</th><th>日期</th><th class="number">收盘</th><th>趋势状态</th>
+                <th>信号标签</th><th>操作建议</th><th>操作提示</th>
+              </tr>
+            </thead>
+            <tbody id="table-body"></tbody>
+          </table>
+        </div>
+      </div>
+      <p class="disclaimer">本结果仅用于趋势观察，不构成投资建议。均线信号存在滞后性和假突破风险。</p>
+    </section>
+  </main>
+
+  <dialog id="detail-modal">
+    <div class="modal-head">
+      <div><h3 id="modal-title"></h3><span class="asset-symbol" id="modal-symbol"></span></div>
+      <div class="modal-actions">
+        <span class="modal-position" id="modal-position"></span>
+        <button class="nav-btn" id="previous-asset" aria-label="上一条指数详情" title="上一条">‹</button>
+        <button class="nav-btn" id="next-asset" aria-label="下一条指数详情" title="下一条">›</button>
+        <button class="close-btn" id="close-modal" aria-label="关闭详情">×</button>
+      </div>
+    </div>
+    <div class="modal-body">
+      <div class="decision" id="modal-decision"></div>
+      <div class="detail-grid" id="detail-grid"></div>
+      <h4 class="range-title">收盘价与均线位置</h4>
+      <div class="ma-scale" id="ma-scale"></div>
+      <p class="disclaimer">位置图用于快速观察价格相对均线的位置，不表示预测结果。</p>
+    </div>
+  </dialog>
+
+  <script>
+    const fallbackAssets = [
+      {name:"沪深300",symbol:"sh000300",date:"2026-05-29",close:4892.12,trend:"✅长期趋势向上",signals:["均线多头排列"],action:"继续持有",hint:"长期趋势向上且未出现破坏信号，可继续持有，适合定投或等待回踩。",MA20:4884.44,MA50:4721.60,MA60:4711.16,MA120:4687.20,MA200:4603.07},
+      {name:"中证A500",symbol:"sh000510",date:"2026-05-29",close:6100.14,trend:"✅长期趋势向上",signals:["无新增信号"],action:"继续持有",hint:"长期趋势向上且未出现破坏信号，可继续持有，适合定投或等待回踩。",MA20:6148.25,MA50:5905.31,MA60:5896.25,MA120:5820.34,MA200:5636.20},
+      {name:"中证500",symbol:"sh000905",date:"2026-05-29",close:8359.56,trend:"✅长期趋势向上",signals:["无新增信号"],action:"继续持有",hint:"长期趋势向上且未出现破坏信号，可继续持有，适合定投或等待回踩。",MA20:8603.67,MA50:8202.63,MA60:8220.15,MA120:8024.16,MA200:7617.66},
+      {name:"创业板100",symbol:"sz399006",date:"2026-05-29",close:4037.95,trend:"✅长期趋势向上",signals:["均线多头排列","高位乖离"],action:"暂不追高",hint:"趋势向上但乖离或短期热度偏高，不宜一次性加仓。",MA20:3917.02,MA50:3618.32,MA60:3559.75,MA120:3404.55,MA200:3212.36},
+      {name:"科创50",symbol:"sh000688",date:"2026-05-29",close:1751.32,trend:"✅长期趋势向上",signals:["均线多头排列","高位乖离"],action:"暂不追高",hint:"趋势向上但乖离或短期热度偏高，不宜一次性加仓。",MA20:1735.98,MA50:1510.05,MA60:1490.78,MA120:1455.57,MA200:1398.44},
+      {name:"恒生指数",symbol:"hkHSI",date:"2026-05-29",close:25182.39,trend:"震荡观察",signals:["震荡观察"],action:"暂不操作",hint:"趋势不清晰或仍偏弱，避免重仓操作。",MA20:25886.63,MA50:25739.50,MA60:25726.34,MA120:26064.45,MA200:26016.30},
+      {name:"红利低波",symbol:"H30269",date:"2026-05-29",close:11082.68,trend:"❌长期趋势向下",signals:["无新增信号"],action:"暂不操作",hint:"长期趋势向下，谨慎参与，原则上不主动加仓。",MA20:11124.23,MA50:11282.79,MA60:11305.42,MA120:11264.50,MA200:11357.45},
+      {name:"国证现金流",symbol:"980092",date:"2026-05-29",close:5390.02,trend:"震荡观察",signals:["震荡观察"],action:"暂不操作",hint:"趋势不清晰或仍偏弱，避免重仓操作。",MA20:5630.57,MA50:5737.72,MA60:5805.43,MA120:5681.54,MA200:5437.25},
+      {name:"中证消费",symbol:"sh000932",date:"2026-05-29",close:13190.39,trend:"❌长期趋势向下",signals:["均线空头排列"],action:"暂不操作",hint:"长期趋势向下，谨慎参与，原则上不主动加仓。",MA20:13638.54,MA50:14104.60,MA60:14230.78,MA120:14763.77,MA200:15398.85},
+      {name:"港股通创新药",symbol:"931250",date:"2026-05-29",close:973.60,trend:"❌长期趋势向下",signals:["均线空头排列"],action:"暂不操作",hint:"长期趋势向下，谨慎参与，原则上不主动加仓。",MA20:1019.16,MA50:1051.32,MA60:1044.83,MA120:1069.06,MA200:1118.52}
+    ];
+
+    let assets = fallbackAssets;
+
+    const filters = [
+      ["all","全部"],["hold","继续持有"],["wait","暂不追高"],["watch","震荡观察"],["risk","长期向下"]
+    ];
+    let activeFilter = "all";
+    let currentDetailIndex = -1;
+    let detailSequence = [];
+
+    function escapeHtml(value) {
+      return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+      })[char]);
+    }
+    function displayNumber(value) {
+      return typeof value === "number" && Number.isFinite(value) ? value.toFixed(2) : "--";
+    }
+    function hasMetrics(asset) {
+      return ["close","MA20","MA50","MA60","MA120","MA200"].every(key =>
+        typeof asset[key] === "number" && Number.isFinite(asset[key])
+      );
+    }
+
+    function tone(asset) {
+      if (asset.action === "暂不追高") return "warn";
+      if (asset.trend.includes("向下")) return "risk";
+      if (asset.trend === "震荡观察") return "watch";
+      return "good";
+    }
+    function tagTone(tag) {
+      if (tag.includes("乖离") || tag.includes("过热")) return "warn";
+      if (tag.includes("空头") || tag.includes("跌破") || tag.includes("死亡")) return "risk";
+      if (tag.includes("震荡")) return "watch";
+      if (tag === "无新增信号") return "neutral";
+      return "good";
+    }
+    function matches(asset) {
+      const q = document.querySelector("#search").value.trim().toLowerCase();
+      const textMatch = !q || `${asset.name} ${asset.symbol}`.toLowerCase().includes(q);
+      const filterMatch = activeFilter === "all" ||
+        (activeFilter === "hold" && asset.action === "继续持有") ||
+        (activeFilter === "wait" && asset.action === "暂不追高") ||
+        (activeFilter === "watch" && asset.trend === "震荡观察") ||
+        (activeFilter === "risk" && asset.trend.includes("向下"));
+      return textMatch && filterMatch;
+    }
+    function visibleAssets() { return assets.filter(matches); }
+
+    function renderKpis() {
+      const items = [
+        ["good","继续持有", assets.filter(x => x.action === "继续持有").length, "长期结构保持健康", "hold"],
+        ["warn","暂不追高", assets.filter(x => x.action === "暂不追高").length, "乖离偏高，等待回落", "wait"],
+        ["neutral","震荡观察", assets.filter(x => x.trend === "震荡观察").length, "方向不清晰，控制仓位", "watch"],
+        ["risk","长期向下", assets.filter(x => x.trend.includes("向下")).length, "原则上不主动加仓", "risk"]
+      ];
+      document.querySelector("#kpis").innerHTML = items.map(([cls,label,value,foot,filter]) =>
+        `<button class="kpi ${cls}" data-kpi-filter="${filter}"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div><div class="kpi-foot">${foot}</div></button>`
+      ).join("");
+      document.querySelectorAll("[data-kpi-filter]").forEach(button => button.addEventListener("click", () => {
+        activeFilter = button.dataset.kpiFilter;
+        document.querySelector("#search").value = "";
+        renderSegments();
+        renderTable();
+        document.querySelector(".panel").scrollIntoView({behavior:"smooth", block:"start"});
+      }));
+    }
+
+    function renderFocus() {
+      const focused = assets.filter(x => x.action === "暂不追高" || x.trend.includes("向下") || x.trend === "震荡观察");
+      document.querySelector("#focus-grid").innerHTML = focused.map(asset => `
+        <button class="focus-card ${tone(asset)}" data-open="${asset.symbol}">
+          <div class="focus-top">
+            <div><span class="asset-name">${escapeHtml(asset.name)}</span><span class="asset-symbol">${escapeHtml(asset.symbol)}</span></div>
+            <span class="badge ${tone(asset)}">${escapeHtml(asset.action)}</span>
+          </div>
+          <div class="tag-list" style="margin-top:10px">${asset.signals.map(tag => `<span class="badge ${tagTone(tag)}">${escapeHtml(tag)}</span>`).join("")}</div>
+          <div class="focus-hint">${escapeHtml(asset.hint)}</div>
+        </button>`).join("");
+    }
+
+    function renderSegments() {
+      document.querySelector("#segments").innerHTML = filters.map(([key,label]) =>
+        `<button class="segment ${key === activeFilter ? "active" : ""}" data-filter="${key}">${label}</button>`
+      ).join("");
+      document.querySelectorAll("[data-filter]").forEach(button => button.addEventListener("click", () => {
+        activeFilter = button.dataset.filter; renderSegments(); renderTable();
+      }));
+    }
+
+    function renderTable() {
+      const rows = visibleAssets().map(asset => `
+        <tr tabindex="0" data-row-open="${asset.symbol}" aria-label="查看${asset.name}详情">
+          <td><span class="asset-name">${escapeHtml(asset.name)}</span><span class="asset-symbol">${escapeHtml(asset.symbol)}</span></td>
+          <td>${escapeHtml(asset.date || "--")}</td><td class="number">${displayNumber(asset.close)}</td>
+          <td><span class="badge ${tone(asset)}">${escapeHtml(asset.trend)}</span></td>
+          <td><div class="tag-list">${asset.signals.filter(tag => tag !== "无新增信号").map(tag => `<span class="badge ${tagTone(tag)}">${escapeHtml(tag)}</span>`).join("")}</div></td>
+          <td><span class="badge ${tone(asset)}">${escapeHtml(asset.action)}</span></td>
+          <td class="hint-cell">${escapeHtml(asset.hint)}</td>
+        </tr>`).join("");
+      document.querySelector("#table-body").innerHTML = rows || `<tr><td colspan="7">没有匹配结果</td></tr>`;
+      document.querySelectorAll("[data-row-open]").forEach(row => {
+        row.addEventListener("click", () => openDetail(row.dataset.rowOpen));
+        row.addEventListener("keydown", event => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            openDetail(row.dataset.rowOpen);
+          }
+        });
+      });
+      document.querySelectorAll("[data-open]").forEach(button => button.addEventListener("click", () => openDetail(button.dataset.open)));
+    }
+
+    function openDetail(symbol) {
+      const orderedAssets = visibleAssets();
+      const requestedIndex = orderedAssets.findIndex(x => x.symbol === symbol);
+      detailSequence = requestedIndex >= 0 ? orderedAssets : assets;
+      currentDetailIndex = requestedIndex >= 0 ? requestedIndex : assets.findIndex(x => x.symbol === symbol);
+      renderDetail();
+      document.querySelector("#detail-modal").showModal();
+    }
+
+    function renderDetail() {
+      const asset = detailSequence[currentDetailIndex];
+      if (!asset) return;
+      document.querySelector("#modal-title").textContent = asset.name;
+      document.querySelector("#modal-symbol").textContent = `${asset.symbol} · ${asset.date || "--"}`;
+      document.querySelector("#modal-position").textContent = `${currentDetailIndex + 1} / ${detailSequence.length}`;
+      document.querySelector("#previous-asset").disabled = currentDetailIndex <= 0;
+      document.querySelector("#next-asset").disabled = currentDetailIndex >= detailSequence.length - 1;
+      document.querySelector("#modal-decision").innerHTML =
+        `<div style="margin-bottom:6px"><span class="badge ${tone(asset)}">${escapeHtml(asset.trend)}</span> <span class="badge ${tone(asset)}">${escapeHtml(asset.action)}</span></div>${escapeHtml(asset.hint)}`;
+      const relativeMA200 = hasMetrics(asset) ? `${((asset.close / asset.MA200 - 1) * 100).toFixed(2)}%` : "--";
+      const metrics = [["收盘价",asset.close],["MA20",asset.MA20],["MA50",asset.MA50],["MA60",asset.MA60],["MA120",asset.MA120],["MA200",asset.MA200],["相对MA200",relativeMA200],["信号",asset.signals.join("、")]];
+      document.querySelector("#detail-grid").innerHTML = metrics.map(([label,value]) =>
+        `<div class="detail-item"><div class="detail-label">${escapeHtml(label)}</div><div class="detail-value">${typeof value === "number" ? displayNumber(value) : escapeHtml(value)}</div></div>`
+      ).join("");
+      if (!hasMetrics(asset)) {
+        document.querySelector("#ma-scale").innerHTML = `<div style="padding:18px;color:var(--muted)">暂无完整均线数据</div>`;
+        return;
+      }
+      const points = [["MA200",asset.MA200],["MA120",asset.MA120],["MA60",asset.MA60],["MA50",asset.MA50],["MA20",asset.MA20],["收盘",asset.close]];
+      const values = points.map(x => x[1]), min = Math.min(...values), max = Math.max(...values), gap = Math.max(max - min, 1);
+      document.querySelector("#ma-scale").innerHTML = `<div class="ma-axis"></div>` + points.map(([label,value], index) => {
+        const left = 4 + ((value - min) / gap) * 92;
+        const top = label === "收盘" ? 105 : (index % 2 === 0 ? 48 : 4);
+        return `<div class="ma-point ${label === "收盘" ? "close" : ""}" style="left:${left}%;top:${top}px"><div class="ma-dot"></div><div class="ma-caption">${label}<br>${value.toFixed(2)}</div></div>`;
+      }).join("");
+    }
+
+    function moveDetail(step) {
+      const nextIndex = currentDetailIndex + step;
+      if (nextIndex < 0 || nextIndex >= detailSequence.length) return;
+      currentDetailIndex = nextIndex;
+      renderDetail();
+    }
+
+    document.querySelector("#search").addEventListener("input", renderTable);
+    document.querySelector("#close-modal").addEventListener("click", () => document.querySelector("#detail-modal").close());
+    document.querySelector("#previous-asset").addEventListener("click", () => moveDetail(-1));
+    document.querySelector("#next-asset").addEventListener("click", () => moveDetail(1));
+    function renderDashboard() {
+      document.querySelector("#asset-count").textContent = `${assets.length} 个指数 · 按操作优先级汇总`;
+      renderKpis(); renderFocus(); renderSegments(); renderTable();
+    }
+
+    async function loadLatestData() {
+      try {
+        const response = await fetch("./dashboard_data.json", {cache:"no-store"});
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        if (!Array.isArray(payload.assets) || !payload.assets.length) throw new Error("行情数据为空");
+        assets = payload.assets;
+        document.querySelector("#as-of").textContent = `更新时间：${payload.generated_at || "--"}`;
+      } catch (error) {
+        document.querySelector("#as-of").textContent = "示例数据 · 等待首次发布";
+        console.warn("未能读取 dashboard_data.json，正在展示页面内置示例。", error);
+      }
+      renderDashboard();
+    }
+
+    loadLatestData();
+  </script>
+</body>
+</html>
