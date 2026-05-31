@@ -12,7 +12,7 @@ import hashlib
 import hmac
 import os
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -25,6 +25,8 @@ import requests
 # provider:
 #   tencent: symbol 示例 sh000300, sz399102, hkHSI, hkHSTECH
 #   eastmoney: symbol 示例 2.930955, 0.980092, 2.931250
+#   csindex: symbol 示例 H30269, 931250
+#   cnindex: symbol 示例 980092
 #   xueqiu:  symbol 示例 CSI932000, CSI931250
 #   yfinance: 需自行安装 yfinance，symbol 示例 QQQ, 000300.SS
 ASSETS = [
@@ -34,10 +36,10 @@ ASSETS = [
     {"name": "创业板100", "symbol": "sz399006", "market": "CN", "asset_type": "指数", "provider": "tencent"},
     {"name": "科创50", "symbol": "sh000688", "market": "CN", "asset_type": "指数", "provider": "tencent"},
     {"name": "恒生指数", "symbol": "hkHSI", "market": "HK", "asset_type": "指数", "provider": "tencent"},
-    {"name": "红利低波", "symbol": "2.930955", "market": "CN", "asset_type": "指数", "provider": "eastmoney"},
-    {"name": "国证现金流", "symbol": "0.980092", "market": "CN", "asset_type": "指数", "provider": "eastmoney"},
+    {"name": "红利低波", "symbol": "H30269", "market": "CN", "asset_type": "指数", "provider": "csindex"},
+    {"name": "国证现金流", "symbol": "980092", "market": "CN", "asset_type": "指数", "provider": "cnindex"},
     {"name": "中证消费", "symbol": "sh000932", "market": "CN", "asset_type": "指数", "provider": "tencent"},
-    {"name": "港股通创新药", "symbol": "2.931250", "market": "CN", "asset_type": "指数", "provider": "eastmoney"},
+    {"name": "港股通创新药", "symbol": "931250", "market": "CN", "asset_type": "指数", "provider": "csindex"},
 ]
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -223,6 +225,59 @@ def fetch_eastmoney(session, symbol):
     return normalize_frame(rows)
 
 
+def fetch_csindex(session, symbol):
+    url = "https://www.csindex.com.cn/csindex-home/perf/index-perf"
+    today = datetime.now(MARKET_TIMEZONE).date()
+    params = {
+        "indexCode": symbol,
+        "startDate": (today - timedelta(days=600)).strftime("%Y%m%d"),
+        "endDate": today.strftime("%Y%m%d"),
+    }
+    response = session.get(url, params=params, timeout=HTTP_TIMEOUT)
+    response.raise_for_status()
+    payload = response.json()
+    if payload.get("code") != "200":
+        raise ValueError(f"中证指数官网返回异常: {payload}")
+    rows = [
+        {
+            "date": row["tradeDate"],
+            "close": row["close"],
+            "high": row["high"],
+            "low": row["low"],
+            "volume": row.get("tradingVol", np.nan),
+        }
+        for row in payload.get("data") or []
+    ]
+    return normalize_frame(rows).tail(LOOKBACK_ROWS).reset_index(drop=True)
+
+
+def fetch_cnindex(session, symbol):
+    url = "https://hq.cnindex.com.cn/market/market/getIndexDailyData"
+    response = session.get(url, params={"indexCode": symbol}, timeout=HTTP_TIMEOUT)
+    response.raise_for_status()
+    payload = response.json()
+    if payload.get("code") != 200:
+        raise ValueError(f"国证指数官网返回异常: {payload}")
+    data = payload.get("data") or {}
+    column_index = {name: index for index, name in enumerate(data.get("item") or [])}
+    required = {"timestamp", "close", "high", "low"}
+    if not required.issubset(column_index):
+        raise ValueError(f"国证指数官网返回字段缺失: {symbol}")
+    rows = [
+        {
+            "date": datetime.fromtimestamp(
+                row[column_index["timestamp"]] / 1000, MARKET_TIMEZONE
+            ).strftime("%Y-%m-%d"),
+            "close": row[column_index["close"]],
+            "high": row[column_index["high"]],
+            "low": row[column_index["low"]],
+            "volume": row[column_index["volume"]] if "volume" in column_index else np.nan,
+        }
+        for row in data.get("data") or []
+    ]
+    return normalize_frame(rows).tail(LOOKBACK_ROWS).reset_index(drop=True)
+
+
 def fetch_yfinance(symbol):
     try:
         import yfinance as yf
@@ -242,14 +297,19 @@ def fetch_yfinance(symbol):
 
 def fetch_history(session, asset):
     provider = asset.get("provider", "tencent").lower()
+    symbol = asset.get("provider_symbol", asset["symbol"])
     if provider == "tencent":
-        return fetch_tencent(session, asset["symbol"])
+        return fetch_tencent(session, symbol)
     if provider == "xueqiu":
-        return fetch_xueqiu(session, asset["symbol"])
+        return fetch_xueqiu(session, symbol)
     if provider == "eastmoney":
-        return fetch_eastmoney(session, asset["symbol"])
+        return fetch_eastmoney(session, symbol)
+    if provider == "csindex":
+        return fetch_csindex(session, symbol)
+    if provider == "cnindex":
+        return fetch_cnindex(session, symbol)
     if provider == "yfinance":
-        return fetch_yfinance(asset["symbol"])
+        return fetch_yfinance(symbol)
     raise ValueError(f"不支持的 provider: {provider}")
 
 
