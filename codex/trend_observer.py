@@ -28,14 +28,15 @@ import requests
 #   yfinance: 需自行安装 yfinance，symbol 示例 QQQ, 000300.SS
 ASSETS = [
     {"name": "沪深300", "symbol": "sh000300", "market": "CN", "asset_type": "指数", "provider": "tencent"},
-    {"name": "中证红利", "symbol": "sh000922", "market": "CN", "asset_type": "指数", "provider": "tencent"},
-    {"name": "恒生科技", "symbol": "hkHSTECH", "market": "HK", "asset_type": "指数", "provider": "tencent"},
-    {"name": "恒生指数", "symbol": "hkHSI", "market": "HK", "asset_type": "指数", "provider": "tencent"},
-    {"name": "中证500", "symbol": "sh000905", "market": "CN", "asset_type": "指数", "provider": "tencent"},
     {"name": "中证A500", "symbol": "sh000510", "market": "CN", "asset_type": "指数", "provider": "tencent"},
+    {"name": "中证500", "symbol": "sh000905", "market": "CN", "asset_type": "指数", "provider": "tencent"},
+    {"name": "创业板100", "symbol": "sz399006", "market": "CN", "asset_type": "指数", "provider": "tencent"},
+    {"name": "科创50", "symbol": "sh000688", "market": "CN", "asset_type": "指数", "provider": "tencent"},
+    {"name": "恒生指数", "symbol": "hkHSI", "market": "HK", "asset_type": "指数", "provider": "tencent"},
+    {"name": "红利低波", "symbol": "CSI930955", "market": "CN", "asset_type": "指数", "provider": "xueqiu"},
+    {"name": "国证现金流", "symbol": "SZ980092", "market": "CN", "asset_type": "指数", "provider": "xueqiu"},
     {"name": "中证消费", "symbol": "sh000932", "market": "CN", "asset_type": "指数", "provider": "tencent"},
-    # {"name": "中证2000", "symbol": "CSI932000", "market": "CN", "asset_type": "指数", "provider": "xueqiu"},
-    # {"name": "纳斯达克100 ETF", "symbol": "QQQ", "market": "US", "asset_type": "ETF", "provider": "yfinance"},
+    {"name": "港股通创新药", "symbol": "CSI931250", "market": "CN", "asset_type": "指数", "provider": "xueqiu"},
 ]
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -51,10 +52,10 @@ FEISHU_KEYWORD = "妙啊"
 
 SIGNAL_PRIORITY = [
     "跌破年线",
-    "死亡交叉",
+    "🆘死亡交叉",
     "均线空头排列",
     "突破年线",
-    "黄金交叉",
+    "💚黄金交叉",
     "均线多头排列",
     "回踩年线",
     "回踩中期均线",
@@ -232,9 +233,9 @@ def calculate_indicators(frame):
 
 def determine_trend(today):
     if today["close"] > today["MA200"] and today["MA50"] > today["MA200"] and today["MA200_slope"] > 0:
-        return "长期趋势向上"
+        return "✅长期趋势向上"
     if today["close"] < today["MA200"] and today["MA50"] < today["MA200"] and today["MA200_slope"] < 0:
-        return "长期趋势向下"
+        return "❌长期趋势向下"
     return "震荡观察"
 
 
@@ -243,13 +244,13 @@ def find_signals(today, yesterday, trend_status):
     if yesterday["close"] <= yesterday["MA200"] and today["close"] > today["MA200"]:
         signals.add("突破年线")
     if yesterday["MA50"] <= yesterday["MA200"] and today["MA50"] > today["MA200"]:
-        signals.add("黄金交叉")
+        signals.add("💚黄金交叉")
     if today["MA20"] > today["MA50"] > today["MA120"] > today["MA200"] and today["close"] > today["MA20"]:
         signals.add("均线多头排列")
     if yesterday["close"] >= yesterday["MA200"] and today["close"] < today["MA200"]:
         signals.add("跌破年线")
     if yesterday["MA50"] >= yesterday["MA200"] and today["MA50"] < today["MA200"]:
-        signals.add("死亡交叉")
+        signals.add("🆘死亡交叉")
     if today["MA20"] < today["MA50"] < today["MA120"] < today["MA200"] and today["close"] < today["MA20"]:
         signals.add("均线空头排列")
     if (
@@ -271,19 +272,19 @@ def find_signals(today, yesterday, trend_status):
 
 def determine_action(trend_status, signals):
     tags = set(signals)
-    if "跌破年线" in tags or "死亡交叉" in tags:
+    if "跌破年线" in tags or "🆘死亡交叉" in tags:
         return "减仓观察"
-    if trend_status == "长期趋势向上" and ({"回踩年线", "回踩中期均线"} & tags) and "高位乖离" not in tags:
+    if trend_status == "✅长期趋势向上" and ({"回踩年线", "回踩中期均线"} & tags) and "高位乖离" not in tags:
         return "谨慎加仓"
-    if trend_status == "长期趋势向上" and ({"高位乖离", "短期过热"} & tags):
+    if trend_status == "✅长期趋势向上" and ({"高位乖离", "短期过热"} & tags):
         return "暂不追高"
-    if trend_status == "长期趋势向上":
+    if trend_status == "✅长期趋势向上":
         return "继续持有"
     return "暂不操作"
 
 
 def determine_action_hint(trend_status, action_category):
-    if trend_status == "长期趋势向下" and action_category == "暂不操作":
+    if trend_status == "❌长期趋势向下" and action_category == "暂不操作":
         return "长期趋势向下，谨慎参与，原则上不主动加仓。"
     return ACTION_HINTS[action_category]
 
