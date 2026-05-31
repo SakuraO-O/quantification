@@ -2,8 +2,8 @@ name: Daily Trend Observer
 
 on:
   schedule:
-    # GitHub Actions cron uses UTC; 00:00 UTC is 08:00 in Asia/Shanghai.
-    - cron: "0 0 * * *"
+    # Avoid the top-of-hour GitHub Actions load spike. 00:07 UTC is 08:07 in Asia/Shanghai.
+    - cron: "7 0 * * *"
   workflow_dispatch:
 
 permissions:
