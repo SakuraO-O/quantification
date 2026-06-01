@@ -167,6 +167,8 @@
     tbody tr:hover { background: #f0f6fa; }
     tbody tr:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
     .number { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .return-up { color: var(--red); }
+    .return-down { color: var(--green); }
     .hint-cell { color: #465563; min-width: 290px; line-height: 1.45; }
     .badge {
       display: inline-flex;
@@ -293,7 +295,8 @@
           <table>
             <thead>
               <tr>
-                <th>资产</th><th>类型</th><th>日期</th><th class="number">收盘</th><th>趋势状态</th>
+                <th>资产</th><th>类型</th><th>日期</th><th class="number">收盘</th>
+                <th class="number">当日</th><th class="number">今年</th><th class="number">近6个月</th><th class="number">近1年</th><th>趋势状态</th>
                 <th>信号标签</th><th>操作建议</th><th>操作提示</th>
               </tr>
             </thead>
@@ -356,6 +359,13 @@
     }
     function displayNumber(value) {
       return typeof value === "number" && Number.isFinite(value) ? value.toFixed(2) : "--";
+    }
+    function displayReturn(value) {
+      return typeof value === "number" && Number.isFinite(value) ? `${value > 0 ? "+" : ""}${value.toFixed(2)}%` : "--";
+    }
+    function returnTone(value) {
+      if (typeof value !== "number" || !Number.isFinite(value) || value === 0) return "";
+      return value > 0 ? "return-up" : "return-down";
     }
     function hasMetrics(asset) {
       return ["close","MA20","MA50","MA60","MA120","MA200"].every(key =>
@@ -454,12 +464,16 @@
           <td><span class="asset-name">${escapeHtml(asset.name)}</span><span class="asset-symbol">${escapeHtml(asset.symbol)}</span></td>
           <td>${escapeHtml(asset.asset_type || "--")}</td>
           <td>${escapeHtml(asset.date || "--")}</td><td class="number">${displayNumber(asset.close)}</td>
+          <td class="number ${returnTone(asset.return_day)}">${displayReturn(asset.return_day)}</td>
+          <td class="number ${returnTone(asset.return_ytd)}">${displayReturn(asset.return_ytd)}</td>
+          <td class="number ${returnTone(asset.return_6m)}">${displayReturn(asset.return_6m)}</td>
+          <td class="number ${returnTone(asset.return_1y)}">${displayReturn(asset.return_1y)}</td>
           <td><span class="badge ${tone(asset)}">${escapeHtml(asset.trend)}</span></td>
           <td><div class="tag-list">${asset.signals.filter(tag => tag !== "无新增信号").map(tag => `<span class="badge ${tagTone(tag)}">${escapeHtml(tag)}</span>`).join("")}</div></td>
           <td><span class="badge ${tone(asset)}">${escapeHtml(asset.action)}</span></td>
           <td class="hint-cell">${escapeHtml(asset.hint)}</td>
         </tr>`).join("");
-      document.querySelector("#table-body").innerHTML = rows || `<tr><td colspan="8">没有匹配结果</td></tr>`;
+      document.querySelector("#table-body").innerHTML = rows || `<tr><td colspan="12">没有匹配结果</td></tr>`;
       document.querySelectorAll("[data-row-open]").forEach(row => {
         row.addEventListener("click", () => openDetail(row.dataset.rowOpen));
         row.addEventListener("keydown", event => {
@@ -492,9 +506,9 @@
       document.querySelector("#modal-decision").innerHTML =
         `<div style="margin-bottom:6px"><span class="badge ${tone(asset)}">${escapeHtml(asset.trend)}</span> <span class="badge ${tone(asset)}">${escapeHtml(asset.action)}</span></div>${escapeHtml(asset.hint)}`;
       const relativeMA200 = hasMetrics(asset) ? `${((asset.close / asset.MA200 - 1) * 100).toFixed(2)}%` : "--";
-      const metrics = [["收盘价",asset.close],["MA20",asset.MA20],["MA50",asset.MA50],["MA60",asset.MA60],["MA120",asset.MA120],["MA200",asset.MA200],["相对MA200",relativeMA200],["信号",asset.signals.join("、")]];
-      document.querySelector("#detail-grid").innerHTML = metrics.map(([label,value]) =>
-        `<div class="detail-item"><div class="detail-label">${escapeHtml(label)}</div><div class="detail-value">${typeof value === "number" ? displayNumber(value) : escapeHtml(value)}</div></div>`
+      const metrics = [["收盘价",asset.close],["当日涨跌幅",asset.return_day,"return"],["今年涨跌幅",asset.return_ytd,"return"],["近6个月涨跌幅",asset.return_6m,"return"],["近1年涨跌幅",asset.return_1y,"return"],["MA20",asset.MA20],["MA50",asset.MA50],["MA60",asset.MA60],["MA120",asset.MA120],["MA200",asset.MA200],["相对MA200",relativeMA200],["信号",asset.signals.join("、")]];
+      document.querySelector("#detail-grid").innerHTML = metrics.map(([label,value,type]) =>
+        `<div class="detail-item"><div class="detail-label">${escapeHtml(label)}</div><div class="detail-value ${type === "return" ? returnTone(value) : ""}">${type === "return" ? displayReturn(value) : (typeof value === "number" ? displayNumber(value) : escapeHtml(value))}</div></div>`
       ).join("");
       if (!hasMetrics(asset)) {
         document.querySelector("#ma-scale").innerHTML = `<div style="padding:18px;color:var(--muted)">暂无完整均线数据</div>`;

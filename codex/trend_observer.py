@@ -93,6 +93,10 @@ REPORT_COLUMNS = [
     "asset_type",
     "date",
     "close",
+    "return_day",
+    "return_ytd",
+    "return_6m",
+    "return_1y",
     "trend_status",
     "signal_tags",
     "action_category",
@@ -109,6 +113,10 @@ MARKDOWN_COLUMNS = [
     "symbol",
     "date",
     "close",
+    "return_day",
+    "return_ytd",
+    "return_6m",
+    "return_1y",
     "trend_status",
     "signal_tags",
     "action_category",
@@ -392,6 +400,24 @@ def determine_action_hint(trend_status, action_category):
     return ACTION_HINTS[action_category]
 
 
+def calculate_returns(frame):
+    today = frame.iloc[-1]
+    today_date = today["date"]
+
+    def return_since(reference_rows):
+        if reference_rows.empty:
+            return np.nan
+        return round((today["close"] / reference_rows.iloc[-1]["close"] - 1) * 100, 2)
+
+    year_start = pd.Timestamp(year=today_date.year, month=1, day=1)
+    return {
+        "return_day": return_since(frame.iloc[:-1]),
+        "return_ytd": return_since(frame[frame["date"] < year_start]),
+        "return_6m": return_since(frame[frame["date"] <= today_date - pd.DateOffset(months=6)]),
+        "return_1y": return_since(frame[frame["date"] <= today_date - pd.DateOffset(years=1)]),
+    }
+
+
 def empty_result(asset, status, detail):
     return {
         "name": asset["name"],
@@ -400,6 +426,10 @@ def empty_result(asset, status, detail):
         "asset_type": asset.get("asset_type", ""),
         "date": "",
         "close": np.nan,
+        "return_day": np.nan,
+        "return_ytd": np.nan,
+        "return_6m": np.nan,
+        "return_1y": np.nan,
         "MA20": np.nan,
         "MA50": np.nan,
         "MA60": np.nan,
@@ -430,6 +460,7 @@ def analyze_asset(session, asset):
     trend_status = determine_trend(today)
     signals = find_signals(today, yesterday, trend_status)
     action_category = determine_action(trend_status, signals)
+    returns = calculate_returns(frame)
     return {
         "name": asset["name"],
         "symbol": asset["symbol"],
@@ -437,6 +468,7 @@ def analyze_asset(session, asset):
         "asset_type": asset.get("asset_type", ""),
         "date": today["date"].strftime("%Y-%m-%d"),
         "close": round(today["close"], 2),
+        **returns,
         "MA20": round(today["MA20"], 2),
         "MA50": round(today["MA50"], 2),
         "MA60": round(today["MA60"], 2),
@@ -454,6 +486,9 @@ def format_markdown(results):
     numeric = ["close", "MA20", "MA50", "MA60", "MA120", "MA200"]
     for column in numeric:
         table[column] = table[column].map(lambda value: "" if pd.isna(value) else f"{value:.2f}")
+    percentages = ["return_day", "return_ytd", "return_6m", "return_1y"]
+    for column in percentages:
+        table[column] = table[column].map(lambda value: "" if pd.isna(value) else f"{value:.2f}%")
     report_date = datetime.now(MARKET_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S")
     return (
         "# 均线趋势观察报告\n\n"
@@ -492,6 +527,10 @@ def export_dashboard_data(results):
                 "asset_type": row["asset_type"],
                 "date": row["date"],
                 "close": None if pd.isna(row["close"]) else row["close"],
+                "return_day": None if pd.isna(row["return_day"]) else row["return_day"],
+                "return_ytd": None if pd.isna(row["return_ytd"]) else row["return_ytd"],
+                "return_6m": None if pd.isna(row["return_6m"]) else row["return_6m"],
+                "return_1y": None if pd.isna(row["return_1y"]) else row["return_1y"],
                 "trend": row["trend_status"],
                 "signals": [tag.strip() for tag in row["signal_tags"].split(",")],
                 "action": row["action_category"],
