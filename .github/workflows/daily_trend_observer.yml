@@ -2,9 +2,14 @@ name: Daily Trend Observer
 
 on:
   schedule:
-    # Avoid the top-of-hour GitHub Actions load spike. 00:07 UTC is 08:07 in Asia/Shanghai.
-    - cron: "7 0 * * *"
+    # Avoid the top-of-hour GitHub Actions load spike while keeping the report in the 08:00 hour.
+    - cron: "37 8 * * *"
+      timezone: "Asia/Shanghai"
   workflow_dispatch:
+
+env:
+  # Validate the workflow against the Node.js 24 runtime before GitHub makes it the default.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 permissions:
   contents: read
