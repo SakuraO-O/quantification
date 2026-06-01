@@ -270,7 +270,7 @@
     <section>
       <div class="section-title">
         <h2>优先关注</h2>
-        <span class="section-note">需要控制仓位或避免追高的指数</span>
+        <span class="section-note">需要控制仓位或避免追高的资产</span>
       </div>
       <div class="focus-grid" id="focus-grid"></div>
     </section>
@@ -282,14 +282,17 @@
       </div>
       <div class="panel">
         <div class="toolbar">
-          <div class="segments" id="segments"></div>
-          <input class="search" id="search" type="search" placeholder="搜索指数名称或代码">
+          <div>
+            <div class="segments" id="asset-scopes" style="margin-bottom:7px"></div>
+            <div class="segments" id="segments"></div>
+          </div>
+          <input class="search" id="search" type="search" placeholder="搜索资产名称或代码">
         </div>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
-                <th>指数</th><th>日期</th><th class="number">收盘</th><th>趋势状态</th>
+                <th>资产</th><th>类型</th><th>日期</th><th class="number">收盘</th><th>趋势状态</th>
                 <th>信号标签</th><th>操作建议</th><th>操作提示</th>
               </tr>
             </thead>
@@ -306,8 +309,8 @@
       <div><h3 id="modal-title"></h3><span class="asset-symbol" id="modal-symbol"></span></div>
       <div class="modal-actions">
         <span class="modal-position" id="modal-position"></span>
-        <button class="nav-btn" id="previous-asset" aria-label="上一条指数详情" title="上一条">‹</button>
-        <button class="nav-btn" id="next-asset" aria-label="下一条指数详情" title="下一条">›</button>
+        <button class="nav-btn" id="previous-asset" aria-label="上一条资产详情" title="上一条">‹</button>
+        <button class="nav-btn" id="next-asset" aria-label="下一条资产详情" title="下一条">›</button>
         <button class="close-btn" id="close-modal" aria-label="关闭详情">×</button>
       </div>
     </div>
@@ -334,11 +337,13 @@
       {name:"港股通创新药",symbol:"931250",date:"2026-05-29",close:973.60,trend:"❌长期趋势向下",signals:["均线空头排列"],action:"暂不操作",hint:"长期趋势向下，谨慎参与，原则上不主动加仓。",MA20:1019.16,MA50:1051.32,MA60:1044.83,MA120:1069.06,MA200:1118.52}
     ];
 
-    let assets = fallbackAssets;
+    let assets = fallbackAssets.map(asset => ({asset_type:"指数", ...asset}));
 
     const filters = [
       ["all","全部"],["hold","继续持有"],["wait","暂不追高"],["watch","震荡观察"],["risk","长期向下"]
     ];
+    const scopes = [["all","全部资产"],["指数","指数"],["股票","股票"]];
+    let activeScope = "all";
     let activeFilter = "all";
     let currentDetailIndex = -1;
     let detailSequence = [];
@@ -355,6 +360,9 @@
       return ["close","MA20","MA50","MA60","MA120","MA200"].every(key =>
         typeof asset[key] === "number" && Number.isFinite(asset[key])
       );
+    }
+    function assetsInScope() {
+      return assets.filter(asset => activeScope === "all" || asset.asset_type === activeScope);
     }
 
     function tone(asset) {
@@ -373,21 +381,22 @@
     function matches(asset) {
       const q = document.querySelector("#search").value.trim().toLowerCase();
       const textMatch = !q || `${asset.name} ${asset.symbol}`.toLowerCase().includes(q);
+      const scopeMatch = activeScope === "all" || asset.asset_type === activeScope;
       const filterMatch = activeFilter === "all" ||
         (activeFilter === "hold" && asset.action === "继续持有") ||
         (activeFilter === "wait" && asset.action === "暂不追高") ||
         (activeFilter === "watch" && asset.trend === "震荡观察") ||
         (activeFilter === "risk" && asset.trend.includes("向下"));
-      return textMatch && filterMatch;
+      return textMatch && scopeMatch && filterMatch;
     }
     function visibleAssets() { return assets.filter(matches); }
 
     function renderKpis() {
       const items = [
-        ["good","继续持有", assets.filter(x => x.action === "继续持有").length, "长期结构保持健康", "hold"],
-        ["warn","暂不追高", assets.filter(x => x.action === "暂不追高").length, "乖离偏高，等待回落", "wait"],
-        ["neutral","震荡观察", assets.filter(x => x.trend === "震荡观察").length, "方向不清晰，控制仓位", "watch"],
-        ["risk","长期向下", assets.filter(x => x.trend.includes("向下")).length, "原则上不主动加仓", "risk"]
+        ["good","继续持有", assetsInScope().filter(x => x.action === "继续持有").length, "长期结构保持健康", "hold"],
+        ["warn","暂不追高", assetsInScope().filter(x => x.action === "暂不追高").length, "乖离偏高，等待回落", "wait"],
+        ["neutral","震荡观察", assetsInScope().filter(x => x.trend === "震荡观察").length, "方向不清晰，控制仓位", "watch"],
+        ["risk","长期向下", assetsInScope().filter(x => x.trend.includes("向下")).length, "原则上不主动加仓", "risk"]
       ];
       document.querySelector("#kpis").innerHTML = items.map(([cls,label,value,foot,filter]) =>
         `<button class="kpi ${cls}" data-kpi-filter="${filter}"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div><div class="kpi-foot">${foot}</div></button>`
@@ -402,7 +411,7 @@
     }
 
     function renderFocus() {
-      const focused = assets.filter(x => x.action === "暂不追高" || x.trend.includes("向下") || x.trend === "震荡观察");
+      const focused = assetsInScope().filter(x => x.action === "暂不追高" || x.trend.includes("向下") || x.trend === "震荡观察");
       document.querySelector("#focus-grid").innerHTML = focused.map(asset => `
         <button class="focus-card ${tone(asset)}" data-open="${asset.symbol}">
           <div class="focus-top">
@@ -422,18 +431,29 @@
         activeFilter = button.dataset.filter; renderSegments(); renderTable();
       }));
     }
+    function renderScopes() {
+      document.querySelector("#asset-scopes").innerHTML = scopes.map(([key,label]) =>
+        `<button class="segment ${key === activeScope ? "active" : ""}" data-scope="${key}">${label}</button>`
+      ).join("");
+      document.querySelectorAll("[data-scope]").forEach(button => button.addEventListener("click", () => {
+        activeScope = button.dataset.scope;
+        activeFilter = "all";
+        renderDashboard();
+      }));
+    }
 
     function renderTable() {
       const rows = visibleAssets().map(asset => `
         <tr tabindex="0" data-row-open="${asset.symbol}" aria-label="查看${asset.name}详情">
           <td><span class="asset-name">${escapeHtml(asset.name)}</span><span class="asset-symbol">${escapeHtml(asset.symbol)}</span></td>
+          <td>${escapeHtml(asset.asset_type || "--")}</td>
           <td>${escapeHtml(asset.date || "--")}</td><td class="number">${displayNumber(asset.close)}</td>
           <td><span class="badge ${tone(asset)}">${escapeHtml(asset.trend)}</span></td>
           <td><div class="tag-list">${asset.signals.filter(tag => tag !== "无新增信号").map(tag => `<span class="badge ${tagTone(tag)}">${escapeHtml(tag)}</span>`).join("")}</div></td>
           <td><span class="badge ${tone(asset)}">${escapeHtml(asset.action)}</span></td>
           <td class="hint-cell">${escapeHtml(asset.hint)}</td>
         </tr>`).join("");
-      document.querySelector("#table-body").innerHTML = rows || `<tr><td colspan="7">没有匹配结果</td></tr>`;
+      document.querySelector("#table-body").innerHTML = rows || `<tr><td colspan="8">没有匹配结果</td></tr>`;
       document.querySelectorAll("[data-row-open]").forEach(row => {
         row.addEventListener("click", () => openDetail(row.dataset.rowOpen));
         row.addEventListener("keydown", event => {
@@ -495,8 +515,9 @@
     document.querySelector("#previous-asset").addEventListener("click", () => moveDetail(-1));
     document.querySelector("#next-asset").addEventListener("click", () => moveDetail(1));
     function renderDashboard() {
-      document.querySelector("#asset-count").textContent = `${assets.length} 个指数 · 按操作优先级汇总`;
-      renderKpis(); renderFocus(); renderSegments(); renderTable();
+      const scopedAssets = assetsInScope();
+      document.querySelector("#asset-count").textContent = `${scopedAssets.length} 个资产 · 按操作优先级汇总`;
+      renderScopes(); renderKpis(); renderFocus(); renderSegments(); renderTable();
     }
 
     async function loadLatestData() {

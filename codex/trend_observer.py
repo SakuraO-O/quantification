@@ -41,6 +41,15 @@ ASSETS = [
     {"name": "国证现金流", "symbol": "980092", "market": "CN", "asset_type": "指数", "provider": "cnindex"},
     {"name": "中证消费", "symbol": "sh000932", "market": "CN", "asset_type": "指数", "provider": "tencent"},
     {"name": "港股通创新药", "symbol": "931250", "market": "CN", "asset_type": "指数", "provider": "csindex"},
+    {"name": "长江电力", "symbol": "sh600900", "market": "CN", "asset_type": "股票", "provider": "tencent"},
+    {"name": "中国神华", "symbol": "sh601088", "market": "CN", "asset_type": "股票", "provider": "tencent"},
+    {"name": "中国海油", "symbol": "sh600938", "market": "CN", "asset_type": "股票", "provider": "tencent"},
+    {"name": "招商银行", "symbol": "sh600036", "market": "CN", "asset_type": "股票", "provider": "tencent"},
+    {"name": "国电电力", "symbol": "sh600795", "market": "CN", "asset_type": "股票", "provider": "tencent"},
+    {"name": "格力电器", "symbol": "sz000651", "market": "CN", "asset_type": "股票", "provider": "tencent"},
+    {"name": "美的集团", "symbol": "sz000333", "market": "CN", "asset_type": "股票", "provider": "tencent"},
+    {"name": "粤高速A", "symbol": "sz000429", "market": "CN", "asset_type": "股票", "provider": "tencent"},
+    {"name": "云铝股份", "symbol": "sz000807", "market": "CN", "asset_type": "股票", "provider": "tencent"},
 ]
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -480,6 +489,7 @@ def export_dashboard_data(results):
             {
                 "name": row["name"],
                 "symbol": row["symbol"],
+                "asset_type": row["asset_type"],
                 "date": row["date"],
                 "close": None if pd.isna(row["close"]) else row["close"],
                 "trend": row["trend_status"],
@@ -554,7 +564,7 @@ def run(notify=False):
     print(f"已导出网页数据: {DASHBOARD_OUTPUT}\n")
     print(format_markdown(output))
     if notify:
-        post_feishu_message(output)
+        post_feishu_message(output[output["asset_type"] == "指数"])
 
 
 if __name__ == "__main__":
