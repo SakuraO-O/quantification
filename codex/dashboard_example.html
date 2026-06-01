@@ -162,6 +162,13 @@
       font-weight: 650;
       white-space: nowrap;
     }
+    .sort-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      border: 0; padding: 0; background: transparent; color: inherit;
+      font-size: inherit; font-weight: inherit;
+    }
+    .sort-btn:hover { color: var(--blue); }
+    .sort-icon { color: #8a99a5; font-size: 11px; }
     td { font-size: 13px; }
     tbody tr { cursor: pointer; transition: background 120ms ease; }
     tbody tr:hover { background: #f0f6fa; }
@@ -295,9 +302,16 @@
           <table>
             <thead>
               <tr>
-                <th>资产</th><th>类型</th><th>日期</th><th class="number">收盘</th>
-                <th class="number">当日</th><th class="number">今年</th><th class="number">近6个月</th><th class="number">近1年</th><th>趋势状态</th>
-                <th>信号标签</th><th>操作建议</th><th>操作提示</th>
+                <th><button class="sort-btn" data-sort="name">资产 <span class="sort-icon">↕</span></button></th>
+                <th><button class="sort-btn" data-sort="asset_type">类型 <span class="sort-icon">↕</span></button></th>
+                <th><button class="sort-btn" data-sort="date">日期 <span class="sort-icon">↕</span></button></th>
+                <th class="number"><button class="sort-btn" data-sort="close">收盘 <span class="sort-icon">↕</span></button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_day">当日 <span class="sort-icon">↕</span></button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_ytd">今年 <span class="sort-icon">↕</span></button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_6m">近6个月 <span class="sort-icon">↕</span></button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_1y">近1年 <span class="sort-icon">↕</span></button></th>
+                <th><button class="sort-btn" data-sort="trend">趋势状态 <span class="sort-icon">↕</span></button></th>
+                <th>信号标签</th><th><button class="sort-btn" data-sort="action">操作建议 <span class="sort-icon">↕</span></button></th><th>操作提示</th>
               </tr>
             </thead>
             <tbody id="table-body"></tbody>
@@ -349,6 +363,8 @@
     const scopes = [["all","全部资产"],["指数","指数"],["股票","股票"]];
     let activeScope = "all";
     let activeFilter = "all";
+    let sortKey = "";
+    let sortDirection = "asc";
     let currentDetailIndex = -1;
     let detailSequence = [];
 
@@ -400,7 +416,27 @@
         (activeFilter === "risk" && asset.trend.includes("向下"));
       return textMatch && scopeMatch && filterMatch;
     }
-    function visibleAssets() { return assets.filter(matches); }
+    function visibleAssets() {
+      const matchingAssets = assets.filter(matches);
+      if (!sortKey) return matchingAssets;
+      return matchingAssets.sort((left, right) => {
+        const leftValue = left[sortKey];
+        const rightValue = right[sortKey];
+        const leftMissing = leftValue === null || leftValue === undefined || leftValue === "";
+        const rightMissing = rightValue === null || rightValue === undefined || rightValue === "";
+        if (leftMissing || rightMissing) return leftMissing === rightMissing ? 0 : (leftMissing ? 1 : -1);
+        const comparison = typeof leftValue === "number" && typeof rightValue === "number"
+          ? leftValue - rightValue
+          : String(leftValue).localeCompare(String(rightValue), "zh-CN");
+        return sortDirection === "asc" ? comparison : -comparison;
+      });
+    }
+    function updateSortHeaders() {
+      document.querySelectorAll("[data-sort]").forEach(button => {
+        const icon = button.querySelector(".sort-icon");
+        icon.textContent = button.dataset.sort === sortKey ? (sortDirection === "asc" ? "↑" : "↓") : "↕";
+      });
+    }
 
     function renderKpis() {
       const scopedAssets = assetsInScope();
@@ -474,6 +510,7 @@
           <td class="hint-cell">${escapeHtml(asset.hint)}</td>
         </tr>`).join("");
       document.querySelector("#table-body").innerHTML = rows || `<tr><td colspan="12">没有匹配结果</td></tr>`;
+      updateSortHeaders();
       document.querySelectorAll("[data-row-open]").forEach(row => {
         row.addEventListener("click", () => openDetail(row.dataset.rowOpen));
         row.addEventListener("keydown", event => {
@@ -531,6 +568,15 @@
     }
 
     document.querySelector("#search").addEventListener("input", renderTable);
+    document.querySelectorAll("[data-sort]").forEach(button => button.addEventListener("click", () => {
+      if (sortKey === button.dataset.sort) {
+        sortDirection = sortDirection === "asc" ? "desc" : "asc";
+      } else {
+        sortKey = button.dataset.sort;
+        sortDirection = "asc";
+      }
+      renderTable();
+    }));
     document.querySelector("#close-modal").addEventListener("click", () => document.querySelector("#detail-modal").close());
     document.querySelector("#previous-asset").addEventListener("click", () => moveDetail(-1));
     document.querySelector("#next-asset").addEventListener("click", () => moveDetail(1));
