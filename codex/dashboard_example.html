@@ -128,6 +128,7 @@
       border-bottom: 1px solid var(--line);
       background: var(--surface-soft);
     }
+    .toolbar-filters { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
     .segments { display: flex; flex-wrap: wrap; gap: 5px; }
     .segment {
       border: 1px solid var(--line-strong);
@@ -282,8 +283,8 @@
       </div>
       <div class="panel">
         <div class="toolbar">
-          <div>
-            <div class="segments" id="asset-scopes" style="margin-bottom:7px"></div>
+          <div class="toolbar-filters">
+            <div class="segments" id="asset-scopes"></div>
             <div class="segments" id="segments"></div>
           </div>
           <input class="search" id="search" type="search" placeholder="搜索资产名称或代码">
@@ -392,11 +393,16 @@
     function visibleAssets() { return assets.filter(matches); }
 
     function renderKpis() {
+      const scopedAssets = assetsInScope();
+      const countTypes = matcher => {
+        const matchingAssets = scopedAssets.filter(matcher);
+        return `${matchingAssets.filter(x => x.asset_type === "指数").length}指数 / ${matchingAssets.filter(x => x.asset_type === "股票").length}股票`;
+      };
       const items = [
-        ["good","继续持有", assetsInScope().filter(x => x.action === "继续持有").length, "长期结构保持健康", "hold"],
-        ["warn","暂不追高", assetsInScope().filter(x => x.action === "暂不追高").length, "乖离偏高，等待回落", "wait"],
-        ["neutral","震荡观察", assetsInScope().filter(x => x.trend === "震荡观察").length, "方向不清晰，控制仓位", "watch"],
-        ["risk","长期向下", assetsInScope().filter(x => x.trend.includes("向下")).length, "原则上不主动加仓", "risk"]
+        ["good","继续持有", scopedAssets.filter(x => x.action === "继续持有").length, `长期结构保持健康 · ${countTypes(x => x.action === "继续持有")}`, "hold"],
+        ["warn","暂不追高", scopedAssets.filter(x => x.action === "暂不追高").length, `乖离偏高，等待回落 · ${countTypes(x => x.action === "暂不追高")}`, "wait"],
+        ["neutral","震荡观察", scopedAssets.filter(x => x.trend === "震荡观察").length, `方向不清晰，控制仓位 · ${countTypes(x => x.trend === "震荡观察")}`, "watch"],
+        ["risk","长期向下", scopedAssets.filter(x => x.trend.includes("向下")).length, `原则上不主动加仓 · ${countTypes(x => x.trend.includes("向下"))}`, "risk"]
       ];
       document.querySelector("#kpis").innerHTML = items.map(([cls,label,value,foot,filter]) =>
         `<button class="kpi ${cls}" data-kpi-filter="${filter}"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div><div class="kpi-foot">${foot}</div></button>`
