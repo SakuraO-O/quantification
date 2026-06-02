@@ -287,7 +287,7 @@
     <section>
       <div class="section-title">
         <h2>优先关注</h2>
-        <span class="section-note">需要控制仓位或避免追高的资产</span>
+        <span class="section-note">当前存在信号标签的资产</span>
       </div>
       <div class="focus-grid" id="focus-grid"></div>
     </section>
@@ -302,6 +302,7 @@
           <div class="toolbar-filters">
             <div class="segments" id="asset-scopes"></div>
             <div class="segments" id="segments"></div>
+            <div class="segments" id="trend-segments"></div>
           </div>
           <input class="search" id="search" type="search" placeholder="搜索资产名称或代码">
         </div>
@@ -368,8 +369,10 @@
       ["all","全部"],["hold","继续持有"],["wait","暂不追高"],["watch","震荡观察"],["risk","长期向下"]
     ];
     const scopes = [["all","全部资产"],["指数","指数"],["股票","股票"]];
+    const trendFilters = [["all","全部趋势"],["up","长期向上"],["sideways","震荡观察"],["down","长期向下"]];
     let activeScope = "all";
     let activeFilter = "all";
+    let activeTrendFilter = "all";
     let sortKey = "";
     let sortDirection = "asc";
     let currentDetailIndex = -1;
@@ -421,7 +424,11 @@
         (activeFilter === "wait" && asset.action === "暂不追高") ||
         (activeFilter === "watch" && asset.trend === "震荡观察") ||
         (activeFilter === "risk" && asset.trend.includes("向下"));
-      return textMatch && scopeMatch && filterMatch;
+      const trendMatch = activeTrendFilter === "all" ||
+        (activeTrendFilter === "up" && asset.trend.includes("向上")) ||
+        (activeTrendFilter === "sideways" && asset.trend === "震荡观察") ||
+        (activeTrendFilter === "down" && asset.trend.includes("向下"));
+      return textMatch && scopeMatch && filterMatch && trendMatch;
     }
     function visibleAssets() {
       const matchingAssets = assets.filter(matches);
@@ -470,8 +477,8 @@
     }
 
     function renderFocus() {
-      const focused = assetsInScope().filter(x => x.action === "暂不追高" || x.trend.includes("向下") || x.trend === "震荡观察");
-      document.querySelector("#focus-grid").innerHTML = focused.map(asset => `
+      const focused = assetsInScope().filter(asset => asset.signals.some(tag => tag !== "无新增信号"));
+      document.querySelector("#focus-grid").innerHTML = focused.length ? focused.map(asset => `
         <button class="focus-card ${tone(asset)}" data-open="${asset.symbol}">
           <div class="focus-top">
             <div><span class="asset-name">${escapeHtml(asset.name)}</span><span class="asset-symbol">${escapeHtml(asset.symbol)}</span></div>
@@ -479,7 +486,7 @@
           </div>
           <div class="tag-list" style="margin-top:10px">${asset.signals.map(tag => `<span class="badge ${tagTone(tag)}">${escapeHtml(tag)}</span>`).join("")}</div>
           <div class="focus-hint">${escapeHtml(asset.hint)}</div>
-        </button>`).join("");
+        </button>`).join("") : `<div class="section-note">当前没有新增信号。</div>`;
     }
 
     function renderSegments() {
@@ -498,6 +505,16 @@
         activeScope = button.dataset.scope;
         activeFilter = "all";
         renderDashboard();
+      }));
+    }
+    function renderTrendSegments() {
+      document.querySelector("#trend-segments").innerHTML = trendFilters.map(([key,label]) =>
+        `<button class="segment ${key === activeTrendFilter ? "active" : ""}" data-trend-filter="${key}">${label}</button>`
+      ).join("");
+      document.querySelectorAll("[data-trend-filter]").forEach(button => button.addEventListener("click", () => {
+        activeTrendFilter = button.dataset.trendFilter;
+        renderTrendSegments();
+        renderTable();
       }));
     }
 
@@ -590,7 +607,7 @@
     function renderDashboard() {
       const scopedAssets = assetsInScope();
       document.querySelector("#asset-count").textContent = `${scopedAssets.length} 个资产 · 按操作优先级汇总`;
-      renderScopes(); renderKpis(); renderFocus(); renderSegments(); renderTable();
+      renderScopes(); renderKpis(); renderFocus(); renderSegments(); renderTrendSegments(); renderTable();
     }
 
     async function loadLatestData() {
