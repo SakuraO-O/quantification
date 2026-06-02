@@ -156,6 +156,9 @@
     table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 1420px; }
     th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
     th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
       background: #f8fafb;
       color: #60707e;
       font-size: 12px;
@@ -178,8 +181,14 @@
       background: #fff;
       box-shadow: 7px 0 9px -9px rgba(32, 47, 59, 0.72);
     }
-    th:first-child { z-index: 2; background: #f8fafb; }
+    th:first-child { z-index: 3; background: #f8fafb; }
     tbody tr:hover td:first-child { background: #f0f6fa; }
+    .floating-table-header {
+      display: none; position: fixed; top: 0; z-index: 20;
+      overflow: hidden; background: #f8fafb;
+      box-shadow: 0 3px 9px rgba(32, 47, 59, 0.14);
+    }
+    .floating-table-header table { transition: none; }
     .number { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .return-up { color: var(--red); }
     .return-down { color: var(--green); }
@@ -325,6 +334,7 @@
             <tbody id="table-body"></tbody>
           </table>
         </div>
+        <div class="floating-table-header" id="floating-table-header" aria-hidden="true"></div>
       </div>
       <p class="disclaimer">本结果仅用于趋势观察，不构成投资建议。均线信号存在滞后性和假突破风险。</p>
     </section>
@@ -451,6 +461,42 @@
         icon.textContent = button.dataset.sort === sortKey ? (sortDirection === "asc" ? "↑" : "↓") : "↕";
       });
     }
+    function syncFloatingHeader() {
+      const wrap = document.querySelector(".table-wrap");
+      const floatingHeader = document.querySelector("#floating-table-header");
+      const floatingTable = floatingHeader.querySelector("table");
+      if (!floatingTable) return;
+      const wrapRect = wrap.getBoundingClientRect();
+      const headerHeight = document.querySelector(".table-wrap thead").getBoundingClientRect().height;
+      const visible = wrapRect.top < 0 && wrapRect.bottom > headerHeight;
+      floatingHeader.style.display = visible ? "block" : "none";
+      if (!visible) return;
+      floatingHeader.style.left = `${wrapRect.left}px`;
+      floatingHeader.style.width = `${wrapRect.width}px`;
+      floatingTable.style.transform = `translateX(${-wrap.scrollLeft}px)`;
+      floatingTable.querySelector("th:first-child").style.transform = `translateX(${wrap.scrollLeft}px)`;
+    }
+    function refreshFloatingHeader() {
+      const originalTable = document.querySelector(".table-wrap table");
+      const originalHead = originalTable.querySelector("thead");
+      const floatingHeader = document.querySelector("#floating-table-header");
+      const floatingTable = document.createElement("table");
+      const clonedHead = originalHead.cloneNode(true);
+      floatingTable.appendChild(clonedHead);
+      floatingTable.style.width = `${originalTable.scrollWidth}px`;
+      [...originalHead.querySelectorAll("th")].forEach((cell, index) => {
+        const width = `${cell.getBoundingClientRect().width}px`;
+        const clone = clonedHead.querySelectorAll("th")[index];
+        clone.style.width = width;
+        clone.style.minWidth = width;
+        clone.style.maxWidth = width;
+      });
+      floatingHeader.replaceChildren(floatingTable);
+      floatingHeader.querySelectorAll("[data-sort]").forEach(button => button.addEventListener("click", () => {
+        document.querySelector(`.table-wrap [data-sort="${button.dataset.sort}"]`).click();
+      }));
+      syncFloatingHeader();
+    }
 
     function renderKpis() {
       const scopedAssets = assetsInScope();
@@ -535,6 +581,7 @@
         </tr>`).join("");
       document.querySelector("#table-body").innerHTML = rows || `<tr><td colspan="12">没有匹配结果</td></tr>`;
       updateSortHeaders();
+      requestAnimationFrame(refreshFloatingHeader);
       document.querySelectorAll("[data-row-open]").forEach(row => {
         row.addEventListener("click", () => openDetail(row.dataset.rowOpen));
         row.addEventListener("keydown", event => {
@@ -592,6 +639,9 @@
     }
 
     document.querySelector("#search").addEventListener("input", renderTable);
+    window.addEventListener("scroll", syncFloatingHeader, {passive:true});
+    window.addEventListener("resize", refreshFloatingHeader);
+    document.querySelector(".table-wrap").addEventListener("scroll", syncFloatingHeader, {passive:true});
     document.querySelectorAll("[data-sort]").forEach(button => button.addEventListener("click", () => {
       if (sortKey === button.dataset.sort) {
         sortDirection = sortDirection === "asc" ? "desc" : "asc";
