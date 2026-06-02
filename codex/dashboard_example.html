@@ -425,6 +425,9 @@
       if (tag === "无新增信号") return "neutral";
       return "good";
     }
+    function focusSignals(asset) {
+      return asset.signals.filter(tag => tag !== "无新增信号" && tag !== "震荡观察");
+    }
     function matches(asset) {
       const q = document.querySelector("#search").value.trim().toLowerCase();
       const textMatch = !q || `${asset.name} ${asset.symbol}`.toLowerCase().includes(q);
@@ -523,14 +526,14 @@
     }
 
     function renderFocus() {
-      const focused = assetsInScope().filter(asset => asset.signals.some(tag => tag !== "无新增信号"));
+      const focused = assetsInScope().filter(asset => focusSignals(asset).length);
       document.querySelector("#focus-grid").innerHTML = focused.length ? focused.map(asset => `
         <button class="focus-card ${tone(asset)}" data-open="${asset.symbol}">
           <div class="focus-top">
             <div><span class="asset-name">${escapeHtml(asset.name)}</span><span class="asset-symbol">${escapeHtml(asset.symbol)}</span></div>
             <span class="badge ${tone(asset)}">${escapeHtml(asset.action)}</span>
           </div>
-          <div class="tag-list" style="margin-top:10px">${asset.signals.map(tag => `<span class="badge ${tagTone(tag)}">${escapeHtml(tag)}</span>`).join("")}</div>
+          <div class="tag-list" style="margin-top:10px">${focusSignals(asset).map(tag => `<span class="badge ${tagTone(tag)}">${escapeHtml(tag)}</span>`).join("")}</div>
           <div class="focus-hint">${escapeHtml(asset.hint)}</div>
         </button>`).join("") : `<div class="section-note">当前没有新增信号。</div>`;
     }
