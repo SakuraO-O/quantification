@@ -366,9 +366,9 @@
       {name:"中证500",symbol:"sh000905",date:"2026-05-29",close:8359.56,trend:"✅长期趋势向上",signals:["无新增信号"],action:"继续持有",hint:"长期趋势向上且未出现破坏信号，可继续持有，适合定投或等待回踩。",MA20:8603.67,MA50:8202.63,MA60:8220.15,MA120:8024.16,MA200:7617.66},
       {name:"创业板100",symbol:"sz399006",date:"2026-05-29",close:4037.95,trend:"✅长期趋势向上",signals:["均线多头排列","高位乖离"],action:"暂不追高",hint:"趋势向上但乖离或短期热度偏高，不宜一次性加仓。",MA20:3917.02,MA50:3618.32,MA60:3559.75,MA120:3404.55,MA200:3212.36},
       {name:"科创50",symbol:"sh000688",date:"2026-05-29",close:1751.32,trend:"✅长期趋势向上",signals:["均线多头排列","高位乖离"],action:"暂不追高",hint:"趋势向上但乖离或短期热度偏高，不宜一次性加仓。",MA20:1735.98,MA50:1510.05,MA60:1490.78,MA120:1455.57,MA200:1398.44},
-      {name:"恒生指数",symbol:"hkHSI",date:"2026-05-29",close:25182.39,trend:"震荡观察",signals:["震荡观察"],action:"暂不操作",hint:"趋势不清晰或仍偏弱，避免重仓操作。",MA20:25886.63,MA50:25739.50,MA60:25726.34,MA120:26064.45,MA200:26016.30},
+      {name:"恒生指数",symbol:"hkHSI",date:"2026-05-29",close:25182.39,trend:"震荡观察",signals:["无新增信号"],action:"暂不操作",hint:"趋势不清晰或仍偏弱，避免重仓操作。",MA20:25886.63,MA50:25739.50,MA60:25726.34,MA120:26064.45,MA200:26016.30},
       {name:"红利低波",symbol:"H30269",date:"2026-05-29",close:11082.68,trend:"❌长期趋势向下",signals:["无新增信号"],action:"暂不操作",hint:"长期趋势向下，谨慎参与，原则上不主动加仓。",MA20:11124.23,MA50:11282.79,MA60:11305.42,MA120:11264.50,MA200:11357.45},
-      {name:"国证现金流",symbol:"980092",date:"2026-05-29",close:5390.02,trend:"震荡观察",signals:["震荡观察"],action:"暂不操作",hint:"趋势不清晰或仍偏弱，避免重仓操作。",MA20:5630.57,MA50:5737.72,MA60:5805.43,MA120:5681.54,MA200:5437.25},
+      {name:"国证现金流",symbol:"980092",date:"2026-05-29",close:5390.02,trend:"震荡观察",signals:["无新增信号"],action:"暂不操作",hint:"趋势不清晰或仍偏弱，避免重仓操作。",MA20:5630.57,MA50:5737.72,MA60:5805.43,MA120:5681.54,MA200:5437.25},
       {name:"中证消费",symbol:"sh000932",date:"2026-05-29",close:13190.39,trend:"❌长期趋势向下",signals:["均线空头排列"],action:"暂不操作",hint:"长期趋势向下，谨慎参与，原则上不主动加仓。",MA20:13638.54,MA50:14104.60,MA60:14230.78,MA120:14763.77,MA200:15398.85},
       {name:"港股通创新药",symbol:"931250",date:"2026-05-29",close:973.60,trend:"❌长期趋势向下",signals:["均线空头排列"],action:"暂不操作",hint:"长期趋势向下，谨慎参与，原则上不主动加仓。",MA20:1019.16,MA50:1051.32,MA60:1044.83,MA120:1069.06,MA200:1118.52}
     ];
@@ -414,6 +414,11 @@
 
     function tone(asset) {
       if (asset.action === "暂不追高") return "warn";
+      if (asset.trend.includes("向下")) return "risk";
+      if (asset.trend === "震荡观察") return "watch";
+      return "good";
+    }
+    function trendTone(asset) {
       if (asset.trend.includes("向下")) return "risk";
       if (asset.trend === "震荡观察") return "watch";
       return "good";
@@ -574,7 +579,7 @@
           <td>${escapeHtml(asset.asset_type || "--")}</td>
           <td>${escapeHtml(asset.date || "--")}</td><td class="number">${displayNumber(asset.close)}</td>
           <td class="number ${returnTone(asset.return_day)}">${displayReturn(asset.return_day)}</td>
-          <td><span class="badge ${tone(asset)}">${escapeHtml(asset.trend)}</span></td>
+          <td><span class="badge ${trendTone(asset)}">${escapeHtml(asset.trend)}</span></td>
           <td><div class="tag-list">${asset.signals.filter(tag => tag !== "无新增信号").map(tag => `<span class="badge ${tagTone(tag)}">${escapeHtml(tag)}</span>`).join("")}</div></td>
           <td><span class="badge ${tone(asset)}">${escapeHtml(asset.action)}</span></td>
           <td class="hint-cell">${escapeHtml(asset.hint)}</td>
@@ -615,7 +620,7 @@
       document.querySelector("#previous-asset").disabled = currentDetailIndex <= 0;
       document.querySelector("#next-asset").disabled = currentDetailIndex >= detailSequence.length - 1;
       document.querySelector("#modal-decision").innerHTML =
-        `<div style="margin-bottom:6px"><span class="badge ${tone(asset)}">${escapeHtml(asset.trend)}</span> <span class="badge ${tone(asset)}">${escapeHtml(asset.action)}</span></div>${escapeHtml(asset.hint)}`;
+        `<div style="margin-bottom:6px"><span class="badge ${trendTone(asset)}">${escapeHtml(asset.trend)}</span> <span class="badge ${tone(asset)}">${escapeHtml(asset.action)}</span></div>${escapeHtml(asset.hint)}`;
       const relativeMA200 = hasMetrics(asset) ? `${((asset.close / asset.MA200 - 1) * 100).toFixed(2)}%` : "--";
       const metrics = [["收盘价",asset.close],["当日涨跌幅",asset.return_day,"return"],["今年涨跌幅",asset.return_ytd,"return"],["近6个月涨跌幅",asset.return_6m,"return"],["近1年涨跌幅",asset.return_1y,"return"],["MA20",asset.MA20],["MA50",asset.MA50],["MA60",asset.MA60],["MA120",asset.MA120],["MA200",asset.MA200],["相对MA200",relativeMA200],["信号",asset.signals.join("、")]];
       document.querySelector("#detail-grid").innerHTML = metrics.map(([label,value,type]) =>

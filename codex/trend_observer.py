@@ -75,7 +75,6 @@ SIGNAL_PRIORITY = [
     "回踩中期均线",
     "高位乖离",
     "短期过热",
-    "震荡观察",
 ]
 
 ACTION_HINTS = {
@@ -376,8 +375,6 @@ def find_signals(today, yesterday, trend_status):
         signals.add("高位乖离")
     if today["close"] > today["MA20"] and today["MA20"] > today["MA50"] and today["close"] / today["MA20"] - 1 > 0.08:
         signals.add("短期过热")
-    if trend_status == "震荡观察":
-        signals.add("震荡观察")
     return [tag for tag in SIGNAL_PRIORITY if tag in signals]
 
 
