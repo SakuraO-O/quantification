@@ -14,6 +14,7 @@ import json
 import os
 import time
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -25,12 +26,14 @@ import requests
 # ------------------------------ 用户配置区 ------------------------------ #
 # provider:
 #   tencent: symbol 示例 sh000300, sz399102, hkHSI, hkHSTECH
-#   eastmoney: symbol 示例 2.930955, 0.980092, 2.931250
+#   eastmoney: symbol 示例 100.NDX100, 100.SPX, 100.N225
+#   yahoo: symbol 示例 ^NDX, ^GSPC, ^N225
 #   csindex: symbol 示例 H30269, 931250
 #   cnindex: symbol 示例 980092
 #   xueqiu:  symbol 示例 CSI932000, CSI931250
 #   yfinance: 需自行安装 yfinance，symbol 示例 QQQ, 000300.SS
 ASSETS = [
+    {"name": "Wind全A", "symbol": "sh000002", "market": "CN", "asset_type": "指数", "provider": "tencent", "is_benchmark": True},
     {"name": "沪深300", "symbol": "sh000300", "market": "CN", "asset_type": "指数", "provider": "tencent"},
     {"name": "中证A500", "symbol": "sh000510", "market": "CN", "asset_type": "指数", "provider": "tencent"},
     {"name": "中证500", "symbol": "sh000905", "market": "CN", "asset_type": "指数", "provider": "tencent"},
@@ -41,15 +44,20 @@ ASSETS = [
     {"name": "国证现金流", "symbol": "980092", "market": "CN", "asset_type": "指数", "provider": "cnindex"},
     {"name": "中证消费", "symbol": "sh000932", "market": "CN", "asset_type": "指数", "provider": "tencent"},
     {"name": "港股通创新药", "symbol": "931250", "market": "CN", "asset_type": "指数", "provider": "csindex"},
-    {"name": "长江电力", "symbol": "sh600900", "market": "CN", "asset_type": "股票", "provider": "tencent"},
-    {"name": "中国神华", "symbol": "sh601088", "market": "CN", "asset_type": "股票", "provider": "tencent"},
-    {"name": "中国海油", "symbol": "sh600938", "market": "CN", "asset_type": "股票", "provider": "tencent"},
-    {"name": "招商银行", "symbol": "sh600036", "market": "CN", "asset_type": "股票", "provider": "tencent"},
-    {"name": "国电电力", "symbol": "sh600795", "market": "CN", "asset_type": "股票", "provider": "tencent"},
-    {"name": "格力电器", "symbol": "sz000651", "market": "CN", "asset_type": "股票", "provider": "tencent"},
-    {"name": "美的集团", "symbol": "sz000333", "market": "CN", "asset_type": "股票", "provider": "tencent"},
-    {"name": "粤高速A", "symbol": "sz000429", "market": "CN", "asset_type": "股票", "provider": "tencent"},
-    {"name": "云铝股份", "symbol": "sz000807", "market": "CN", "asset_type": "股票", "provider": "tencent"},
+    {"name": "纳斯达克100", "symbol": "100.NDX100", "market": "US", "asset_type": "指数", "provider": "eastmoney"},
+    {"name": "标普500", "symbol": "100.SPX", "market": "US", "asset_type": "指数", "provider": "eastmoney"},
+    {"name": "日经225", "symbol": "100.N225", "market": "JP", "asset_type": "指数", "provider": "eastmoney"},
+    # last_year_dividend 为上一年每股分红，支持留空；非空时必须为非负数，且最多 5 位小数。
+    {"name": "长江电力", "symbol": "sh600900", "market": "CN", "asset_type": "股票", "provider": "tencent", "last_year_dividend": None},
+    {"name": "中国神华", "symbol": "sh601088", "market": "CN", "asset_type": "股票", "provider": "tencent", "last_year_dividend": None},
+    {"name": "中国海油", "symbol": "sh600938", "market": "CN", "asset_type": "股票", "provider": "tencent", "last_year_dividend": None},
+    {"name": "招商银行", "symbol": "sh600036", "market": "CN", "asset_type": "股票", "provider": "tencent", "last_year_dividend": None},
+    {"name": "国电电力", "symbol": "sh600795", "market": "CN", "asset_type": "股票", "provider": "tencent", "last_year_dividend": None},
+    {"name": "格力电器", "symbol": "sz000651", "market": "CN", "asset_type": "股票", "provider": "tencent", "last_year_dividend": None},
+    {"name": "美的集团", "symbol": "sz000333", "market": "CN", "asset_type": "股票", "provider": "tencent", "last_year_dividend": None},
+    {"name": "粤高速A", "symbol": "sz000429", "market": "CN", "asset_type": "股票", "provider": "tencent", "last_year_dividend": None},
+    {"name": "云铝股份", "symbol": "sz000807", "market": "CN", "asset_type": "股票", "provider": "tencent", "last_year_dividend": None},
+    {"name": "中远海控", "symbol": "sh601919", "market": "CN", "asset_type": "股票", "provider": "tencent", "last_year_dividend": None},
 ]
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -92,10 +100,14 @@ REPORT_COLUMNS = [
     "asset_type",
     "date",
     "close",
+    "last_year_dividend",
+    "dividend_yield",
     "return_day",
     "return_ytd",
     "return_6m",
     "return_1y",
+    "return_40d",
+    "return_40d_excess",
     "trend_status",
     "signal_tags",
     "action_category",
@@ -112,10 +124,14 @@ MARKDOWN_COLUMNS = [
     "symbol",
     "date",
     "close",
+    "last_year_dividend",
+    "dividend_yield",
     "return_day",
     "return_ytd",
     "return_6m",
     "return_1y",
+    "return_40d",
+    "return_40d_excess",
     "trend_status",
     "signal_tags",
     "action_category",
@@ -130,6 +146,7 @@ MARKDOWN_COLUMNS = [
 
 def make_session():
     session = requests.Session()
+    session.trust_env = False
     session.headers.update(
         {
             "User-Agent": (
@@ -151,6 +168,33 @@ def normalize_frame(rows):
     frame[numeric_columns] = frame[numeric_columns].apply(pd.to_numeric, errors="coerce")
     frame = frame.dropna(subset=["date", "close", "high", "low"])
     return frame.sort_values("date").drop_duplicates("date").reset_index(drop=True)
+
+
+def parse_last_year_dividend(asset):
+    value = asset.get("last_year_dividend")
+    if value in (None, ""):
+        return np.nan
+    try:
+        dividend = Decimal(str(value))
+    except (InvalidOperation, ValueError) as exc:
+        raise ValueError(f"{asset['name']} last_year_dividend 必须为非负数。") from exc
+    if not dividend.is_finite() or dividend < 0:
+        raise ValueError(f"{asset['name']} last_year_dividend 必须为非负数。")
+    if abs(dividend.as_tuple().exponent) > 5:
+        raise ValueError(f"{asset['name']} last_year_dividend 最多只能录入 5 位小数。")
+    return float(dividend)
+
+
+def calculate_dividend_yield(dividend, close):
+    if pd.isna(dividend) or pd.isna(close) or close <= 0:
+        return np.nan
+    return round(dividend / close * 100, 2)
+
+
+def validate_asset_config():
+    for asset in ASSETS:
+        if asset.get("asset_type") == "股票":
+            parse_last_year_dividend(asset)
 
 
 def fetch_tencent(session, symbol):
@@ -215,7 +259,7 @@ def fetch_xueqiu(session, symbol):
 
 
 def fetch_eastmoney(session, symbol):
-    url = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+    url = "http://push2his.eastmoney.com/api/qt/stock/kline/get"
     params = {
         "secid": symbol,
         "klt": "101",
@@ -225,8 +269,17 @@ def fetch_eastmoney(session, symbol):
         "fields1": "f1,f2,f3,f4,f5,f6",
         "fields2": "f51,f52,f53,f54,f55,f56",
     }
-    response = session.get(url, params=params, timeout=HTTP_TIMEOUT)
-    response.raise_for_status()
+    last_error = None
+    for attempt in range(3):
+        try:
+            response = session.get(url, params=params, timeout=HTTP_TIMEOUT)
+            response.raise_for_status()
+            break
+        except requests.RequestException as exc:
+            last_error = exc
+            if attempt == 2:
+                raise
+            time.sleep(0.8 * (attempt + 1))
     raw_rows = (response.json().get("data") or {}).get("klines") or []
     rows = []
     for raw_row in raw_rows:
@@ -296,6 +349,39 @@ def fetch_cnindex(session, symbol):
     return normalize_frame(rows).tail(LOOKBACK_ROWS).reset_index(drop=True)
 
 
+def fetch_yahoo(session, symbol):
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+    period2 = int(datetime.now(timezone.utc).timestamp())
+    period1 = period2 - 900 * 24 * 3600
+    response = session.get(
+        url,
+        params={"period1": period1, "period2": period2, "interval": "1d", "events": "history"},
+        timeout=HTTP_TIMEOUT,
+    )
+    response.raise_for_status()
+    payload = response.json().get("chart", {})
+    error = payload.get("error")
+    if error:
+        raise ValueError(f"Yahoo 返回异常: {error}")
+    result = (payload.get("result") or [None])[0]
+    if not result:
+        raise ValueError(f"Yahoo 未返回行情: {symbol}")
+    timestamps = result.get("timestamp") or []
+    quote = ((result.get("indicators") or {}).get("quote") or [{}])[0]
+    rows = []
+    for index, timestamp in enumerate(timestamps):
+        rows.append(
+            {
+                "date": datetime.fromtimestamp(timestamp, MARKET_TIMEZONE).strftime("%Y-%m-%d"),
+                "close": quote.get("close", [np.nan] * len(timestamps))[index],
+                "high": quote.get("high", [np.nan] * len(timestamps))[index],
+                "low": quote.get("low", [np.nan] * len(timestamps))[index],
+                "volume": quote.get("volume", [np.nan] * len(timestamps))[index],
+            }
+        )
+    return normalize_frame(rows).tail(LOOKBACK_ROWS).reset_index(drop=True)
+
+
 def fetch_yfinance(symbol):
     try:
         import yfinance as yf
@@ -326,6 +412,8 @@ def fetch_history(session, asset):
         return fetch_csindex(session, symbol)
     if provider == "cnindex":
         return fetch_cnindex(session, symbol)
+    if provider == "yahoo":
+        return fetch_yahoo(session, symbol)
     if provider == "yfinance":
         return fetch_yfinance(symbol)
     raise ValueError(f"不支持的 provider: {provider}")
@@ -409,6 +497,7 @@ def calculate_returns(frame):
     year_start = pd.Timestamp(year=today_date.year, month=1, day=1)
     return {
         "return_day": return_since(frame.iloc[:-1]),
+        "return_40d": return_since(frame.iloc[:-40]),
         "return_ytd": return_since(frame[frame["date"] < year_start]),
         "return_6m": return_since(frame[frame["date"] <= today_date - pd.DateOffset(months=6)]),
         "return_1y": return_since(frame[frame["date"] <= today_date - pd.DateOffset(years=1)]),
@@ -416,6 +505,7 @@ def calculate_returns(frame):
 
 
 def empty_result(asset, status, detail):
+    dividend = parse_last_year_dividend(asset)
     return {
         "name": asset["name"],
         "symbol": asset["symbol"],
@@ -423,10 +513,14 @@ def empty_result(asset, status, detail):
         "asset_type": asset.get("asset_type", ""),
         "date": "",
         "close": np.nan,
+        "last_year_dividend": dividend,
+        "dividend_yield": np.nan,
         "return_day": np.nan,
         "return_ytd": np.nan,
         "return_6m": np.nan,
         "return_1y": np.nan,
+        "return_40d": np.nan,
+        "return_40d_excess": np.nan,
         "MA20": np.nan,
         "MA50": np.nan,
         "MA60": np.nan,
@@ -440,6 +534,7 @@ def empty_result(asset, status, detail):
 
 
 def analyze_asset(session, asset):
+    dividend = parse_last_year_dividend(asset)
     frame = fetch_history(session, asset)
     if len(frame) < MIN_HISTORY_ROWS:
         return empty_result(
@@ -465,7 +560,10 @@ def analyze_asset(session, asset):
         "asset_type": asset.get("asset_type", ""),
         "date": today["date"].strftime("%Y-%m-%d"),
         "close": round(today["close"], 2),
+        "last_year_dividend": dividend,
+        "dividend_yield": calculate_dividend_yield(dividend, today["close"]),
         **returns,
+        "return_40d_excess": np.nan,
         "MA20": round(today["MA20"], 2),
         "MA50": round(today["MA50"], 2),
         "MA60": round(today["MA60"], 2),
@@ -480,10 +578,10 @@ def analyze_asset(session, asset):
 
 def format_markdown(results):
     table = results.copy()
-    numeric = ["close", "MA20", "MA50", "MA60", "MA120", "MA200"]
+    numeric = ["close", "last_year_dividend", "MA20", "MA50", "MA60", "MA120", "MA200"]
     for column in numeric:
         table[column] = table[column].map(lambda value: "" if pd.isna(value) else f"{value:.2f}")
-    percentages = ["return_day", "return_ytd", "return_6m", "return_1y"]
+    percentages = ["dividend_yield", "return_day", "return_ytd", "return_6m", "return_1y", "return_40d", "return_40d_excess"]
     for column in percentages:
         table[column] = table[column].map(lambda value: "" if pd.isna(value) else f"{value:.2f}%")
     report_date = datetime.now(MARKET_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S")
@@ -524,10 +622,14 @@ def export_dashboard_data(results):
                 "asset_type": row["asset_type"],
                 "date": row["date"],
                 "close": None if pd.isna(row["close"]) else row["close"],
+                "last_year_dividend": None if pd.isna(row["last_year_dividend"]) else row["last_year_dividend"],
+                "dividend_yield": None if pd.isna(row["dividend_yield"]) else row["dividend_yield"],
                 "return_day": None if pd.isna(row["return_day"]) else row["return_day"],
                 "return_ytd": None if pd.isna(row["return_ytd"]) else row["return_ytd"],
                 "return_6m": None if pd.isna(row["return_6m"]) else row["return_6m"],
                 "return_1y": None if pd.isna(row["return_1y"]) else row["return_1y"],
+                "return_40d": None if pd.isna(row["return_40d"]) else row["return_40d"],
+                "return_40d_excess": None if pd.isna(row["return_40d_excess"]) else row["return_40d_excess"],
                 "trend": row["trend_status"],
                 "signals": [tag.strip() for tag in row["signal_tags"].split(",")],
                 "action": row["action_category"],
@@ -580,6 +682,7 @@ def parse_args():
 
 
 def run(notify=False):
+    validate_asset_config()
     results = []
     with make_session() as session:
         for number, asset in enumerate(ASSETS, start=1):
@@ -591,7 +694,15 @@ def run(notify=False):
                 print(f"  获取失败: {exc}", flush=True)
             results.append(result)
 
-    output = pd.DataFrame(results)[REPORT_COLUMNS]
+    output = pd.DataFrame(results)
+    benchmark_rows = output[(output["asset_type"] == "指数") & (output["name"] == "Wind全A")]
+    if not benchmark_rows.empty and not pd.isna(benchmark_rows.iloc[0]["return_40d"]):
+        benchmark_return_40d = benchmark_rows.iloc[0]["return_40d"]
+        index_mask = output["asset_type"] == "指数"
+        output.loc[index_mask, "return_40d_excess"] = (
+            output.loc[index_mask, "return_40d"] - benchmark_return_40d
+        ).round(2)
+    output = output[REPORT_COLUMNS]
     output.to_csv(CSV_OUTPUT, index=False, encoding="utf-8-sig")
     MARKDOWN_OUTPUT.write_text(format_markdown(output), encoding="utf-8")
     export_dashboard_data(output)
