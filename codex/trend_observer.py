@@ -64,6 +64,7 @@ BASE_DIR = Path(__file__).resolve().parent
 CSV_OUTPUT = BASE_DIR / "trend_observer_report.csv"
 MARKDOWN_OUTPUT = BASE_DIR / "trend_observer_report.md"
 DASHBOARD_OUTPUT = BASE_DIR / "dashboard_data.json"
+DIVIDENDS_CONFIG = BASE_DIR / "dividends.json"
 LOOKBACK_ROWS = 300
 MIN_HISTORY_ROWS = 250
 SLOPE_DAYS = 20
@@ -170,19 +171,47 @@ def normalize_frame(rows):
     return frame.sort_values("date").drop_duplicates("date").reset_index(drop=True)
 
 
-def parse_last_year_dividend(asset):
-    value = asset.get("last_year_dividend")
-    if value in (None, ""):
+def parse_dividend_value(label, value):
+    if value in (None, "") or pd.isna(value):
         return np.nan
     try:
         dividend = Decimal(str(value))
     except (InvalidOperation, ValueError) as exc:
-        raise ValueError(f"{asset['name']} last_year_dividend 必须为非负数。") from exc
+        raise ValueError(f"{label} 必须为非负数。") from exc
     if not dividend.is_finite() or dividend < 0:
-        raise ValueError(f"{asset['name']} last_year_dividend 必须为非负数。")
+        raise ValueError(f"{label} 必须为非负数。")
     if abs(dividend.as_tuple().exponent) > 5:
-        raise ValueError(f"{asset['name']} last_year_dividend 最多只能录入 5 位小数。")
+        raise ValueError(f"{label} 最多只能录入 5 位小数。")
     return float(dividend)
+
+
+def parse_last_year_dividend(asset):
+    return parse_dividend_value(f"{asset['name']} last_year_dividend", asset.get("last_year_dividend"))
+
+
+def load_dividend_config():
+    if not DIVIDENDS_CONFIG.exists():
+        return {}
+    try:
+        payload = json.loads(DIVIDENDS_CONFIG.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{DIVIDENDS_CONFIG} 不是有效 JSON。") from exc
+    if not isinstance(payload, dict):
+        raise ValueError(f"{DIVIDENDS_CONFIG} 顶层必须是股票代码到分红金额的对象。")
+    return {
+        str(symbol): parse_dividend_value(f"{DIVIDENDS_CONFIG.name} {symbol}", value)
+        for symbol, value in payload.items()
+    }
+
+
+def apply_dividend_config():
+    config = load_dividend_config()
+    stock_assets = {asset["symbol"]: asset for asset in ASSETS if asset.get("asset_type") == "股票"}
+    unknown_symbols = sorted(set(config) - set(stock_assets))
+    if unknown_symbols:
+        raise ValueError(f"{DIVIDENDS_CONFIG.name} 包含未配置的股票代码: {', '.join(unknown_symbols)}")
+    for symbol, dividend in config.items():
+        stock_assets[symbol]["last_year_dividend"] = None if pd.isna(dividend) else dividend
 
 
 def calculate_dividend_yield(dividend, close):
@@ -682,6 +711,7 @@ def parse_args():
 
 
 def run(notify=False):
+    apply_dividend_config()
     validate_asset_config()
     results = []
     with make_session() as session:

@@ -252,6 +252,10 @@
       background: #fff;
       box-shadow: 7px 0 9px -9px rgba(32, 47, 59, 0.72);
     }
+    #stock-list-section th:first-child,
+    #stock-list-section td:first-child {
+      min-width: 120px;
+    }
     th:first-child { z-index: 3; background: #f8fafb; }
     tbody tr:hover td:first-child { background: #f0f6fa; }
     .floating-table-header {
@@ -436,7 +440,6 @@
             <thead>
               <tr>
                 <th><button class="sort-btn" data-sort="name">资产 <span class="sort-icon">↕</span></button></th>
-                <th><button class="sort-btn" data-sort="asset_type">类型 <span class="sort-icon">↕</span></button></th>
                 <th><button class="sort-btn" data-sort="date">日期 <span class="sort-icon">↕</span></button></th>
                 <th class="number"><button class="sort-btn" data-sort="close">收盘 <span class="sort-icon">↕</span></button></th>
                 <th class="number"><button class="sort-btn" data-sort="return_day">当日 <span class="sort-icon">↕</span></button></th>
@@ -458,7 +461,6 @@
     <section id="stock-list-section">
       <div class="section-title">
         <h2>股票观察列表</h2>
-        <span class="section-note">点击任意股票查看全部均线位置</span>
       </div>
       <div class="panel">
         <div class="toolbar">
@@ -473,7 +475,6 @@
             <thead>
               <tr>
                 <th><button class="sort-btn" data-sort="name">资产 <span class="sort-icon">↕</span></button></th>
-                <th><button class="sort-btn" data-sort="asset_type">类型 <span class="sort-icon">↕</span></button></th>
                 <th><button class="sort-btn" data-sort="date">日期 <span class="sort-icon">↕</span></button></th>
                 <th class="number"><button class="sort-btn" data-sort="close">收盘 <span class="sort-icon">↕</span></button></th>
                 <th class="number"><button class="sort-btn" data-sort="return_day">当日 <span class="sort-icon">↕</span></button></th>
@@ -491,7 +492,6 @@
           </table>
         </div>
       </div>
-      <p class="disclaimer">本结果仅用于趋势观察，不构成投资建议。均线信号存在滞后性和假突破风险。</p>
     </section>
   </main>
 
@@ -920,7 +920,6 @@
       return visibleAssets(assetType).map(asset => `
         <tr tabindex="0" data-row-open="${asset.symbol}" data-asset-type="${asset.asset_type}" aria-label="查看${asset.name}详情">
           <td><span class="asset-name">${escapeHtml(asset.name)}</span><span class="asset-symbol">${escapeHtml(asset.symbol)}</span></td>
-          <td>${escapeHtml(asset.asset_type || "--")}</td>
           <td>${escapeHtml(asset.date || "--")}</td><td class="number">${displayNumber(asset.close)}</td>
           <td class="number ${returnTone(asset.return_day)}">${displayReturn(asset.return_day)}</td>
           ${assetType === "股票" ? `<td class="number ${returnTone(asset.dividend_yield)}">${displayReturn(asset.dividend_yield)}</td>` : ""}
