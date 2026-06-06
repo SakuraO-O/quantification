@@ -2,8 +2,8 @@ name: Daily Trend Observer
 
 on:
   schedule:
-    # Run after the mainland and Hong Kong markets close, away from the top-of-hour load spike.
-    - cron: "13 22 * * *"
+    # Run at 07:10 Asia/Shanghai, away from the top-of-hour load spike.
+    - cron: "10 23 * * *"
       timezone: "Asia/Shanghai"
   workflow_dispatch:
 
