@@ -3,11 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>均线趋势观察台</title>
+  <title>趋势观察台</title>
   <style>
     :root {
       --bg: #f4f6f8;
-      --surface: #ffffff;
+      --surface: #fff;
       --surface-soft: #f8fafb;
       --ink: #18212b;
       --muted: #687684;
@@ -24,27 +24,22 @@
       --gray-bg: #edf1f4;
       --shadow: 0 8px 22px rgba(27, 39, 51, 0.06);
     }
-
     * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
     body {
       margin: 0;
       background: var(--bg);
       color: var(--ink);
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
       font-size: 14px;
-      letter-spacing: 0;
     }
-
     button, input { font: inherit; }
     button { cursor: pointer; }
     body.auth-locked { overflow: hidden; }
-    body.auth-locked .app-header,
-    body.auth-locked main,
-    body.auth-locked dialog:not(#auth-gate) {
+    body.auth-locked .app-header, body.auth-locked main, body.auth-locked dialog:not(#auth-gate) {
       visibility: hidden;
       pointer-events: none;
     }
-
     .auth-gate {
       position: fixed;
       inset: 0;
@@ -53,37 +48,44 @@
       align-items: center;
       justify-content: center;
       padding: 22px;
-      background:
-        linear-gradient(rgba(23, 35, 45, 0.94), rgba(23, 35, 45, 0.94)),
-        #17232d;
+      background: linear-gradient(rgba(23, 35, 45, 0.94), rgba(23, 35, 45, 0.94)), #17232d;
     }
     body.auth-locked .auth-gate { display: flex; }
     .auth-card {
       width: min(420px, 100%);
       background: var(--surface);
-      border: 1px solid rgba(255, 255, 255, 0.16);
       border-radius: 7px;
       box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
       padding: 24px;
     }
     .auth-title { margin: 0; font-size: 22px; line-height: 1.2; }
     .auth-copy { margin: 9px 0 20px; color: var(--muted); line-height: 1.6; }
-    .auth-form { display: grid; gap: 12px; }
-    .auth-error { min-height: 18px; color: var(--red); font-size: 12px; }
-    .auth-submit { width: 100%; justify-content: center; padding: 10px 12px; }
-
-    .app-header {
-      background: #17232d;
-      color: #fff;
-      padding: 18px 28px 16px;
+    .form-label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 12px; }
+    .form-input {
+      width: 100%;
+      border: 1px solid var(--line-strong);
+      border-radius: 5px;
+      padding: 9px 10px;
+      color: var(--ink);
     }
+    .auth-error { min-height: 18px; color: var(--red); font-size: 12px; margin: 8px 0; }
+    .primary-btn {
+      width: 100%;
+      border: 1px solid #263946;
+      background: #263946;
+      color: #fff;
+      padding: 10px 12px;
+      border-radius: 5px;
+      font-weight: 650;
+    }
+    .app-header { background: #17232d; color: #fff; padding: 18px 28px 16px; }
     .header-inner, main { max-width: 1460px; margin: 0 auto; }
     .header-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
     h1 { margin: 0; font-size: 23px; font-weight: 700; }
     .subtitle { margin: 6px 0 0; color: #b6c5d0; font-size: 13px; }
     .as-of { color: #d7e1e8; font-variant-numeric: tabular-nums; white-space: nowrap; }
-
     main { padding: 20px 22px 34px; }
+    section { margin-bottom: 22px; }
     .section-title {
       display: flex;
       align-items: center;
@@ -93,17 +95,15 @@
     }
     .section-title h2 { margin: 0; font-size: 16px; }
     .section-note { color: var(--muted); font-size: 12px; }
-
     .kpis {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 12px;
-      margin-bottom: 22px;
     }
     .kpi {
       display: block;
       width: 100%;
-      min-height: 102px;
+      min-height: 96px;
       padding: 15px 16px;
       background: var(--surface);
       border: 1px solid var(--line);
@@ -111,10 +111,7 @@
       box-shadow: var(--shadow);
       color: inherit;
       text-align: left;
-      transition: border-color 120ms ease, transform 120ms ease;
     }
-    .kpi:hover { border-color: #9caab5; transform: translateY(-1px); }
-    .kpi:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
     .kpi-label { color: var(--muted); font-size: 13px; }
     .kpi-value { margin-top: 7px; font-size: 30px; line-height: 1; font-weight: 750; font-variant-numeric: tabular-nums; }
     .kpi-foot { margin-top: 9px; color: var(--muted); font-size: 12px; }
@@ -122,12 +119,10 @@
     .kpi.warn .kpi-value { color: var(--amber); }
     .kpi.risk .kpi-value { color: var(--red); }
     .kpi.neutral .kpi-value { color: var(--blue); }
-
     .focus-grid {
       display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap: 12px;
-      margin-bottom: 22px;
     }
     .focus-card {
       padding: 14px 15px;
@@ -139,37 +134,62 @@
       box-shadow: var(--shadow);
     }
     .focus-card.risk { border-left-color: var(--red); }
+    .focus-card.good { border-left-color: var(--green); }
     .focus-card.watch { border-left-color: var(--blue); }
-    .focus-top { display: flex; justify-content: space-between; gap: 10px; align-items: start; }
-    .asset-name { font-weight: 700; font-size: 15px; }
-    .asset-symbol { display: block; color: var(--muted); margin-top: 3px; font-size: 12px; }
-    .focus-hint { margin-top: 10px; color: #3e4b57; line-height: 1.55; font-size: 13px; }
-
-    .rotation-grid {
-      display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
-      gap: 10px;
-      margin-bottom: 22px;
-    }
-    .rotation-card {
-      padding: 13px 14px;
-      background: var(--surface);
+    .focus-card.focus-compact {
+      position: relative;
+      overflow: hidden;
+      min-height: 126px;
+      padding: 13px;
       border: 1px solid var(--line);
+      border-left: 4px solid var(--amber);
       border-radius: 6px;
+      background: var(--surface);
+      color: var(--ink);
       box-shadow: var(--shadow);
     }
-    .rotation-title { color: var(--muted); font-size: 12px; line-height: 1.35; }
-    .rotation-pair { margin-top: 4px; font-size: 14px; font-weight: 700; line-height: 1.35; }
-    .rotation-value {
-      margin-top: 10px;
-      font-size: 24px;
-      line-height: 1;
-      font-weight: 760;
-      font-variant-numeric: tabular-nums;
+    .focus-card.index-focus.value-deep { border-left-color: #045c3b; }
+    .focus-card.index-focus.value-low { border-left-color: #14804a; }
+    .focus-card.index-focus.value-neutral { border-left-color: #8b97a3; }
+    .focus-card.index-focus.value-high { border-left-color: var(--amber); }
+    .focus-card.index-focus.value-risk { border-left-color: var(--red); }
+    .focus-card.stock-focus.dividend-good { border-left-color: var(--green); }
+    .focus-card.stock-focus.dividend-risk { border-left-color: var(--red); }
+    .focus-card.stock-focus.dividend-neutral { border-left-color: var(--amber); }
+    .focus-compact .focus-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 10px;
     }
-    .rotation-meta { margin-top: 8px; color: var(--muted); font-size: 12px; line-height: 1.45; }
-    .rotation-value.neutral { color: var(--ink); }
-
+    .focus-compact .focus-index-name { font-size: 16px; font-weight: 750; line-height: 1.2; }
+    .focus-compact .focus-index-code { margin-top: 4px; color: var(--muted); font-size: 12px; font-weight: 400; letter-spacing: 0; }
+    .focus-compact .focus-quote { text-align: right; min-width: 92px; }
+    .focus-compact .focus-label { color: var(--muted); font-size: 12px; font-weight: 400; }
+    .focus-compact .focus-close { font-size: 17px; line-height: 1; font-weight: 760; font-variant-numeric: tabular-nums; letter-spacing: 0; }
+    .focus-compact .focus-change { margin-top: 5px; font-size: 12px; line-height: 1.35; font-weight: 750; font-variant-numeric: tabular-nums; }
+    .focus-compact .focus-change.up { color: var(--red); }
+    .focus-compact .focus-change.down { color: var(--green); }
+    .focus-compact .focus-change.flat { color: var(--muted); }
+    .focus-compact .focus-metric { margin-top: 13px; }
+    .focus-compact .focus-metric-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+    .focus-compact .focus-metric-value { color: var(--ink); font-size: 15px; font-weight: 750; font-variant-numeric: tabular-nums; }
+    .focus-compact .focus-metric-value.value-deep { color: #045c3b; }
+    .focus-compact .focus-metric-value.value-low { color: #14804a; }
+    .focus-compact .focus-metric-value.value-neutral { color: #52616e; }
+    .focus-compact .focus-metric-value.value-high { color: var(--amber); }
+    .focus-compact .focus-metric-value.value-risk { color: var(--red); }
+    .focus-compact .focus-metric-value.dividend-good { color: var(--green); }
+    .focus-compact .focus-metric-value.dividend-risk { color: var(--red); }
+    .focus-compact .focus-metric-value.dividend-neutral { color: var(--ink); }
+    .focus-compact .focus-status-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 11px; padding-top: 10px; border-top: 1px solid var(--line); }
+    .focus-compact .focus-status-value { margin-top: 5px; font-size: 13px; font-weight: 750; }
+    .focus-compact .focus-status-value.good { color: var(--green); }
+    .focus-compact .focus-status-value.watch { color: var(--blue); }
+    .focus-compact .focus-status-value.risk { color: var(--red); }
+    .focus-compact .focus-status-value.warn { color: var(--amber); }
+    .asset-name { font-weight: 700; font-size: 15px; }
+    .asset-symbol { display: block; color: var(--muted); margin-top: 3px; font-size: 12px; }
     .panel {
       background: var(--surface);
       border: 1px solid var(--line);
@@ -187,7 +207,6 @@
       border-bottom: 1px solid var(--line);
       background: var(--surface-soft);
     }
-    .toolbar-filters { display: flex; flex-wrap: wrap; align-items: center; column-gap: 18px; row-gap: 8px; }
     .segments { display: flex; flex-wrap: wrap; gap: 5px; }
     .segment {
       border: 1px solid var(--line-strong);
@@ -197,11 +216,7 @@
       border-radius: 5px;
       font-size: 12px;
     }
-    .segment.active {
-      background: #263946;
-      border-color: #263946;
-      color: #fff;
-    }
+    .segment.active { background: #263946; border-color: #263946; color: #fff; }
     .search {
       width: min(270px, 100%);
       border: 1px solid var(--line-strong);
@@ -210,11 +225,10 @@
       padding: 8px 10px;
       color: var(--ink);
     }
-
     .table-wrap { overflow-x: auto; }
-    .table-title { margin: 14px 14px 8px; font-size: 14px; }
-    table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 1580px; }
-    th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
+    table { width: 100%; border-collapse: separate; border-spacing: 0; table-layout: fixed; min-width: 1446px; }
+    [data-table-type="股票"] table { min-width: 1296px; }
+    th, td { padding: 10px 8px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
     th {
       position: sticky;
       top: 0;
@@ -226,50 +240,54 @@
       white-space: nowrap;
     }
     .sort-btn {
-      display: inline-flex; align-items: center; gap: 4px;
-      border: 0; padding: 0; background: transparent; color: inherit;
-      font-size: inherit; font-weight: inherit;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border: 0;
+      padding: 0;
+      background: transparent;
+      color: inherit;
+      font-size: inherit;
+      font-weight: inherit;
     }
-    .sort-btn:hover { color: var(--blue); }
-    .sort-icon { color: #8a99a5; font-size: 11px; }
-    .text-btn {
-      border: 1px solid var(--line-strong);
-      background: #fff;
-      color: var(--blue);
-      padding: 6px 9px;
-      border-radius: 5px;
-      font-size: 12px;
-      font-weight: 650;
-      white-space: nowrap;
-    }
-    .text-btn:hover { border-color: var(--blue); background: var(--blue-bg); }
     td { font-size: 13px; }
     tbody tr { cursor: pointer; transition: background 120ms ease; }
     tbody tr:hover { background: #f0f6fa; }
-    tbody tr:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; }
     th:first-child, td:first-child {
-      position: sticky; left: 0; z-index: 1;
+      position: sticky;
+      left: 0;
+      z-index: 1;
+      width: 136px;
+      min-width: 128px;
       background: #fff;
       box-shadow: 7px 0 9px -9px rgba(32, 47, 59, 0.72);
     }
-    #stock-list-section th:first-child,
-    #stock-list-section td:first-child {
-      min-width: 120px;
-    }
     th:first-child { z-index: 3; background: #f8fafb; }
     tbody tr:hover td:first-child { background: #f0f6fa; }
-    .floating-table-header {
-      display: none; position: fixed; top: 0; z-index: 20;
-      overflow: hidden; background: #f8fafb;
-      box-shadow: 0 3px 9px rgba(32, 47, 59, 0.14);
-    }
-    .floating-table-header table { transition: none; }
+    th:nth-child(2), td:nth-child(2) { width: 120px; min-width: 120px; white-space: nowrap; }
+    [data-table-type="指数"] th:nth-child(3), [data-table-type="指数"] td:nth-child(3),
+    [data-table-type="股票"] th:nth-child(3), [data-table-type="股票"] td:nth-child(3) { width: 82px; }
+    [data-table-type="指数"] th:nth-child(4), [data-table-type="指数"] td:nth-child(4),
+    [data-table-type="股票"] th:nth-child(4), [data-table-type="股票"] td:nth-child(4) { width: 70px; }
+    [data-table-type="指数"] th:nth-child(5), [data-table-type="指数"] td:nth-child(5) { width: 66px; }
+    [data-table-type="指数"] th:nth-child(6), [data-table-type="指数"] td:nth-child(6) { width: 84px; }
+    [data-table-type="指数"] th:nth-child(7), [data-table-type="指数"] td:nth-child(7) { width: 86px; }
+    [data-table-type="股票"] th:nth-child(5), [data-table-type="股票"] td:nth-child(5) { width: 78px; }
+    [data-table-type="指数"] th:nth-child(8), [data-table-type="指数"] td:nth-child(8),
+    [data-table-type="指数"] th:nth-child(9), [data-table-type="指数"] td:nth-child(9),
+    [data-table-type="指数"] th:nth-child(10), [data-table-type="指数"] td:nth-child(10),
+    [data-table-type="指数"] th:nth-child(11), [data-table-type="指数"] td:nth-child(11),
+    [data-table-type="股票"] th:nth-child(6), [data-table-type="股票"] td:nth-child(6),
+    [data-table-type="股票"] th:nth-child(7), [data-table-type="股票"] td:nth-child(7),
+    [data-table-type="股票"] th:nth-child(8), [data-table-type="股票"] td:nth-child(8),
+    [data-table-type="股票"] th:nth-child(9), [data-table-type="股票"] td:nth-child(9) { width: 90px; }
+    [data-table-type="指数"] th:nth-child(n+12), [data-table-type="指数"] td:nth-child(n+12),
+    [data-table-type="股票"] th:nth-child(n+10), [data-table-type="股票"] td:nth-child(n+10) { width: 76px; }
     .number { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-    .return-up { color: var(--red); }
-    .return-down { color: var(--green); }
-    .excess-strong { color: var(--green); font-weight: 700; }
-    .excess-weak { color: var(--red); font-weight: 700; }
-    .hint-cell { color: #465563; min-width: 290px; line-height: 1.45; }
+    .return-value { font-weight: 650; }
+    .return-value.up { color: var(--red); }
+    .return-value.down { color: var(--green); }
+    .return-value.flat { color: var(--muted); }
     .badge {
       display: inline-flex;
       align-items: center;
@@ -285,88 +303,144 @@
     .badge.warn { background: var(--amber-bg); color: var(--amber); }
     .badge.watch { background: var(--blue-bg); color: var(--blue); }
     .badge.neutral { background: var(--gray-bg); color: #52616e; }
-    .tag-list { display: flex; flex-wrap: wrap; gap: 4px; min-width: 180px; }
-
+    .badge.value-deep { background: #d7f5df; color: #045c3b; }
+    .badge.value-low { background: #ecfdf3; color: #14804a; }
+    .badge.value-neutral { background: var(--gray-bg); color: #52616e; }
+    .badge.value-high { background: var(--amber-bg); color: var(--amber); }
+    .badge.value-risk { background: var(--red-bg); color: var(--red); }
+    .tag-list { display: flex; flex-wrap: wrap; gap: 4px; min-width: 160px; }
     dialog {
-      width: min(820px, calc(100vw - 32px));
+      width: min(1100px, calc(100vw - 32px));
+      max-height: calc(100vh - 36px);
       border: 0;
       border-radius: 7px;
       padding: 0;
       box-shadow: 0 20px 60px rgba(20, 34, 46, 0.28);
+      overflow: hidden;
     }
+    dialog[open] { display: flex; flex-direction: column; }
     dialog::backdrop { background: rgba(17, 29, 38, 0.42); }
     .modal-head {
-      display: flex; justify-content: space-between; align-items: start; gap: 12px;
-      padding: 17px 18px; border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: start;
+      gap: 12px;
+      padding: 17px 18px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+      flex: 0 0 auto;
+      z-index: 2;
     }
     .modal-head h3 { margin: 0; font-size: 18px; }
+    .modal-title-block { min-width: 0; }
+    .modal-title-line { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+    .modal-close-summary { color: var(--red); font-size: 15px; font-weight: 750; font-variant-numeric: tabular-nums; white-space: nowrap; }
     .modal-actions { display: flex; align-items: center; gap: 7px; }
     .modal-position { color: var(--muted); font-size: 12px; white-space: nowrap; }
-    .nav-btn,
-    .close-btn {
-      width: 30px; height: 30px; border: 1px solid var(--line-strong);
-      border-radius: 5px; background: #fff; font-size: 18px; line-height: 1;
+    .nav-btn, .close-btn {
+      width: 30px;
+      height: 30px;
+      border: 1px solid var(--line-strong);
+      border-radius: 5px;
+      background: #fff;
+      font-size: 18px;
+      line-height: 1;
     }
-    .nav-btn:disabled {
-      cursor: not-allowed;
-      color: #b6c0c8;
-      background: #f2f4f6;
-      border-color: var(--line);
-    }
-    .nav-btn:not(:disabled):hover, .close-btn:hover { border-color: #8797a4; background: #f7fafb; }
-    .modal-body { padding: 17px 18px 20px; }
-    .decision {
-      padding: 12px 13px; margin-bottom: 18px; border-left: 4px solid var(--blue);
-      background: var(--surface-soft); line-height: 1.6;
-    }
+    .nav-btn:disabled { cursor: not-allowed; color: #b6c0c8; background: #f2f4f6; border-color: var(--line); }
+    .modal-body { padding: 17px 18px 20px; overflow-y: auto; flex: 1 1 auto; }
     .detail-grid {
-      display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 8px; margin-bottom: 20px;
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 20px;
     }
     .detail-item { padding: 10px; background: var(--surface-soft); border: 1px solid var(--line); border-radius: 5px; }
     .detail-label { color: var(--muted); font-size: 11px; }
     .detail-value { margin-top: 5px; font-size: 15px; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .form-row { margin-bottom: 12px; }
-    .form-label { display: block; margin-bottom: 6px; color: var(--muted); font-size: 12px; }
-    .form-input {
-      width: 100%;
+    .chart-panel {
+      margin-bottom: 20px;
+      padding: 13px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface-soft);
+    }
+    .chart-panel[hidden] { display: none; }
+    .chart-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .chart-title { margin: 0; font-size: 15px; }
+    .chart-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .chart-toggle-row { margin-top: 8px; align-items: center; justify-content: space-between; }
+    #chart-trend-controls { margin-left: auto; justify-content: flex-end; }
+    .chart-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-height: 28px;
       border: 1px solid var(--line-strong);
       border-radius: 5px;
-      padding: 9px 10px;
-      color: var(--ink);
-      font-variant-numeric: tabular-nums;
+      padding: 5px 8px;
+      background: #fff;
+      color: #4c5a67;
+      font-size: 12px;
     }
-    .form-help { margin-top: 7px; color: var(--muted); font-size: 12px; line-height: 1.45; }
-    .form-error { min-height: 18px; color: var(--red); font-size: 12px; }
-    .form-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
-    .primary-btn {
-      border: 1px solid #263946;
-      background: #263946;
-      color: #fff;
-      padding: 8px 12px;
+    .chart-chip.active { background: #263946; color: #fff; border-color: #263946; }
+    .chart-chip input { margin: 0; }
+    .chart-box {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+    }
+    .chart-tooltip {
+      position: absolute;
+      z-index: 5;
+      display: none;
+      max-width: 280px;
+      padding: 8px 10px;
+      border: 1px solid rgba(30, 42, 54, 0.16);
       border-radius: 5px;
-      font-weight: 650;
+      background: rgba(24, 33, 43, 0.94);
+      color: #fff;
+      font-size: 12px;
+      line-height: 1.55;
+      white-space: pre-line;
+      pointer-events: none;
+      box-shadow: 0 10px 26px rgba(20, 34, 46, 0.24);
     }
-
-    .range-title { margin: 0 0 10px; font-size: 14px; }
-    .ma-scale { position: relative; height: 174px; border: 1px solid var(--line); border-radius: 5px; background: #fbfcfd; }
-    .ma-axis { position: absolute; left: 18px; right: 18px; top: 96px; height: 2px; background: #c9d2da; }
-    .ma-point { position: absolute; transform: translateX(-50%); text-align: center; }
-    .ma-dot { width: 12px; height: 12px; margin: 0 auto 4px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px #8393a1; background: #718393; }
-    .ma-point.close .ma-dot { background: var(--red); width: 15px; height: 15px; }
-    .ma-point.close .ma-caption { color: var(--red); font-weight: 700; }
-    .ma-caption { font-size: 11px; color: #52616e; white-space: nowrap; }
+    .chart-empty { padding: 22px; color: var(--muted); }
+    .chart-svg { display: block; width: 100%; height: auto; }
+    .chart-subtitle { margin: 14px 0 8px; font-size: 13px; color: #344352; font-weight: 700; }
+    .chart-subtitle-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 14px 0 8px;
+    }
+    .chart-subtitle-row .chart-subtitle { margin: 0; }
+    .chart-latest { color: var(--muted); font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .chart-legend { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 0; color: var(--muted); font-size: 12px; }
+    .legend-item { display: inline-flex; align-items: center; gap: 5px; }
+    .legend-line { width: 16px; height: 3px; border-radius: 99px; background: currentColor; }
     .disclaimer { margin: 16px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
-
     @media (max-width: 900px) {
       .app-header { padding: 16px 18px; }
       .header-row { align-items: start; flex-direction: column; gap: 8px; }
       main { padding: 16px 12px 28px; }
-      .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .focus-grid { grid-template-columns: 1fr; }
-      .rotation-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .kpis { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+      .focus-grid { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
       .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .search { width: 100%; }
+    }
+    @media (max-width: 560px) {
+      .kpis, .focus-grid { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -375,22 +449,20 @@
     <div class="auth-card">
       <h2 class="auth-title" id="auth-title">访问校验</h2>
       <p class="auth-copy">遵守操作纪律，先想后做！流水不争先，争的是滔滔不绝。</p>
-      <form class="auth-form" id="auth-form">
-        <div>
-          <label class="form-label" for="auth-password">访问密码</label>
-          <input class="form-input" id="auth-password" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="请输入密码">
-        </div>
+      <form id="auth-form">
+        <label class="form-label" for="auth-password">访问密码</label>
+        <input class="form-input" id="auth-password" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="请输入密码">
         <div class="auth-error" id="auth-error"></div>
-        <button class="primary-btn auth-submit" type="submit">进入看板</button>
+        <button class="primary-btn" type="submit">进入看板</button>
       </form>
     </div>
   </div>
+
   <header class="app-header">
     <div class="header-inner">
       <div class="header-row">
         <div>
-          <h1>均线趋势观察台</h1>
-          <p class="subtitle">中长期趋势观察与仓位管理参考</p>
+          <h1>趋势观察台</h1>
         </div>
         <div class="as-of" id="as-of">正在载入最新行情...</div>
       </div>
@@ -400,8 +472,8 @@
   <main>
     <section>
       <div class="section-title">
-        <h2>决策概览</h2>
-        <span class="section-note" id="asset-count">按操作优先级汇总</span>
+        <h2>趋势概览</h2>
+        <span class="section-note" id="asset-count">按综合状态汇总</span>
       </div>
       <div class="kpis" id="kpis"></div>
     </section>
@@ -409,51 +481,45 @@
     <section>
       <div class="section-title">
         <h2>优先关注</h2>
-        <span class="section-note">当前存在信号标签的资产</span>
+        <span class="section-note">风险、修复、强趋势与估值缺失资产</span>
       </div>
       <div class="focus-grid" id="focus-grid"></div>
-    </section>
-
-    <section>
-      <div class="section-title">
-        <h2>指数轮动</h2>
-        <span class="section-note">近40日收益率差值对比</span>
-      </div>
-      <div class="rotation-grid" id="rotation-grid"></div>
     </section>
 
     <section id="index-list-section">
       <div class="section-title">
         <h2>指数观察列表</h2>
-        <span class="section-note">点击任意指数查看全部均线位置</span>
       </div>
       <div class="panel">
         <div class="toolbar">
-          <div class="toolbar-filters">
-            <div class="segments" id="index-segments"></div>
-            <div class="segments" id="index-trend-segments"></div>
-          </div>
+          <div class="segments" id="index-segments"></div>
           <input class="search" id="index-search" type="search" placeholder="搜索指数名称或代码">
         </div>
         <div class="table-wrap" data-table-type="指数">
           <table>
             <thead>
               <tr>
-                <th><button class="sort-btn" data-sort="name">资产 <span class="sort-icon">↕</span></button></th>
-                <th><button class="sort-btn" data-sort="date">日期 <span class="sort-icon">↕</span></button></th>
-                <th class="number"><button class="sort-btn" data-sort="close">收盘 <span class="sort-icon">↕</span></button></th>
-                <th class="number"><button class="sort-btn" data-sort="return_day">当日 <span class="sort-icon">↕</span></button></th>
-                <th><button class="sort-btn" data-sort="trend">趋势状态 <span class="sort-icon">↕</span></button></th>
-                <th>信号标签</th><th><button class="sort-btn" data-sort="action">操作建议 <span class="sort-icon">↕</span></button></th><th>操作提示</th>
-                <th class="number"><button class="sort-btn" data-sort="return_ytd">今年 <span class="sort-icon">↕</span></button></th>
-                <th class="number"><button class="sort-btn" data-sort="return_6m">近6个月 <span class="sort-icon">↕</span></button></th>
-                <th class="number"><button class="sort-btn" data-sort="return_1y">近1年 <span class="sort-icon">↕</span></button></th>
+                <th><button class="sort-btn" data-sort="name">资产 ↕</button></th>
+                <th><button class="sort-btn" data-sort="date">日期 ↕</button></th>
+                <th class="number"><button class="sort-btn" data-sort="close">收盘 ↕</button></th>
+                <th class="number"><button class="sort-btn" data-sort="daily_return">涨幅 ↕</button></th>
+                <th class="number"><button class="sort-btn" data-sort="pe">PE ↕</button></th>
+                <th class="number"><button class="sort-btn" data-sort="pe_percentile">PE百分位 ↕</button></th>
+                <th><button class="sort-btn" data-sort="valuation_status">估值状态 ↕</button></th>
+                <th><button class="sort-btn" data-sort="short_trend">短期 ↕</button></th>
+                <th><button class="sort-btn" data-sort="mid_trend">中期 ↕</button></th>
+                <th><button class="sort-btn" data-sort="long_trend">长期 ↕</button></th>
+                <th><button class="sort-btn" data-sort="overall_status">综合状态 ↕</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_ytd">今年 ↕</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_1w">近1周 ↕</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_1m">近1月 ↕</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_1y">近1年 ↕</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_3y">近3年 ↕</button></th>
               </tr>
             </thead>
             <tbody id="index-table-body"></tbody>
           </table>
         </div>
-        <div class="floating-table-header" id="floating-table-header" aria-hidden="true"></div>
       </div>
       <p class="disclaimer">本结果仅用于趋势观察，不构成投资建议。均线信号存在滞后性和假突破风险。</p>
     </section>
@@ -464,28 +530,27 @@
       </div>
       <div class="panel">
         <div class="toolbar">
-          <div class="toolbar-filters">
-            <div class="segments" id="stock-segments"></div>
-            <div class="segments" id="stock-trend-segments"></div>
-          </div>
+          <div class="segments" id="stock-segments"></div>
           <input class="search" id="stock-search" type="search" placeholder="搜索股票名称或代码">
         </div>
         <div class="table-wrap" data-table-type="股票">
           <table>
             <thead>
               <tr>
-                <th><button class="sort-btn" data-sort="name">资产 <span class="sort-icon">↕</span></button></th>
-                <th><button class="sort-btn" data-sort="date">日期 <span class="sort-icon">↕</span></button></th>
-                <th class="number"><button class="sort-btn" data-sort="close">收盘 <span class="sort-icon">↕</span></button></th>
-                <th class="number"><button class="sort-btn" data-sort="return_day">当日 <span class="sort-icon">↕</span></button></th>
-                <th class="number"><button class="sort-btn" data-sort="dividend_yield">股息率 <span class="sort-icon">↕</span></button></th>
-                <th><button class="sort-btn" data-sort="trend">趋势状态 <span class="sort-icon">↕</span></button></th>
-                <th>信号标签</th><th><button class="sort-btn" data-sort="action">操作建议 <span class="sort-icon">↕</span></button></th><th>操作提示</th>
-                <th class="number"><button class="sort-btn" data-sort="return_ytd">今年 <span class="sort-icon">↕</span></button></th>
-                <th class="number"><button class="sort-btn" data-sort="return_6m">近6个月 <span class="sort-icon">↕</span></button></th>
-                <th class="number"><button class="sort-btn" data-sort="return_1y">近1年 <span class="sort-icon">↕</span></button></th>
-                <th class="number"><button class="sort-btn" data-sort="last_year_dividend">上一年每股分红 <span class="sort-icon">↕</span></button></th>
-                <th>操作</th>
+                <th><button class="sort-btn" data-sort="name">资产 ↕</button></th>
+                <th><button class="sort-btn" data-sort="date">日期 ↕</button></th>
+                <th class="number"><button class="sort-btn" data-sort="close">收盘 ↕</button></th>
+                <th class="number"><button class="sort-btn" data-sort="daily_return">涨幅 ↕</button></th>
+                <th class="number"><button class="sort-btn" data-sort="dividend_yield">股息率 ↕</button></th>
+                <th><button class="sort-btn" data-sort="short_trend">短期 ↕</button></th>
+                <th><button class="sort-btn" data-sort="mid_trend">中期 ↕</button></th>
+                <th><button class="sort-btn" data-sort="long_trend">长期 ↕</button></th>
+                <th><button class="sort-btn" data-sort="overall_status">综合状态 ↕</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_ytd">今年 ↕</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_1w">近1周 ↕</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_1m">近1月 ↕</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_1y">近1年 ↕</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_3y">近3年 ↕</button></th>
               </tr>
             </thead>
             <tbody id="stock-table-body"></tbody>
@@ -497,7 +562,13 @@
 
   <dialog id="detail-modal">
     <div class="modal-head">
-      <div><h3 id="modal-title"></h3><span class="asset-symbol" id="modal-symbol"></span></div>
+      <div class="modal-title-block">
+        <div class="modal-title-line">
+          <h3 id="modal-title"></h3>
+          <span class="modal-close-summary" id="modal-close-summary"></span>
+        </div>
+        <span class="asset-symbol" id="modal-symbol"></span>
+      </div>
       <div class="modal-actions">
         <span class="modal-position" id="modal-position"></span>
         <button class="nav-btn" id="previous-asset" aria-label="上一条资产详情" title="上一条">‹</button>
@@ -506,68 +577,61 @@
       </div>
     </div>
     <div class="modal-body">
-      <div class="decision" id="modal-decision"></div>
       <div class="detail-grid" id="detail-grid"></div>
-      <h4 class="range-title">收盘价与均线位置</h4>
-      <div class="ma-scale" id="ma-scale"></div>
-      <p class="disclaimer">位置图用于快速观察价格相对均线的位置，不表示预测结果。</p>
+      <section class="chart-panel" id="index-chart-panel" hidden>
+        <div class="chart-head">
+          <h4 class="chart-title" id="chart-panel-title">指数趋势</h4>
+          <div class="chart-controls" id="chart-range-controls"></div>
+        </div>
+        <div class="chart-controls chart-toggle-row">
+          <div class="chart-controls" id="chart-ma-controls"></div>
+          <div class="chart-controls" id="chart-trend-controls"></div>
+        </div>
+        <div class="chart-box" id="price-trend-chart" style="margin-top:10px"></div>
+        <div class="chart-legend" id="price-chart-legend"></div>
+        <div class="chart-subtitle-row" id="pe-chart-row">
+          <div class="chart-subtitle">PE百分位趋势</div>
+          <div class="chart-latest" id="pe-chart-latest"></div>
+        </div>
+        <div class="chart-box" id="pe-percentile-chart"></div>
+      </section>
+      <p class="disclaimer" id="history-note">历史数据用于后续趋势曲线扩展。</p>
     </div>
-  </dialog>
-
-  <dialog id="dividend-modal">
-    <div class="modal-head">
-      <div>
-        <h3>编辑上一年度分红</h3>
-        <span class="asset-symbol" id="dividend-modal-symbol"></span>
-      </div>
-      <button class="close-btn" id="close-dividend-modal" aria-label="关闭分红编辑">×</button>
-    </div>
-    <form class="modal-body" id="dividend-form" method="dialog">
-      <div class="form-row">
-        <label class="form-label" for="dividend-input">上一年每股分红</label>
-        <input class="form-input" id="dividend-input" type="text" inputmode="decimal" autocomplete="off" placeholder="例如 1.23456">
-        <div class="form-help">可留空清除；仅支持非负数，最多 5 位小数。</div>
-      </div>
-      <div class="form-error" id="dividend-error"></div>
-      <div class="form-actions">
-        <button class="text-btn" type="button" id="clear-dividend">清除</button>
-        <button class="text-btn" type="button" id="cancel-dividend">取消</button>
-        <button class="primary-btn" type="submit">保存</button>
-      </div>
-    </form>
   </dialog>
 
   <script>
     const fallbackAssets = [
-      {name:"沪深300",symbol:"sh000300",date:"2026-05-29",close:4892.12,trend:"✅长期趋势向上",signals:["均线多头排列"],action:"继续持有",hint:"长期趋势向上且未出现破坏信号，可继续持有，适合定投或等待回踩。",MA20:4884.44,MA50:4721.60,MA60:4711.16,MA120:4687.20,MA200:4603.07},
-      {name:"中证A500",symbol:"sh000510",date:"2026-05-29",close:6100.14,trend:"✅长期趋势向上",signals:["无新增信号"],action:"继续持有",hint:"长期趋势向上且未出现破坏信号，可继续持有，适合定投或等待回踩。",MA20:6148.25,MA50:5905.31,MA60:5896.25,MA120:5820.34,MA200:5636.20},
-      {name:"中证500",symbol:"sh000905",date:"2026-05-29",close:8359.56,trend:"✅长期趋势向上",signals:["无新增信号"],action:"继续持有",hint:"长期趋势向上且未出现破坏信号，可继续持有，适合定投或等待回踩。",MA20:8603.67,MA50:8202.63,MA60:8220.15,MA120:8024.16,MA200:7617.66},
-      {name:"创业板100",symbol:"sz399006",date:"2026-05-29",close:4037.95,trend:"✅长期趋势向上",signals:["均线多头排列","高位乖离"],action:"暂不追高",hint:"趋势向上但乖离或短期热度偏高，不宜一次性加仓。",MA20:3917.02,MA50:3618.32,MA60:3559.75,MA120:3404.55,MA200:3212.36},
-      {name:"科创50",symbol:"sh000688",date:"2026-05-29",close:1751.32,trend:"✅长期趋势向上",signals:["均线多头排列","高位乖离"],action:"暂不追高",hint:"趋势向上但乖离或短期热度偏高，不宜一次性加仓。",MA20:1735.98,MA50:1510.05,MA60:1490.78,MA120:1455.57,MA200:1398.44},
-      {name:"恒生指数",symbol:"hkHSI",date:"2026-05-29",close:25182.39,trend:"震荡观察",signals:["无新增信号"],action:"暂不操作",hint:"趋势不清晰或仍偏弱，避免重仓操作。",MA20:25886.63,MA50:25739.50,MA60:25726.34,MA120:26064.45,MA200:26016.30},
-      {name:"红利低波",symbol:"H30269",date:"2026-05-29",close:11082.68,trend:"❌长期趋势向下",signals:["无新增信号"],action:"暂不操作",hint:"长期趋势向下，谨慎参与，原则上不主动加仓。",MA20:11124.23,MA50:11282.79,MA60:11305.42,MA120:11264.50,MA200:11357.45},
-      {name:"国证现金流",symbol:"980092",date:"2026-05-29",close:5390.02,trend:"震荡观察",signals:["无新增信号"],action:"暂不操作",hint:"趋势不清晰或仍偏弱，避免重仓操作。",MA20:5630.57,MA50:5737.72,MA60:5805.43,MA120:5681.54,MA200:5437.25},
-      {name:"中证消费",symbol:"sh000932",date:"2026-05-29",close:13190.39,trend:"❌长期趋势向下",signals:["均线空头排列"],action:"暂不操作",hint:"长期趋势向下，谨慎参与，原则上不主动加仓。",MA20:13638.54,MA50:14104.60,MA60:14230.78,MA120:14763.77,MA200:15398.85},
-      {name:"港股通创新药",symbol:"931250",date:"2026-05-29",close:973.60,trend:"❌长期趋势向下",signals:["均线空头排列"],action:"暂不操作",hint:"长期趋势向下，谨慎参与，原则上不主动加仓。",MA20:1019.16,MA50:1051.32,MA60:1044.83,MA120:1069.06,MA200:1118.52}
+      {name:"沪深300",symbol:"000300",asset_type:"指数",date:"--",close:null,short_trend:"数据不足",mid_trend:"数据不足",long_trend:"数据不足",overall_status:"数据不足",signals:["等待首次发布"],valuation_status:"估值数据缺失"}
     ];
-
-    let assets = fallbackAssets.map(asset => ({asset_type:"指数", ...asset}));
-
-    const filters = [
-      ["all","全部"],["hold","继续持有"],["wait","暂不追高"],["watch","震荡观察"],["risk","长期向下"]
-    ];
-    const trendFilters = [["all","全部趋势"],["up","长期向上"],["sideways","震荡观察"],["down","长期向下"]];
-    const tableStates = {
-      "指数": { filter: "all", trendFilter: "all", search: "", sortKey: "", sortDirection: "asc" },
-      "股票": { filter: "all", trendFilter: "all", search: "", sortKey: "", sortDirection: "asc" },
-    };
+    let assets = fallbackAssets;
+    let historyRows = [];
     const accessPassword = "流水不争先";
     const authStorageKey = "trend_observer_authenticated";
-    const dividendStorageKey = "trend_observer_last_year_dividends";
     const memoryStorage = {};
+    const statusFilters = [["all","全部"],["strong","强趋势"],["healthy","健康上升"],["repair","趋势修复"],["weak","趋势转弱"],["fall","下跌通道"],["missing","估值缺失"]];
+    const tableStates = {
+      "指数": { filter: "all", search: "", sortKey: "", sortDirection: "asc" },
+      "股票": { filter: "all", search: "", sortKey: "", sortDirection: "asc" },
+    };
     let currentDetailIndex = -1;
     let detailSequence = [];
-    let editingDividendSymbol = "";
+    const chartState = {
+      rangeMonths: 12,
+      ma: { MA20: true, MA60: true, MA120: true, MA200: true },
+      trends: { short_trend: false, mid_trend: false, long_trend: false },
+    };
+    const rangeOptions = [[3, "近3个月"], [6, "近6个月"], [12, "近1年"], [36, "近3年"], [60, "近5年"]];
+    const maSeries = [
+      ["MA20", "MA20", "#2563eb"],
+      ["MA60", "MA60", "#7c3aed"],
+      ["MA120", "MA120", "#b7791f"],
+      ["MA200", "MA200", "#475569"],
+    ];
+    const trendSeries = [
+      ["short_trend", "短期趋势"],
+      ["mid_trend", "中期趋势"],
+      ["long_trend", "长期趋势"],
+    ];
 
     function escapeHtml(value) {
       return String(value ?? "").replace(/[&<>"']/g, char => ({
@@ -577,47 +641,42 @@
     function displayNumber(value) {
       return typeof value === "number" && Number.isFinite(value) ? value.toFixed(2) : "--";
     }
-    function displayDividend(value) {
-      if (typeof value !== "number" || !Number.isFinite(value)) return "--";
-      return value.toFixed(5).replace(/\.?0+$/, "");
+    function displayPercent(value) {
+      return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(2)}%` : "--";
     }
-    function displayReturn(value) {
-      return typeof value === "number" && Number.isFinite(value) ? `${value > 0 ? "+" : ""}${value.toFixed(2)}%` : "--";
+    function returnClass(value) {
+      if (typeof value !== "number" || !Number.isFinite(value)) return "flat";
+      if (value > 0) return "up";
+      if (value < 0) return "down";
+      return "flat";
     }
-    function calculateDividendYield(asset) {
-      if (
-        typeof asset.last_year_dividend !== "number" ||
-        !Number.isFinite(asset.last_year_dividend) ||
-        typeof asset.close !== "number" ||
-        !Number.isFinite(asset.close) ||
-        asset.close <= 0
-      ) {
-        return null;
-      }
-      return Number((asset.last_year_dividend / asset.close * 100).toFixed(2));
+    function returnCell(value) {
+      return `<span class="return-value ${returnClass(value)}">${displayPercent(value)}</span>`;
     }
-    function readStoredValue(key) {
-      try {
-        return window.localStorage ? window.localStorage.getItem(key) : memoryStorage[key];
-      } catch (error) {
-        return memoryStorage[key];
-      }
+    function dailyChangeAmount(asset) {
+      if (!isFiniteNumber(asset.close) || !isFiniteNumber(asset.daily_return)) return null;
+      const previousClose = asset.close / (1 + asset.daily_return / 100);
+      return asset.close - previousClose;
     }
-    function writeStoredValue(key, value) {
-      try {
-        if (window.localStorage) {
-          window.localStorage.setItem(key, value);
-          return;
-        }
-      } catch (error) {}
-      memoryStorage[key] = value;
+    function displaySignedNumber(value) {
+      if (!isFiniteNumber(value)) return "--";
+      return `${value > 0 ? "+" : ""}${value.toFixed(2)}`;
+    }
+    function displaySignedPercent(value) {
+      if (!isFiniteNumber(value)) return "--";
+      return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
+    }
+    function focusIndexSymbol(symbol) {
+      if (/^000\\d{3}$/.test(symbol)) return `${symbol}.SH`;
+      if (/^399\\d{3}$/.test(symbol)) return `${symbol}.SZ`;
+      if (symbol.startsWith("sz")) return `${symbol.slice(2)}.SZ`;
+      if (symbol.startsWith("sh")) return `${symbol.slice(2)}.SH`;
+      if (symbol.startsWith("hk")) return symbol.slice(2);
+      return symbol;
     }
     function readSessionValue(key) {
-      try {
-        return window.sessionStorage ? window.sessionStorage.getItem(key) : memoryStorage[key];
-      } catch (error) {
-        return memoryStorage[key];
-      }
+      try { return window.sessionStorage ? window.sessionStorage.getItem(key) : memoryStorage[key]; }
+      catch (error) { return memoryStorage[key]; }
     }
     function writeSessionValue(key, value) {
       try {
@@ -628,213 +687,102 @@
       } catch (error) {}
       memoryStorage[key] = value;
     }
-    function unlockDashboard() {
-      document.body.classList.remove("auth-locked");
-      document.querySelector("#auth-password").value = "";
-      document.querySelector("#auth-error").textContent = "";
-      loadLatestData();
+    function toneFromStatus(status) {
+      if (["强趋势", "健康上升"].includes(status)) return "good";
+      if (["趋势修复", "趋势分歧"].includes(status)) return "warn";
+      if (["趋势转弱", "下跌通道", "数据不足"].includes(status)) return "risk";
+      return "watch";
     }
-    function initializeAuth() {
-      if (readSessionValue(authStorageKey) === "1") {
-        unlockDashboard();
-        return;
-      }
-      document.body.classList.add("auth-locked");
-      setTimeout(() => document.querySelector("#auth-password").focus(), 0);
+    function toneFromTrend(trend) {
+      if (String(trend).includes("上升") || String(trend).includes("强势")) return "good";
+      if (String(trend).includes("修复") || String(trend).includes("震荡")) return "watch";
+      if (String(trend).includes("转弱") || String(trend).includes("下跌")) return "risk";
+      return "neutral";
     }
-    function loadDividendOverrides() {
-      try {
-        const parsed = JSON.parse(readStoredValue(dividendStorageKey) || "{}");
-        return parsed && typeof parsed === "object" ? parsed : {};
-      } catch (error) {
-        return {};
-      }
+    function toneFromValuation(zone) {
+      if (zone === "极低估") return "value-deep";
+      if (zone === "低估") return "value-low";
+      if (zone === "合理") return "value-neutral";
+      if (zone === "偏高") return "value-high";
+      if (zone === "高估") return "value-risk";
+      if (zone === "估值数据缺失") return "neutral";
+      return "neutral";
     }
-    function saveDividendOverrides(overrides) {
-      writeStoredValue(dividendStorageKey, JSON.stringify(overrides));
+    function valuationStatusFromPercent(value) {
+      if (!isFiniteNumber(value)) return "估值数据缺失";
+      if (value < 15) return "极低估";
+      if (value < 35) return "低估";
+      if (value < 70) return "合理";
+      if (value < 90) return "偏高";
+      return "高估";
     }
-    function applyDividendOverrides() {
-      const overrides = loadDividendOverrides();
-      assets.forEach(asset => {
-        if (asset.asset_type !== "股票") return;
-        if (Object.prototype.hasOwnProperty.call(overrides, asset.symbol)) {
-          const value = overrides[asset.symbol];
-          asset.last_year_dividend = typeof value === "number" && Number.isFinite(value) ? value : null;
-        }
-        asset.dividend_yield = calculateDividendYield(asset);
-      });
-    }
-    function parseDividendInput(rawValue) {
-      const value = rawValue.trim();
-      if (!value) return null;
-      if (!/^\d+(?:\.\d{1,5})?$/.test(value)) {
-        throw new Error("请输入非负数，且小数位最多 5 位。");
-      }
-      const number = Number(value);
-      if (!Number.isFinite(number) || number < 0) {
-        throw new Error("请输入非负数，且小数位最多 5 位。");
-      }
-      return number;
-    }
-    function excessTone(value) {
-      if (typeof value !== "number" || !Number.isFinite(value)) return "";
-      if (value <= -5) return "excess-weak";
-      if (value >= 5) return "excess-strong";
-      return "";
-    }
-    function returnTone(value) {
-      if (typeof value !== "number" || !Number.isFinite(value) || value === 0) return "";
-      return value > 0 ? "return-up" : "return-down";
-    }
-    function hasMetrics(asset) {
-      return ["close","MA20","MA50","MA60","MA120","MA200"].every(key =>
-        typeof asset[key] === "number" && Number.isFinite(asset[key])
-      );
-    }
-    function assetsInScope() { return assets; }
-
-    function tone(asset) {
-      if (asset.action === "暂不追高") return "warn";
-      if (asset.trend.includes("向下")) return "risk";
-      if (asset.trend === "震荡观察") return "watch";
-      return "good";
-    }
-    function trendTone(asset) {
-      if (asset.trend.includes("向下")) return "risk";
-      if (asset.trend === "震荡观察") return "watch";
-      return "good";
+    function valuationColorFromPercent(value) {
+      const zone = valuationStatusFromPercent(value);
+      if (zone === "极低估") return "#045c3b";
+      if (zone === "低估") return "#14804a";
+      if (zone === "合理") return "#8b97a3";
+      if (zone === "偏高") return "#9a5b00";
+      if (zone === "高估") return "#b42332";
+      return "#8b97a3";
     }
     function tagTone(tag) {
-      if (tag.includes("乖离") || tag.includes("过热")) return "warn";
-      if (tag.includes("空头") || tag.includes("跌破") || tag.includes("死亡")) return "risk";
-      if (tag.includes("震荡")) return "watch";
-      if (tag === "无新增信号") return "neutral";
-      return "good";
+      if (tag === "极低估") return "value-deep";
+      if (tag === "低估") return "value-low";
+      if (tag === "合理") return "value-neutral";
+      if (tag === "偏高") return "value-high";
+      if (tag === "高估") return "value-risk";
+      if (["强趋势", "健康上升", "短期强势"].includes(tag)) return "good";
+      if (["趋势修复", "趋势分歧"].includes(tag)) return "watch";
+      if (["趋势转弱", "下跌通道", "长期下跌", "中期下跌", "长期转弱", "短期转弱"].includes(tag)) return "risk";
+      return "neutral";
     }
-    function focusSignals(asset) {
-      return asset.signals.filter(tag => tag !== "无新增信号" && tag !== "震荡观察");
+    function statusMatch(asset, filter) {
+      if (filter === "all") return true;
+      if (filter === "strong") return asset.overall_status === "强趋势";
+      if (filter === "healthy") return asset.overall_status === "健康上升";
+      if (filter === "repair") return ["趋势修复", "趋势分歧"].includes(asset.overall_status);
+      if (filter === "weak") return asset.overall_status === "趋势转弱";
+      if (filter === "fall") return asset.overall_status === "下跌通道";
+      if (filter === "missing") return asset.valuation_status === "估值数据缺失";
+      return true;
     }
-    function findAssetByName(name) {
-      return assets.find(asset => asset.name === name);
-    }
-    function relativeReturn(sourceName, baseName) {
-      const source = findAssetByName(sourceName);
-      const base = findAssetByName(baseName);
-      if (!source || !base || typeof source.return_40d !== "number" || typeof base.return_40d !== "number") {
-        return null;
-      }
-      return {
-        source,
-        base,
-        value: Number((source.return_40d - base.return_40d).toFixed(2)),
-      };
-    }
-    function matches(asset, assetType) {
+    function visibleAssets(assetType) {
       const state = tableStates[assetType];
       const q = state.search.trim().toLowerCase();
-      const textMatch = !q || `${asset.name} ${asset.symbol}`.toLowerCase().includes(q);
-      const filterMatch = state.filter === "all" ||
-        (state.filter === "hold" && asset.action === "继续持有") ||
-        (state.filter === "wait" && asset.action === "暂不追高") ||
-        (state.filter === "watch" && asset.trend === "震荡观察") ||
-        (state.filter === "risk" && asset.trend.includes("向下"));
-      const trendMatch = state.trendFilter === "all" ||
-        (state.trendFilter === "up" && asset.trend.includes("向上")) ||
-        (state.trendFilter === "sideways" && asset.trend === "震荡观察") ||
-        (state.trendFilter === "down" && asset.trend.includes("向下"));
-      return textMatch && filterMatch && trendMatch;
-    }
-    function visibleAssets(assetType = "") {
-      const state = assetType ? tableStates[assetType] : null;
-      const matchingAssets = assetType
-        ? assets.filter(asset => asset.asset_type === assetType && matches(asset, assetType))
-        : assets;
-      if (!state || !state.sortKey) return matchingAssets;
-      return matchingAssets.sort((left, right) => {
-        const leftValue = left[state.sortKey];
-        const rightValue = right[state.sortKey];
-        const leftMissing = leftValue === null || leftValue === undefined || leftValue === "";
-        const rightMissing = rightValue === null || rightValue === undefined || rightValue === "";
-        if (leftMissing || rightMissing) return leftMissing === rightMissing ? 0 : (leftMissing ? 1 : -1);
-        const comparison = typeof leftValue === "number" && typeof rightValue === "number"
-          ? leftValue - rightValue
-          : String(leftValue).localeCompare(String(rightValue), "zh-CN");
+      const filtered = assets.filter(asset => {
+        const textMatch = !q || `${asset.name} ${asset.symbol}`.toLowerCase().includes(q);
+        return asset.asset_type === assetType && textMatch && statusMatch(asset, state.filter);
+      });
+      if (!state.sortKey) return filtered;
+      return [...filtered].sort((left, right) => {
+        const lv = left[state.sortKey], rv = right[state.sortKey];
+        const comparison = typeof lv === "number" && typeof rv === "number"
+          ? lv - rv
+          : String(lv ?? "").localeCompare(String(rv ?? ""), "zh-CN");
         return state.sortDirection === "asc" ? comparison : -comparison;
       });
     }
-    function updateSortHeaders(assetType) {
+    function renderSegments(assetType) {
       const state = tableStates[assetType];
-      document.querySelectorAll(`[data-table-type="${assetType}"] [data-sort]`).forEach(button => {
-        const icon = button.querySelector(".sort-icon");
-        icon.textContent = button.dataset.sort === state.sortKey ? (state.sortDirection === "asc" ? "↑" : "↓") : "↕";
-      });
-    }
-    function syncFloatingHeader() {
-      const wraps = [...document.querySelectorAll(".table-wrap")];
-      const wrap = wraps.find(candidate => {
-        const rect = candidate.getBoundingClientRect();
-        const headerHeight = candidate.querySelector("thead").getBoundingClientRect().height;
-        return rect.top < 0 && rect.bottom > headerHeight;
-      });
-      const floatingHeader = document.querySelector("#floating-table-header");
-      if (!wrap) {
-        floatingHeader.style.display = "none";
-        return;
-      }
-      let floatingTable = floatingHeader.querySelector("table");
-      if (floatingHeader.dataset.tableType !== wrap.dataset.tableType) {
-        refreshFloatingHeader(wrap);
-        floatingTable = floatingHeader.querySelector("table");
-      }
-      if (!floatingTable) return;
-      const wrapRect = wrap.getBoundingClientRect();
-      const headerHeight = wrap.querySelector("thead").getBoundingClientRect().height;
-      floatingHeader.style.display = "block";
-      floatingHeader.style.left = `${wrapRect.left}px`;
-      floatingHeader.style.width = `${wrapRect.width}px`;
-      floatingTable.style.transform = `translateX(${-wrap.scrollLeft}px)`;
-      floatingTable.querySelector("th:first-child").style.transform = `translateX(${wrap.scrollLeft}px)`;
-    }
-    function refreshFloatingHeader(activeWrap = null) {
-      const originalWrap = activeWrap || [...document.querySelectorAll(".table-wrap")].find(wrap => {
-        const rect = wrap.getBoundingClientRect();
-        return rect.top < 0 && rect.bottom > 0;
-      }) || document.querySelector(".table-wrap");
-      const originalTable = originalWrap.querySelector("table");
-      const originalHead = originalTable.querySelector("thead");
-      const floatingHeader = document.querySelector("#floating-table-header");
-      const floatingTable = document.createElement("table");
-      const clonedHead = originalHead.cloneNode(true);
-      floatingTable.appendChild(clonedHead);
-      floatingTable.style.width = `${originalTable.scrollWidth}px`;
-      [...originalHead.querySelectorAll("th")].forEach((cell, index) => {
-        const width = `${cell.getBoundingClientRect().width}px`;
-        const clone = clonedHead.querySelectorAll("th")[index];
-        clone.style.width = width;
-        clone.style.minWidth = width;
-        clone.style.maxWidth = width;
-      });
-      floatingHeader.replaceChildren(floatingTable);
-      floatingHeader.dataset.tableType = originalWrap.dataset.tableType || "";
-      floatingHeader.querySelectorAll("[data-sort]").forEach(button => button.addEventListener("click", () => {
-        originalWrap.querySelector(`[data-sort="${button.dataset.sort}"]`).click();
+      const id = assetType === "指数" ? "index-segments" : "stock-segments";
+      document.querySelector(`#${id}`).innerHTML = statusFilters.map(([key, label]) =>
+        `<button class="segment ${state.filter === key ? "active" : ""}" data-filter="${key}" data-filter-type="${assetType}">${label}</button>`
+      ).join("");
+      document.querySelectorAll(`[data-filter-type="${assetType}"]`).forEach(button => button.addEventListener("click", () => {
+        state.filter = button.dataset.filter;
+        renderSegments(assetType);
+        renderTable(assetType);
       }));
-      syncFloatingHeader();
     }
-
     function renderKpis() {
-      const scopedAssets = assetsInScope();
-      const countTypes = matcher => {
-        const matchingAssets = scopedAssets.filter(matcher);
-        return `${matchingAssets.filter(x => x.asset_type === "指数").length}指数 / ${matchingAssets.filter(x => x.asset_type === "股票").length}股票`;
-      };
+      const scopedAssets = assets;
       const items = [
-        ["good","继续持有", scopedAssets.filter(x => x.action === "继续持有").length, `长期结构保持健康 · ${countTypes(x => x.action === "继续持有")}`, "hold"],
-        ["warn","暂不追高", scopedAssets.filter(x => x.action === "暂不追高").length, `乖离偏高，等待回落 · ${countTypes(x => x.action === "暂不追高")}`, "wait"],
-        ["neutral","震荡观察", scopedAssets.filter(x => x.trend === "震荡观察").length, `方向不清晰，控制仓位 · ${countTypes(x => x.trend === "震荡观察")}`, "watch"],
-        ["risk","长期向下", scopedAssets.filter(x => x.trend.includes("向下")).length, `原则上不主动加仓 · ${countTypes(x => x.trend.includes("向下"))}`, "risk"]
+        ["good", "强趋势", scopedAssets.filter(x => x.overall_status === "强趋势").length, "三周期同步向上", "strong"],
+        ["good", "健康上升", scopedAssets.filter(x => x.overall_status === "健康上升").length, "中长期趋势良好", "healthy"],
+        ["warn", "修复/分歧", scopedAssets.filter(x => ["趋势修复", "趋势分歧"].includes(x.overall_status)).length, "趋势改善但未完全确认", "repair"],
+        ["risk", "转弱/下跌", scopedAssets.filter(x => ["趋势转弱", "下跌通道"].includes(x.overall_status)).length, "需要降低交易频率", "weak"],
       ];
-      document.querySelector("#kpis").innerHTML = items.map(([cls,label,value,foot,filter]) =>
+      document.querySelector("#kpis").innerHTML = items.filter(([, , value]) => value > 0).map(([cls, label, value, foot, filter]) =>
         `<button class="kpi ${cls}" data-kpi-filter="${filter}"><div class="kpi-label">${label}</div><div class="kpi-value">${value}</div><div class="kpi-foot">${foot}</div></button>`
       ).join("");
       document.querySelectorAll("[data-kpi-filter]").forEach(button => button.addEventListener("click", () => {
@@ -851,91 +799,143 @@
         document.querySelector("#index-list-section").scrollIntoView({behavior:"smooth", block:"start"});
       }));
     }
-
-    function renderFocus() {
-      const focused = assetsInScope().filter(asset => focusSignals(asset).length);
-      document.querySelector("#focus-grid").innerHTML = focused.length ? focused.map(asset => `
-        <button class="focus-card ${tone(asset)}" data-open="${asset.symbol}">
-          <div class="focus-top">
-            <div><span class="asset-name">${escapeHtml(asset.name)}</span><span class="asset-symbol">${escapeHtml(asset.symbol)}</span></div>
-            <span class="badge ${tone(asset)}">${escapeHtml(asset.action)}</span>
-          </div>
-          <div class="tag-list" style="margin-top:10px">${focusSignals(asset).map(tag => `<span class="badge ${tagTone(tag)}">${escapeHtml(tag)}</span>`).join("")}</div>
-          <div class="focus-hint">${escapeHtml(asset.hint)}</div>
-        </button>`).join("") : `<div class="section-note">当前没有新增信号。</div>`;
-      document.querySelectorAll("[data-open]").forEach(button => button.addEventListener("click", () => openDetail(button.dataset.open)));
+    function focusSignals(asset) {
+      return (asset.signals || []).filter(tag => !["合理"].includes(tag));
     }
-
-    function renderRotation() {
-      const comparisons = [
-        ["相对 Wind全A", "红利低波", "Wind全A"],
-        ["相对 Wind全A", "国证现金流", "Wind全A"],
-        ["相对 Wind全A", "创业板100", "Wind全A"],
-        ["相对 Wind全A", "科创50", "Wind全A"],
-        ["相对 创业板100", "红利低波", "创业板100"],
-        ["相对 创业板100", "国证现金流", "创业板100"],
-      ];
-      document.querySelector("#rotation-grid").innerHTML = comparisons.map(([group, sourceName, baseName]) => {
-        const result = relativeReturn(sourceName, baseName);
-        const toneClass = result ? excessTone(result.value) || "neutral" : "neutral";
-        const sourceReturn = result ? displayReturn(result.source.return_40d) : "--";
-        const baseReturn = result ? displayReturn(result.base.return_40d) : "--";
-        return `
-          <div class="rotation-card">
-            <div class="rotation-title">${escapeHtml(group)}</div>
-            <div class="rotation-pair">${escapeHtml(sourceName)} - ${escapeHtml(baseName)}</div>
-            <div class="rotation-value ${toneClass}">${result ? displayReturn(result.value) : "--"}</div>
-            <div class="rotation-meta">${escapeHtml(sourceName)} ${sourceReturn} · ${escapeHtml(baseName)} ${baseReturn}</div>
+    function shouldFocusAsset(asset) {
+      if (asset.overall_status === "数据不足") return false;
+      const watchedStatuses = ["强趋势", "下跌通道"];
+      const watchedValuations = ["极低估", "低估", "偏高", "高估"];
+      const matchesTrend = watchedStatuses.includes(asset.overall_status);
+      if (asset.asset_type === "指数") {
+        return watchedValuations.includes(asset.valuation_status) || matchesTrend;
+      }
+      if (asset.asset_type === "股票") {
+        const watchedDividend = isFiniteNumber(asset.dividend_yield) && (asset.dividend_yield <= 3 || asset.dividend_yield >= 5);
+        return watchedDividend || matchesTrend;
+      }
+      return matchesTrend;
+    }
+    function dividendFocusTone(value) {
+      if (!isFiniteNumber(value)) return "dividend-neutral";
+      if (value >= 5) return "dividend-good";
+      if (value <= 3) return "dividend-risk";
+      return "dividend-neutral";
+    }
+    function renderIndexFocusCard(asset) {
+      const changeTone = returnClass(asset.daily_return);
+      const pePercent = isFiniteNumber(asset.pe_percentile) ? Math.max(0, Math.min(100, asset.pe_percentile)) : null;
+      const valuationTone = toneFromValuation(asset.valuation_status);
+      return `
+        <button class="focus-card focus-compact index-focus ${valuationTone}" data-open="${asset.symbol}" data-open-type="${asset.asset_type}">
+          <div class="focus-top">
+            <div>
+              <div class="focus-index-name">${escapeHtml(asset.name)}</div>
+              <div class="focus-index-code">${escapeHtml(focusIndexSymbol(asset.symbol))}</div>
+            </div>
+            <div class="focus-quote">
+              <div class="focus-close">${displayNumber(asset.close)}</div>
+              <div class="focus-change ${changeTone}">
+                <span>${displaySignedPercent(asset.daily_return)}</span>
+              </div>
+            </div>
           </div>
-        `;
+          <div class="focus-metric">
+            <div class="focus-metric-head">
+              <span class="focus-label">PE百分位</span>
+              <span class="focus-metric-value ${valuationTone}">${pePercent === null ? "--" : `${pePercent.toFixed(1)}%`}</span>
+            </div>
+          </div>
+          <div class="focus-status-row">
+            <div>
+              <div class="focus-label">中期状态</div>
+              <div class="focus-status-value ${toneFromTrend(asset.mid_trend)}">${escapeHtml(asset.mid_trend || "--")}</div>
+            </div>
+            <div>
+              <div class="focus-label">长期状态</div>
+              <div class="focus-status-value ${toneFromTrend(asset.long_trend)}">${escapeHtml(asset.long_trend || "--")}</div>
+            </div>
+          </div>
+        </button>`;
+    }
+    function renderStockFocusCard(asset) {
+      const changeTone = returnClass(asset.daily_return);
+      const dividendTone = dividendFocusTone(asset.dividend_yield);
+      return `
+        <button class="focus-card focus-compact stock-focus ${dividendTone}" data-open="${asset.symbol}" data-open-type="${asset.asset_type}">
+          <div class="focus-top">
+            <div>
+              <div class="focus-index-name">${escapeHtml(asset.name)}</div>
+              <div class="focus-index-code">${escapeHtml(asset.symbol)} · ${escapeHtml(asset.asset_type)}</div>
+            </div>
+            <div class="focus-quote">
+              <div class="focus-close">${displayNumber(asset.close)}</div>
+              <div class="focus-change ${changeTone}">
+                <span>${displaySignedPercent(asset.daily_return)}</span>
+              </div>
+            </div>
+          </div>
+          <div class="focus-metric">
+            <div class="focus-metric-head">
+              <span class="focus-label">股息率</span>
+              <span class="focus-metric-value ${dividendTone}">${displayPercent(asset.dividend_yield)}</span>
+            </div>
+          </div>
+          <div class="focus-status-row">
+            <div>
+              <div class="focus-label">中期状态</div>
+              <div class="focus-status-value ${toneFromTrend(asset.mid_trend)}">${escapeHtml(asset.mid_trend || "--")}</div>
+            </div>
+            <div>
+              <div class="focus-label">长期状态</div>
+              <div class="focus-status-value ${toneFromTrend(asset.long_trend)}">${escapeHtml(asset.long_trend || "--")}</div>
+            </div>
+          </div>
+        </button>`;
+    }
+    function renderPlainFocusCard(asset) {
+      return `
+        <button class="focus-card ${toneFromStatus(asset.overall_status)}" data-open="${asset.symbol}" data-open-type="${asset.asset_type}">
+          <div><span class="asset-name">${escapeHtml(asset.name)}</span><span class="asset-symbol">${escapeHtml(asset.symbol)} · ${escapeHtml(asset.asset_type)}</span></div>
+          <div style="margin-top:10px"><span class="badge ${toneFromStatus(asset.overall_status)}">${escapeHtml(asset.overall_status)}</span></div>
+          <div class="tag-list" style="margin-top:10px">${focusSignals(asset).map(tag => `<span class="badge ${tagTone(tag)}">${escapeHtml(tag)}</span>`).join("")}</div>
+        </button>`;
+    }
+    function renderFocus() {
+      const focused = assets.filter(shouldFocusAsset);
+      document.querySelector("#focus-grid").innerHTML = focused.length
+        ? focused.map(asset => asset.asset_type === "指数" ? renderIndexFocusCard(asset) : renderStockFocusCard(asset)).join("")
+        : `<div class="section-note">当前没有需要优先关注的信号。</div>`;
+      document.querySelectorAll("[data-open]").forEach(button => button.addEventListener("click", () => openDetail(button.dataset.open, button.dataset.openType)));
+    }
+    function renderAssetRows(assetType) {
+      return visibleAssets(assetType).map(asset => {
+        const indexCells = assetType === "指数" ? `
+          <td class="number">${displayNumber(asset.pe)}</td>
+          <td class="number">${displayPercent(asset.pe_percentile)}</td>
+          <td><span class="badge ${toneFromValuation(asset.valuation_status)}">${escapeHtml(asset.valuation_status || "--")}</span></td>` : "";
+        const common = `
+          <td><span class="asset-name">${escapeHtml(asset.name)}</span><span class="asset-symbol">${escapeHtml(asset.symbol)}</span></td>
+          <td>${escapeHtml(asset.date || "--")}</td>
+          <td class="number">${displayNumber(asset.close)}</td>
+          <td class="number">${returnCell(asset.daily_return)}</td>
+          ${indexCells}
+          ${assetType === "股票" ? `<td class="number">${displayPercent(asset.dividend_yield)}</td>` : ""}
+          <td><span class="badge ${toneFromTrend(asset.short_trend)}">${escapeHtml(asset.short_trend || "--")}</span></td>
+          <td><span class="badge ${toneFromTrend(asset.mid_trend)}">${escapeHtml(asset.mid_trend || "--")}</span></td>
+          <td><span class="badge ${toneFromTrend(asset.long_trend)}">${escapeHtml(asset.long_trend || "--")}</span></td>
+          <td><span class="badge ${toneFromStatus(asset.overall_status)}">${escapeHtml(asset.overall_status || "--")}</span></td>
+          <td class="number">${returnCell(asset.return_ytd)}</td>
+          <td class="number">${returnCell(asset.return_1w)}</td>
+          <td class="number">${returnCell(asset.return_1m)}</td>
+          <td class="number">${returnCell(asset.return_1y)}</td>
+          <td class="number">${returnCell(asset.return_3y)}</td>`;
+        return `<tr tabindex="0" data-row-open="${asset.symbol}" data-asset-type="${asset.asset_type}" aria-label="查看${asset.name}详情">${common}</tr>`;
       }).join("");
     }
-
-    function renderSegments(assetType) {
-      const state = tableStates[assetType];
-      const prefix = assetType === "指数" ? "index" : "stock";
-      document.querySelector(`#${prefix}-segments`).innerHTML = filters.map(([key,label]) =>
-        `<button class="segment ${key === state.filter ? "active" : ""}" data-filter="${key}" data-filter-type="${assetType}">${label}</button>`
-      ).join("");
-      document.querySelectorAll(`[data-filter-type="${assetType}"]`).forEach(button => button.addEventListener("click", () => {
-        tableStates[assetType].filter = button.dataset.filter;
-        renderSegments(assetType);
-        renderTable(assetType);
-      }));
-    }
-    function renderTrendSegments(assetType) {
-      const state = tableStates[assetType];
-      const prefix = assetType === "指数" ? "index" : "stock";
-      document.querySelector(`#${prefix}-trend-segments`).innerHTML = trendFilters.map(([key,label]) =>
-        `<button class="segment ${key === state.trendFilter ? "active" : ""}" data-trend-filter="${key}" data-trend-filter-type="${assetType}">${label}</button>`
-      ).join("");
-      document.querySelectorAll(`[data-trend-filter-type="${assetType}"]`).forEach(button => button.addEventListener("click", () => {
-        tableStates[assetType].trendFilter = button.dataset.trendFilter;
-        renderTrendSegments(assetType);
-        renderTable(assetType);
-      }));
-    }
-
-    function renderAssetRows(assetType) {
-      return visibleAssets(assetType).map(asset => `
-        <tr tabindex="0" data-row-open="${asset.symbol}" data-asset-type="${asset.asset_type}" aria-label="查看${asset.name}详情">
-          <td><span class="asset-name">${escapeHtml(asset.name)}</span><span class="asset-symbol">${escapeHtml(asset.symbol)}</span></td>
-          <td>${escapeHtml(asset.date || "--")}</td><td class="number">${displayNumber(asset.close)}</td>
-          <td class="number ${returnTone(asset.return_day)}">${displayReturn(asset.return_day)}</td>
-          ${assetType === "股票" ? `<td class="number ${returnTone(asset.dividend_yield)}">${displayReturn(asset.dividend_yield)}</td>` : ""}
-          <td><span class="badge ${trendTone(asset)}">${escapeHtml(asset.trend)}</span></td>
-          <td><div class="tag-list">${asset.signals.filter(tag => tag !== "无新增信号").map(tag => `<span class="badge ${tagTone(tag)}">${escapeHtml(tag)}</span>`).join("")}</div></td>
-          <td><span class="badge ${tone(asset)}">${escapeHtml(asset.action)}</span></td>
-          <td class="hint-cell">${escapeHtml(asset.hint)}</td>
-          <td class="number ${returnTone(asset.return_ytd)}">${displayReturn(asset.return_ytd)}</td>
-          <td class="number ${returnTone(asset.return_6m)}">${displayReturn(asset.return_6m)}</td>
-          <td class="number ${returnTone(asset.return_1y)}">${displayReturn(asset.return_1y)}</td>
-          ${assetType === "股票" ? `<td class="number">${displayDividend(asset.last_year_dividend)}</td>` : ""}
-          ${assetType === "股票" ? `<td><button class="text-btn" type="button" data-edit-dividend="${asset.symbol}" aria-label="编辑${asset.name}上一年度分红">编辑</button></td>` : ""}
-        </tr>`).join("");
-    }
-
-    function bindRows(assetType) {
+    function renderTable(assetType) {
+      const body = document.querySelector(assetType === "指数" ? "#index-table-body" : "#stock-table-body");
+      body.innerHTML = renderAssetRows(assetType) || `<tr><td colspan="${assetType === "指数" ? 16 : 14}">没有匹配结果</td></tr>`;
       document.querySelectorAll(`[data-asset-type="${assetType}"][data-row-open]`).forEach(row => {
         row.addEventListener("click", () => openDetail(row.dataset.rowOpen, row.dataset.assetType));
         row.addEventListener("keydown", event => {
@@ -946,63 +946,242 @@
         });
       });
     }
-
-    function renderTable(assetType) {
-      const body = document.querySelector(assetType === "指数" ? "#index-table-body" : "#stock-table-body");
-      const rows = renderAssetRows(assetType);
-      body.innerHTML = rows || `<tr><td colspan="${assetType === "股票" ? 15 : 12}">没有匹配结果</td></tr>`;
-      updateSortHeaders(assetType);
-      requestAnimationFrame(refreshFloatingHeader);
-      bindRows(assetType);
-      if (assetType === "股票") bindDividendButtons();
+    function isFiniteNumber(value) {
+      return typeof value === "number" && Number.isFinite(value);
     }
-
-    function bindDividendButtons() {
-      document.querySelectorAll("[data-edit-dividend]").forEach(button => {
-        button.addEventListener("click", event => {
-          event.stopPropagation();
-          openDividendEditor(button.dataset.editDividend);
+    function rowsForChart(asset, relatedHistory) {
+      const rows = relatedHistory
+        .filter(row => row.asset_type === asset.asset_type && row.symbol === asset.symbol && row.date)
+        .map(row => ({ ...row, dateObj: new Date(row.date) }))
+        .filter(row => !Number.isNaN(row.dateObj.getTime()))
+        .sort((left, right) => left.dateObj - right.dateObj);
+      if (!rows.length) return [];
+      const latest = rows[rows.length - 1].dateObj;
+      const start = new Date(latest);
+      start.setMonth(start.getMonth() - chartState.rangeMonths);
+      return rows.filter(row => row.dateObj >= start);
+    }
+    function trendColor(value) {
+      const text = String(value || "");
+      if (text.includes("上升") || text.includes("强势")) return "#0b8f61";
+      if (text.includes("修复") || text.includes("震荡")) return "#1769aa";
+      if (text.includes("转弱") || text.includes("下跌")) return "#c21f32";
+      return "#94a3b8";
+    }
+    function trendLabel(key) {
+      return trendSeries.find(([trendKey]) => trendKey === key)?.[1] || key;
+    }
+    function slopeKeyForMa(maKey) {
+      return { MA20: "ma20_slope_5d", MA60: "ma60_slope_10d", MA120: "ma120_slope_20d", MA200: "ma200_slope_40d" }[maKey];
+    }
+    function priceTooltip(row, enabledSeries, trendKeys) {
+      const lines = [`日期：${row.date}`, `收盘价：${displayNumber(row.close)}`];
+      enabledSeries.forEach(([key, label]) => {
+        if (key === "close" || !isFiniteNumber(row[key])) return;
+        const slopeKey = slopeKeyForMa(key);
+        const slopeText = slopeKey && isFiniteNumber(row[slopeKey]) ? `，斜率：${displayPercent(row[slopeKey])}` : "";
+        lines.push(`${label}：${displayNumber(row[key])}${slopeText}`);
+      });
+      trendKeys.forEach(key => lines.push(`${trendLabel(key)}：${row[key] || "--"}`));
+      return escapeHtml(lines.join("\n"));
+    }
+    function peTooltip(row) {
+      return escapeHtml([
+        `日期：${row.date}`,
+        `PE：${displayNumber(row.pe)}`,
+        `PE百分位：${displayPercent(row.pe_percentile)}`,
+        `估值状态：${valuationStatusFromPercent(row.pe_percentile)}`,
+      ].join("\n"));
+    }
+    function bindChartTooltip(container) {
+      let tooltip = container.querySelector(".chart-tooltip");
+      if (!tooltip) {
+        tooltip = document.createElement("div");
+        tooltip.className = "chart-tooltip";
+        container.appendChild(tooltip);
+      }
+      const moveTooltip = event => {
+        const source = event.target?.closest?.("[data-tooltip]");
+        const text = source?.dataset?.tooltip;
+        if (!text) return;
+        const bounds = container.getBoundingClientRect();
+        tooltip.textContent = text;
+        tooltip.style.display = "block";
+        const tooltipWidth = tooltip.offsetWidth || 240;
+        const tooltipHeight = tooltip.offsetHeight || 80;
+        let left = event.clientX - bounds.left + 12;
+        let top = event.clientY - bounds.top + 12;
+        if (left + tooltipWidth > bounds.width - 8) left = event.clientX - bounds.left - tooltipWidth - 12;
+        if (top + tooltipHeight > bounds.height - 8) top = event.clientY - bounds.top - tooltipHeight - 12;
+        tooltip.style.left = `${Math.max(8, left)}px`;
+        tooltip.style.top = `${Math.max(8, top)}px`;
+      };
+      container.querySelectorAll("[data-tooltip]").forEach(point => {
+        point.addEventListener("mouseenter", moveTooltip);
+        point.addEventListener("mousemove", moveTooltip);
+        point.addEventListener("mouseleave", () => {
+          tooltip.style.display = "none";
         });
       });
     }
-
-    function openDividendEditor(symbol) {
-      const asset = assets.find(item => item.symbol === symbol && item.asset_type === "股票");
-      if (!asset) return;
-      editingDividendSymbol = symbol;
-      document.querySelector("#dividend-modal-symbol").textContent = `${asset.name} · ${asset.symbol} · 收盘 ${displayNumber(asset.close)}`;
-      document.querySelector("#dividend-input").value = displayDividend(asset.last_year_dividend) === "--" ? "" : displayDividend(asset.last_year_dividend);
-      document.querySelector("#dividend-error").textContent = "";
-      document.querySelector("#dividend-modal").showModal();
-      document.querySelector("#dividend-input").focus();
+    function chartX(index, count, left, width) {
+      return count <= 1 ? left : left + (index / (count - 1)) * width;
     }
-
-    function closeDividendEditor() {
-      document.querySelector("#dividend-modal").close();
-      editingDividendSymbol = "";
+    function linePath(rows, key, xScale, yScale) {
+      let path = "";
+      rows.forEach((row, index) => {
+        if (!isFiniteNumber(row[key])) return;
+        const command = path ? "L" : "M";
+        path += `${command}${xScale(index).toFixed(1)},${yScale(row[key]).toFixed(1)} `;
+      });
+      return path.trim();
     }
-
-    function saveDividendValue(rawValue) {
-      const asset = assets.find(item => item.symbol === editingDividendSymbol && item.asset_type === "股票");
-      if (!asset) return;
-      const value = parseDividendInput(rawValue);
-      const overrides = loadDividendOverrides();
-      if (value === null) {
-        overrides[asset.symbol] = null;
-        asset.last_year_dividend = null;
-      } else {
-        overrides[asset.symbol] = value;
-        asset.last_year_dividend = value;
+    function renderChartControls(asset, relatedHistory) {
+      document.querySelector("#chart-range-controls").innerHTML = rangeOptions.map(([months, label]) =>
+        `<button class="chart-chip ${chartState.rangeMonths === months ? "active" : ""}" data-chart-range="${months}">${label}</button>`
+      ).join("");
+      document.querySelector("#chart-ma-controls").innerHTML = maSeries.map(([key, label, color]) =>
+        `<label class="chart-chip"><input type="checkbox" data-chart-ma="${key}" ${chartState.ma[key] ? "checked" : ""}><span style="color:${color}">${label}</span></label>`
+      ).join("");
+      document.querySelector("#chart-trend-controls").innerHTML = trendSeries.map(([key, label]) =>
+        `<label class="chart-chip"><input type="checkbox" data-chart-trend="${key}" ${chartState.trends[key] ? "checked" : ""}>${label}</label>`
+      ).join("");
+      document.querySelectorAll("[data-chart-range]").forEach(button => button.addEventListener("click", () => {
+        chartState.rangeMonths = Number(button.dataset.chartRange);
+        renderIndexCharts(asset, relatedHistory);
+      }));
+      document.querySelectorAll("[data-chart-ma]").forEach(input => input.addEventListener("change", () => {
+        chartState.ma[input.dataset.chartMa] = input.checked;
+        renderIndexCharts(asset, relatedHistory);
+      }));
+      document.querySelectorAll("[data-chart-trend]").forEach(input => input.addEventListener("change", () => {
+        chartState.trends[input.dataset.chartTrend] = input.checked;
+        renderIndexCharts(asset, relatedHistory);
+      }));
+    }
+    function renderPriceChart(rows) {
+      const container = document.querySelector("#price-trend-chart");
+      if (rows.length < 2) {
+        container.innerHTML = `<div class="chart-empty">当前时间范围内暂无足够历史行情。</div>`;
+        document.querySelector("#price-chart-legend").innerHTML = "";
+        return;
       }
-      saveDividendOverrides(overrides);
-      asset.dividend_yield = calculateDividendYield(asset);
-      renderTable("股票");
-      if (document.querySelector("#detail-modal").open && detailSequence[currentDetailIndex]?.symbol === asset.symbol) {
-        renderDetail();
+      const width = 1000, height = 320, left = 52, right = 18, top = 28, bottom = 34;
+      const plotWidth = width - left - right, plotHeight = height - top - bottom;
+      const enabledSeries = [["close", "收盘", "#c21f32"], ...maSeries.filter(([key]) => chartState.ma[key])];
+      const values = [];
+      rows.forEach(row => enabledSeries.forEach(([key]) => { if (isFiniteNumber(row[key])) values.push(row[key]); }));
+      if (!values.length) {
+        container.innerHTML = `<div class="chart-empty">当前时间范围内暂无可绘制的收盘或均线数据。</div>`;
+        document.querySelector("#price-chart-legend").innerHTML = "";
+        return;
       }
-      closeDividendEditor();
+      const min = Math.min(...values), max = Math.max(...values), gap = Math.max(max - min, 1);
+      const yMin = min - gap * 0.08, yMax = max + gap * 0.08;
+      const xScale = index => chartX(index, rows.length, left, plotWidth);
+      const yScale = value => top + (yMax - value) / (yMax - yMin) * plotHeight;
+      const gridValues = [0, 0.25, 0.5, 0.75, 1].map(ratio => yMin + (yMax - yMin) * ratio);
+      const trendKeys = Object.keys(chartState.trends).filter(key => chartState.trends[key]);
+      const trendLaneHeight = 10;
+      const trendRects = trendKeys.map((key, laneIndex) => rows.map((row, index) => {
+        const x = xScale(index);
+        const nextX = index < rows.length - 1 ? xScale(index + 1) : x + 1;
+        const rectWidth = Math.max(nextX - x + 1.5, 2);
+        return `<rect x="${(x - 0.75).toFixed(1)}" y="${(6 + laneIndex * 13).toFixed(1)}" width="${rectWidth.toFixed(1)}" height="${trendLaneHeight}" fill="${trendColor(row[key])}" opacity="0.76"><title>${row.date} ${trendLabel(key)}：${row[key] || "--"}</title></rect>`;
+      }).join("")).join("");
+      const paths = enabledSeries.map(([key, label, color]) => {
+        const path = linePath(rows, key, xScale, yScale);
+        return path ? `<path d="${path}" fill="none" stroke="${color}" stroke-width="${key === "close" ? 2.3 : 1.6}" stroke-linejoin="round" stroke-linecap="round"/>` : "";
+      }).join("");
+      const hoverBandWidth = Math.max(plotWidth / Math.max(rows.length - 1, 1), 8);
+      const hoverPoints = rows.map((row, index) => isFiniteNumber(row.close)
+        ? `<g class="chart-hover-point" data-tooltip="${priceTooltip(row, enabledSeries, trendKeys)}">
+            <rect x="${(xScale(index) - hoverBandWidth / 2).toFixed(1)}" y="0" width="${hoverBandWidth.toFixed(1)}" height="${height}" fill="transparent" pointer-events="all"/>
+          </g>`
+        : ""
+      ).join("");
+      const firstDate = rows[0].date.slice(0, 10), lastDate = rows[rows.length - 1].date.slice(0, 10);
+      container.innerHTML = `
+        <svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="指数收盘价与均线趋势图">
+          <rect x="0" y="0" width="${width}" height="${height}" fill="#fff"/>
+          ${trendRects}
+          ${gridValues.map(value => `<line x1="${left}" x2="${width - right}" y1="${yScale(value).toFixed(1)}" y2="${yScale(value).toFixed(1)}" stroke="#edf1f4"/><text x="8" y="${(yScale(value) + 4).toFixed(1)}" fill="#687684" font-size="11">${value.toFixed(0)}</text>`).join("")}
+          <line x1="${left}" x2="${width - right}" y1="${height - bottom}" y2="${height - bottom}" stroke="#c8d1d9"/>
+          ${paths}
+          ${hoverPoints}
+          <text x="${left}" y="${height - 10}" fill="#687684" font-size="11">${firstDate}</text>
+          <text x="${width - right - 70}" y="${height - 10}" fill="#687684" font-size="11">${lastDate}</text>
+        </svg>`;
+      bindChartTooltip(container);
+      const trendLegend = trendKeys.map(key => {
+        const label = trendLabel(key);
+        return `<span class="legend-item"><span class="legend-line" style="background:#94a3b8"></span>${label}状态带</span>`;
+      }).join("");
+      const trendResultLegend = trendKeys.length ? [
+        ["#0b8f61", "上升/强势"],
+        ["#1769aa", "修复/震荡"],
+        ["#c21f32", "转弱/下跌"],
+      ].map(([color, label]) => `<span class="legend-item" style="color:${color}"><span class="legend-line"></span>${label}</span>`).join("") : "";
+      document.querySelector("#price-chart-legend").innerHTML = enabledSeries.map(([, label, color]) =>
+        `<span class="legend-item" style="color:${color}"><span class="legend-line"></span>${label}</span>`
+      ).join("") + trendLegend + trendResultLegend;
     }
-
+    function renderPeChart(rows) {
+      const container = document.querySelector("#pe-percentile-chart");
+      const peRows = rows.filter(row => isFiniteNumber(row.pe_percentile));
+      if (peRows.length < 2) {
+        container.innerHTML = `<div class="chart-empty">当前指数暂无足够 PE 百分位历史数据。</div>`;
+        return;
+      }
+      const width = 1000, height = 210, left = 52, right = 18, top = 18, bottom = 30;
+      const plotWidth = width - left - right, plotHeight = height - top - bottom;
+      const xScale = index => chartX(index, peRows.length, left, plotWidth);
+      const yScale = value => top + (100 - value) / 100 * plotHeight;
+      const zones = [
+        [90, 100, "#fbeaec"],
+        [70, 90, "#fff2d9"],
+        [35, 70, "#edf1f4"],
+        [15, 35, "#ecfdf3"],
+        [0, 15, "#d7f5df"],
+      ];
+      const peSegments = peRows.slice(1).map((row, index) => {
+        const prev = peRows[index];
+        if (!isFiniteNumber(prev.pe_percentile) || !isFiniteNumber(row.pe_percentile)) return "";
+        return `<line x1="${xScale(index).toFixed(1)}" y1="${yScale(prev.pe_percentile).toFixed(1)}" x2="${xScale(index + 1).toFixed(1)}" y2="${yScale(row.pe_percentile).toFixed(1)}" stroke="${valuationColorFromPercent(row.pe_percentile)}" stroke-width="2.2" stroke-linecap="round"/>`;
+      }).join("");
+      const peHoverBandWidth = Math.max(plotWidth / Math.max(peRows.length - 1, 1), 8);
+      const peHoverPoints = peRows.map((row, index) => isFiniteNumber(row.pe_percentile)
+        ? `<g class="chart-hover-point" data-tooltip="${peTooltip(row)}">
+            <rect x="${(xScale(index) - peHoverBandWidth / 2).toFixed(1)}" y="0" width="${peHoverBandWidth.toFixed(1)}" height="${height}" fill="transparent" pointer-events="all"/>
+          </g>`
+        : ""
+      ).join("");
+      container.innerHTML = `
+        <svg class="chart-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="PE百分位趋势图">
+          <rect x="0" y="0" width="${width}" height="${height}" fill="#fff"/>
+          ${zones.map(([from, to, color]) => `<rect x="${left}" y="${yScale(to).toFixed(1)}" width="${plotWidth}" height="${(yScale(from) - yScale(to)).toFixed(1)}" fill="${color}" opacity="0.76"/>`).join("")}
+          ${[0, 15, 35, 70, 90, 100].map(value => `<line x1="${left}" x2="${width - right}" y1="${yScale(value).toFixed(1)}" y2="${yScale(value).toFixed(1)}" stroke="#dce3e8"/><text x="14" y="${(yScale(value) + 4).toFixed(1)}" fill="#687684" font-size="11">${value}%</text>`).join("")}
+          ${peSegments}
+          ${peHoverPoints}
+          <text x="${left}" y="${height - 9}" fill="#687684" font-size="11">${peRows[0].date.slice(0, 10)}</text>
+          <text x="${width - right - 70}" y="${height - 9}" fill="#687684" font-size="11">${peRows[peRows.length - 1].date.slice(0, 10)}</text>
+        </svg>`;
+      bindChartTooltip(container);
+    }
+    function renderIndexCharts(asset, relatedHistory) {
+      renderChartControls(asset, relatedHistory);
+      document.querySelector("#chart-panel-title").textContent = `${asset.asset_type}趋势`;
+      const showPeChart = asset.asset_type === "指数";
+      document.querySelector("#pe-chart-row").hidden = !showPeChart;
+      document.querySelector("#pe-percentile-chart").hidden = !showPeChart;
+      const peLatest = document.querySelector("#pe-chart-latest");
+      if (peLatest) {
+        peLatest.textContent = `PE ${displayNumber(asset.pe)} · PE百分位 ${displayPercent(asset.pe_percentile)}`;
+      }
+      const rows = rowsForChart(asset, relatedHistory);
+      renderPriceChart(rows);
+      if (showPeChart) renderPeChart(rows);
+    }
     function openDetail(symbol, assetType = "") {
       const orderedAssets = assetType ? visibleAssets(assetType) : assets;
       const requestedIndex = orderedAssets.findIndex(x => x.symbol === symbol);
@@ -1011,53 +1190,125 @@
       renderDetail();
       document.querySelector("#detail-modal").showModal();
     }
-
     function renderDetail() {
       const asset = detailSequence[currentDetailIndex];
       if (!asset) return;
       document.querySelector("#modal-title").textContent = asset.name;
-      document.querySelector("#modal-symbol").textContent = `${asset.symbol} · ${asset.date || "--"}`;
+      document.querySelector("#modal-close-summary").textContent = `收盘 ${displayNumber(asset.close)}`;
+      document.querySelector("#modal-symbol").textContent = `${asset.symbol} · ${asset.asset_type} · ${asset.date || "--"}`;
       document.querySelector("#modal-position").textContent = `${currentDetailIndex + 1} / ${detailSequence.length}`;
       document.querySelector("#previous-asset").disabled = currentDetailIndex <= 0;
       document.querySelector("#next-asset").disabled = currentDetailIndex >= detailSequence.length - 1;
-      document.querySelector("#modal-decision").innerHTML =
-        `<div style="margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-          <span><span class="badge ${trendTone(asset)}">${escapeHtml(asset.trend)}</span> <span class="badge ${tone(asset)}">${escapeHtml(asset.action)}</span></span>
-          ${asset.asset_type === "股票" ? `<button class="text-btn" type="button" data-detail-edit-dividend="${asset.symbol}">编辑分红</button>` : ""}
-        </div>${escapeHtml(asset.hint)}`;
-      const detailDividendButton = document.querySelector("[data-detail-edit-dividend]");
-      if (detailDividendButton) {
-        detailDividendButton.addEventListener("click", () => openDividendEditor(detailDividendButton.dataset.detailEditDividend));
-      }
-      const relativeMA200 = hasMetrics(asset) ? `${((asset.close / asset.MA200 - 1) * 100).toFixed(2)}%` : "--";
-      const metrics = [["收盘价",asset.close]];
+      const metrics = asset.asset_type === "指数"
+        ? [
+          ["综合状态", asset.overall_status, "status"],
+          ["短期趋势", asset.short_trend, "trend"],
+          ["中期趋势", asset.mid_trend, "trend"],
+          ["长期趋势", asset.long_trend, "trend"],
+          ["PE百分位", asset.pe_percentile, "percent"],
+          ["估值状态", asset.valuation_status, "valuation"],
+          ["百分位区间", asset.pe_percentile_period],
+        ]
+        : [
+          ["综合状态", asset.overall_status, "status"],
+          ["短期趋势", asset.short_trend, "trend"],
+          ["中期趋势", asset.mid_trend, "trend"],
+          ["长期趋势", asset.long_trend, "trend"],
+        ];
       if (asset.asset_type === "股票") {
-        metrics.push(["上一年每股分红", asset.last_year_dividend, "dividend"], ["股息率", asset.dividend_yield, "return"]);
+        metrics.push(["上一年每股分红", asset.last_year_dividend], ["股息率", asset.dividend_yield, "percent"]);
       }
-      metrics.push(["当日涨跌幅",asset.return_day,"return"],["今年涨跌幅",asset.return_ytd,"return"],["近6个月涨跌幅",asset.return_6m,"return"],["近1年涨跌幅",asset.return_1y,"return"],["MA20",asset.MA20],["MA50",asset.MA50],["MA60",asset.MA60],["MA120",asset.MA120],["MA200",asset.MA200],["相对MA200",relativeMA200],["信号",asset.signals.join("、")]);
-      document.querySelector("#detail-grid").innerHTML = metrics.map(([label,value,type]) =>
-        `<div class="detail-item"><div class="detail-label">${escapeHtml(label)}</div><div class="detail-value ${type === "return" ? returnTone(value) : ""}">${type === "return" ? displayReturn(value) : (type === "dividend" ? displayDividend(value) : (typeof value === "number" ? displayNumber(value) : escapeHtml(value)))}</div></div>`
-      ).join("");
-      if (!hasMetrics(asset)) {
-        document.querySelector("#ma-scale").innerHTML = `<div style="padding:18px;color:var(--muted)">暂无完整均线数据</div>`;
-        return;
-      }
-      const points = [["MA200",asset.MA200],["MA120",asset.MA120],["MA60",asset.MA60],["MA50",asset.MA50],["MA20",asset.MA20],["收盘",asset.close]];
-      const values = points.map(x => x[1]), min = Math.min(...values), max = Math.max(...values), gap = Math.max(max - min, 1);
-      document.querySelector("#ma-scale").innerHTML = `<div class="ma-axis"></div>` + points.map(([label,value], index) => {
-        const left = 4 + ((value - min) / gap) * 92;
-        const top = label === "收盘" ? 105 : (index % 2 === 0 ? 48 : 4);
-        return `<div class="ma-point ${label === "收盘" ? "close" : ""}" style="left:${left}%;top:${top}px"><div class="ma-dot"></div><div class="ma-caption">${label}<br>${value.toFixed(2)}</div></div>`;
+      document.querySelector("#detail-grid").innerHTML = metrics.map(([label, value, type]) => {
+        let displayValue = type === "percent" ? displayPercent(value) : (typeof value === "number" ? displayNumber(value) : escapeHtml(value || "--"));
+        if (type === "status") displayValue = `<span class="badge ${toneFromStatus(value)}">${escapeHtml(value || "--")}</span>`;
+        if (type === "trend") displayValue = `<span class="badge ${toneFromTrend(value)}">${escapeHtml(value || "--")}</span>`;
+        if (type === "valuation") displayValue = `<span class="badge ${toneFromValuation(value)}">${escapeHtml(value || "--")}</span>`;
+        return `<div class="detail-item"><div class="detail-label">${escapeHtml(label)}</div><div class="detail-value">${displayValue}</div></div>`;
       }).join("");
+      const relatedHistory = historyRows.filter(row => row.symbol === asset.symbol);
+      document.querySelector("#history-note").textContent = relatedHistory.length ? `已加载 ${relatedHistory.length} 条历史行情。` : "历史数据暂未加载。";
+      document.querySelector("#index-chart-panel").hidden = false;
+      renderIndexCharts(asset, relatedHistory);
     }
-
     function moveDetail(step) {
       const nextIndex = currentDetailIndex + step;
       if (nextIndex < 0 || nextIndex >= detailSequence.length) return;
       currentDetailIndex = nextIndex;
       renderDetail();
     }
+    function renderDashboard() {
+      document.querySelector("#asset-count").textContent = `${assets.length} 个资产 · ${assets.filter(x => x.asset_type === "指数").length}指数 / ${assets.filter(x => x.asset_type === "股票").length}股票`;
+      renderKpis();
+      renderFocus();
+      renderSegments("指数");
+      renderSegments("股票");
+      renderTable("指数");
+      renderTable("股票");
+    }
+    async function loadLatestData() {
+      try {
+        const response = await fetch("./dashboard_data.json", {cache: "no-store"});
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const payload = await response.json();
+        if (!Array.isArray(payload.assets) || !payload.assets.length) throw new Error("行情数据为空");
+        assets = payload.assets;
+        document.querySelector("#as-of").textContent = `更新时间：${payload.generated_at || "--"}`;
+      } catch (error) {
+        document.querySelector("#as-of").textContent = "示例数据 · 等待首次发布";
+        console.warn("未能读取 dashboard_data.json，正在展示页面内置示例。", error);
+      }
+      historyRows = [];
+      try {
+        const manifestResponse = await fetch("./history/manifest.json", {cache: "no-store"});
+        if (!manifestResponse.ok) throw new Error(`HTTP ${manifestResponse.status}`);
+        const manifest = await manifestResponse.json();
+        const files = Array.isArray(manifest.assets) ? manifest.assets.filter(item => item.path) : [];
+        const payloads = await Promise.all(files.map(async item => {
+          const response = await fetch(`./history/${encodeURIComponent(item.path)}`, {cache: "no-store"});
+          if (!response.ok) throw new Error(`${item.path} HTTP ${response.status}`);
+          return response.json();
+        }));
+        historyRows = payloads.flatMap(payload => Array.isArray(payload.history) ? payload.history : []);
+      } catch (error) {
+        try {
+          const response = await fetch("./trend_history.json", {cache: "no-store"});
+          if (response.ok) {
+            const payload = await response.json();
+            historyRows = Array.isArray(payload.history) ? payload.history : [];
+          }
+        } catch (fallbackError) {
+          historyRows = [];
+        }
+      }
+      renderDashboard();
+    }
+    function initializeAuth() {
+      if (readSessionValue(authStorageKey) === "1") {
+        document.body.classList.remove("auth-locked");
+        loadLatestData();
+        return;
+      }
+      document.body.classList.add("auth-locked");
+      setTimeout(() => document.querySelector("#auth-password").focus(), 0);
+    }
 
+    document.querySelector("#auth-form").addEventListener("submit", event => {
+      event.preventDefault();
+      const password = document.querySelector("#auth-password").value.trim();
+      if (password === accessPassword) {
+        writeSessionValue(authStorageKey, "1");
+        document.body.classList.remove("auth-locked");
+        document.querySelector("#auth-password").value = "";
+        document.querySelector("#auth-error").textContent = "";
+        loadLatestData();
+      } else {
+        document.querySelector("#auth-error").textContent = "密码不正确，请重新输入。";
+        document.querySelector("#auth-password").select();
+      }
+    });
+    document.querySelector("#auth-password").addEventListener("input", () => {
+      document.querySelector("#auth-error").textContent = "";
+    });
     document.querySelector("#index-search").addEventListener("input", event => {
       tableStates["指数"].search = event.target.value;
       renderTable("指数");
@@ -1066,9 +1317,6 @@
       tableStates["股票"].search = event.target.value;
       renderTable("股票");
     });
-    window.addEventListener("scroll", syncFloatingHeader, {passive:true});
-    window.addEventListener("resize", refreshFloatingHeader);
-    document.querySelectorAll(".table-wrap").forEach(wrap => wrap.addEventListener("scroll", syncFloatingHeader, {passive:true}));
     document.querySelectorAll("[data-sort]").forEach(button => button.addEventListener("click", () => {
       const assetType = button.closest("[data-table-type]")?.dataset.tableType;
       if (!assetType) return;
@@ -1084,67 +1332,6 @@
     document.querySelector("#close-modal").addEventListener("click", () => document.querySelector("#detail-modal").close());
     document.querySelector("#previous-asset").addEventListener("click", () => moveDetail(-1));
     document.querySelector("#next-asset").addEventListener("click", () => moveDetail(1));
-    document.querySelector("#close-dividend-modal").addEventListener("click", closeDividendEditor);
-    document.querySelector("#cancel-dividend").addEventListener("click", closeDividendEditor);
-    document.querySelector("#clear-dividend").addEventListener("click", () => {
-      document.querySelector("#dividend-input").value = "";
-      document.querySelector("#dividend-error").textContent = "";
-    });
-    document.querySelector("#dividend-input").addEventListener("input", () => {
-      document.querySelector("#dividend-error").textContent = "";
-    });
-    document.querySelector("#dividend-form").addEventListener("submit", event => {
-      event.preventDefault();
-      try {
-        saveDividendValue(document.querySelector("#dividend-input").value);
-      } catch (error) {
-        document.querySelector("#dividend-error").textContent = error.message;
-      }
-    });
-    document.querySelector("#auth-form").addEventListener("submit", event => {
-      event.preventDefault();
-      const password = document.querySelector("#auth-password").value.trim();
-      if (password === accessPassword) {
-        writeSessionValue(authStorageKey, "1");
-        unlockDashboard();
-      } else {
-        document.querySelector("#auth-error").textContent = "密码不正确，请重新输入。";
-        document.querySelector("#auth-password").select();
-      }
-    });
-    document.querySelector("#auth-password").addEventListener("input", () => {
-      document.querySelector("#auth-error").textContent = "";
-    });
-    function renderDashboard() {
-      const scopedAssets = assetsInScope();
-      document.querySelector("#asset-count").textContent = `${scopedAssets.length} 个资产 · 按操作优先级汇总`;
-      renderKpis();
-      renderFocus();
-      renderRotation();
-      renderSegments("指数");
-      renderTrendSegments("指数");
-      renderSegments("股票");
-      renderTrendSegments("股票");
-      renderTable("指数");
-      renderTable("股票");
-    }
-
-    async function loadLatestData() {
-      try {
-        const response = await fetch("./dashboard_data.json", {cache:"no-store"});
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-        const payload = await response.json();
-        if (!Array.isArray(payload.assets) || !payload.assets.length) throw new Error("行情数据为空");
-        assets = payload.assets;
-        document.querySelector("#as-of").textContent = `更新时间：${payload.generated_at || "--"}`;
-      } catch (error) {
-        document.querySelector("#as-of").textContent = "示例数据 · 等待首次发布";
-        console.warn("未能读取 dashboard_data.json，正在展示页面内置示例。", error);
-      }
-      applyDividendOverrides();
-      renderDashboard();
-    }
-
     initializeAuth();
   </script>
 </body>
