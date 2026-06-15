@@ -627,21 +627,31 @@ def format_markdown(results):
 
 def format_feishu_message(results):
     generated_at = datetime.now(MARKET_TIMEZONE).strftime("%Y-%m-%d %H:%M")
-    lines = [f"{FEISHU_KEYWORD} | 三周期趋势观察报告 | {generated_at}", ""]
+    lines = [f"{FEISHU_KEYWORD} | 趋势观察报告 | {generated_at}", ""]
+
+    def format_overall_status(value):
+        if value in {"强趋势", "健康上升"}:
+            return f"✅{value}"
+        if value == "下跌通道":
+            return f"❌{value}"
+        return value or "--"
+
     for row in results.to_dict("records"):
+        if row["asset_type"] == "股票":
+            dividend_yield = row["dividend_yield"]
+            if pd.isna(dividend_yield) or not (dividend_yield < 3 or dividend_yield > 5):
+                continue
+
         close = "--" if pd.isna(row["close"]) else f"{row['close']:.2f}"
-        lines.append(f"{row['name']} ({row['symbol']}) | {row['date'] or '--'} | 收盘 {close}")
-        lines.append(f"趋势：{row['short_trend']} / {row['mid_trend']} / {row['long_trend']} | 综合：{row['overall_status']}")
+        lines.append(f"{row['name']}（{row['symbol']}）｜{row['date'] or '--'}｜收盘 {close}")
+        lines.append(f"趋势：{row['short_trend']}｜{row['mid_trend']}｜{row['long_trend']}")
+        lines.append(f"综合：{format_overall_status(row['overall_status'])}")
         if row["asset_type"] == "指数":
             pe = "--" if pd.isna(row["pe"]) else f"{row['pe']:.2f}"
             pe_pct = "--" if pd.isna(row["pe_percentile"]) else f"{row['pe_percentile']:.2f}%"
-            period = row["pe_percentile_period"] or "--"
-            lines.append(f"估值：PE {pe} | 百分位 {pe_pct} | {row['valuation_status']} | 区间 {period}")
+            lines.append(f"估值：PE {pe}｜百分位 {pe_pct}｜{row['valuation_status'] or '--'}")
         if row["asset_type"] == "股票":
-            dividend = "--" if pd.isna(row["last_year_dividend"]) else f"{row['last_year_dividend']:.5f}".rstrip("0").rstrip(".")
-            dividend_yield = "--" if pd.isna(row["dividend_yield"]) else f"{row['dividend_yield']:.2f}%"
-            lines.append(f"股息：上一年每股分红 {dividend} | 股息率 {dividend_yield}")
-        lines.append(f"信号：{row['signal_tags'] or '--'}")
+            lines.append(f"股息率：{row['dividend_yield']:.2f}%")
         if row["error"]:
             lines.append(f"异常：{row['error']}")
         lines.append("")
