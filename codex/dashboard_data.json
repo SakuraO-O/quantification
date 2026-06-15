@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-14 17:19",
+  "generated_at": "2026-06-15 08:22",
   "assets": [
     {
       "name": "沪深300",
@@ -263,7 +263,7 @@
       "last_year_dividend": null,
       "dividend_yield": null,
       "pe": 7.85,
-      "pe_percentile": 79.49,
+      "pe_percentile": 79.53,
       "pe_percentile_period": "近10年",
       "valuation_status": "偏高",
       "error": "",
