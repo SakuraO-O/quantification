@@ -1,2 +1,2 @@
-# quantification
-trae 量化
+# 指数趋势观察
+自己写着玩罢了
