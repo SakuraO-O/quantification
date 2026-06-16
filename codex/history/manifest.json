@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-06-15 22:33",
+  "generated_at": "2026-06-16 09:45",
   "assets": [
     {
       "name": "沪深300",
       "symbol": "000300",
       "asset_type": "指数",
       "path": "000300.json",
-      "rows": 2669,
-      "start_date": "2015-06-18",
+      "rows": 2668,
+      "start_date": "2015-06-19",
       "end_date": "2026-06-15"
     },
     {
@@ -15,8 +15,8 @@
       "symbol": "000510",
       "asset_type": "指数",
       "path": "000510.json",
-      "rows": 2655,
-      "start_date": "2015-06-18",
+      "rows": 2654,
+      "start_date": "2015-06-19",
       "end_date": "2026-06-15"
     },
     {
@@ -24,8 +24,8 @@
       "symbol": "000905",
       "asset_type": "指数",
       "path": "000905.json",
-      "rows": 2669,
-      "start_date": "2015-06-18",
+      "rows": 2668,
+      "start_date": "2015-06-19",
       "end_date": "2026-06-15"
     },
     {
@@ -34,8 +34,8 @@
       "asset_type": "指数",
       "path": "sz399006.json",
       "rows": 1232,
-      "start_date": "2021-05-17",
-      "end_date": "2026-06-15"
+      "start_date": "2021-05-18",
+      "end_date": "2026-06-16"
     },
     {
       "name": "科创50",
@@ -52,16 +52,16 @@
       "asset_type": "指数",
       "path": "hkHSI.json",
       "rows": 1248,
-      "start_date": "2021-05-17",
-      "end_date": "2026-06-15"
+      "start_date": "2021-05-18",
+      "end_date": "2026-06-16"
     },
     {
       "name": "红利低波",
       "symbol": "H30269",
       "asset_type": "指数",
       "path": "H30269.json",
-      "rows": 2204,
-      "start_date": "2015-06-18",
+      "rows": 2203,
+      "start_date": "2015-06-19",
       "end_date": "2026-06-15"
     },
     {
@@ -78,8 +78,8 @@
       "symbol": "000932",
       "asset_type": "指数",
       "path": "000932.json",
-      "rows": 2669,
-      "start_date": "2015-06-18",
+      "rows": 2668,
+      "start_date": "2015-06-19",
       "end_date": "2026-06-15"
     },
     {
@@ -87,8 +87,8 @@
       "symbol": "000991",
       "asset_type": "指数",
       "path": "000991.json",
-      "rows": 2669,
-      "start_date": "2015-06-18",
+      "rows": 2668,
+      "start_date": "2015-06-19",
       "end_date": "2026-06-15"
     },
     {
@@ -96,8 +96,8 @@
       "symbol": "sh600900",
       "asset_type": "股票",
       "path": "sh600900.json",
-      "rows": 1221,
-      "start_date": "2021-05-17",
+      "rows": 640,
+      "start_date": "2023-10-24",
       "end_date": "2026-06-15"
     },
     {
@@ -106,16 +106,16 @@
       "asset_type": "股票",
       "path": "sh601919.json",
       "rows": 1232,
-      "start_date": "2021-05-17",
-      "end_date": "2026-06-15"
+      "start_date": "2021-05-18",
+      "end_date": "2026-06-16"
     },
     {
       "name": "招商银行",
       "symbol": "sh600036",
       "asset_type": "股票",
       "path": "sh600036.json",
-      "rows": 1232,
-      "start_date": "2021-05-17",
+      "rows": 640,
+      "start_date": "2023-10-24",
       "end_date": "2026-06-15"
     },
     {
@@ -124,16 +124,16 @@
       "asset_type": "股票",
       "path": "sh601088.json",
       "rows": 1222,
-      "start_date": "2021-05-17",
-      "end_date": "2026-06-15"
+      "start_date": "2021-05-18",
+      "end_date": "2026-06-16"
     },
     {
       "name": "中国海油",
       "symbol": "sh600938",
       "asset_type": "股票",
       "path": "sh600938.json",
-      "rows": 1005,
-      "start_date": "2022-04-21",
+      "rows": 640,
+      "start_date": "2023-10-24",
       "end_date": "2026-06-15"
     },
     {
@@ -142,8 +142,8 @@
       "asset_type": "股票",
       "path": "sz000333.json",
       "rows": 1232,
-      "start_date": "2021-05-17",
-      "end_date": "2026-06-15"
+      "start_date": "2021-05-18",
+      "end_date": "2026-06-16"
     },
     {
       "name": "格力电器",
@@ -151,8 +151,8 @@
       "asset_type": "股票",
       "path": "sz000651.json",
       "rows": 1232,
-      "start_date": "2021-05-17",
-      "end_date": "2026-06-15"
+      "start_date": "2021-05-18",
+      "end_date": "2026-06-16"
     },
     {
       "name": "粤高速A",
@@ -160,26 +160,26 @@
       "asset_type": "股票",
       "path": "sz000429.json",
       "rows": 1232,
-      "start_date": "2021-05-17",
-      "end_date": "2026-06-15"
+      "start_date": "2021-05-18",
+      "end_date": "2026-06-16"
     },
     {
       "name": "国电电力",
       "symbol": "sh600795",
       "asset_type": "股票",
       "path": "sh600795.json",
-      "rows": 640,
-      "start_date": "2023-10-24",
-      "end_date": "2026-06-15"
+      "rows": 1232,
+      "start_date": "2021-05-18",
+      "end_date": "2026-06-16"
     },
     {
       "name": "云铝股份",
       "symbol": "sz000807",
       "asset_type": "股票",
       "path": "sz000807.json",
-      "rows": 640,
-      "start_date": "2023-10-24",
-      "end_date": "2026-06-15"
+      "rows": 1232,
+      "start_date": "2021-05-18",
+      "end_date": "2026-06-16"
     }
   ]
 }
