@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-20 17:56",
+  "generated_at": "2026-06-20 18:22",
   "assets": [
     {
       "name": "沪深300",
@@ -168,8 +168,8 @@
       "symbol": "sh600795",
       "asset_type": "股票",
       "path": "sh600795.json",
-      "rows": 1230,
-      "start_date": "2021-05-24",
+      "rows": 640,
+      "start_date": "2023-10-27",
       "end_date": "2026-06-18"
     },
     {
@@ -177,8 +177,8 @@
       "symbol": "sz000807",
       "asset_type": "股票",
       "path": "sz000807.json",
-      "rows": 1230,
-      "start_date": "2021-05-24",
+      "rows": 640,
+      "start_date": "2023-10-27",
       "end_date": "2026-06-18"
     }
   ]
