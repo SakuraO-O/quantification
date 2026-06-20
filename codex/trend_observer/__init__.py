@@ -1,0 +1,2 @@
+"""Trend observer package."""
+
