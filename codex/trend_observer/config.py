@@ -38,16 +38,7 @@ ASSETS = [
     {"name": "国证现金流", "symbol": "980092", "market": "CN", "asset_type": "指数", "provider": "cnindex"},
     {"name": "中证消费", "symbol": "000932", "market": "CN", "asset_type": "指数", "provider": "csindex"},
     {"name": "全指医药", "symbol": "000991", "market": "CN", "asset_type": "指数", "provider": "csindex"},
-    {
-        "name": "纳斯达克100",
-        "symbol": "NDX100",
-        "market": "US",
-        "asset_type": "指数",
-        "provider": "global_index",
-        "eastmoney_symbol": "100.NDX100",
-        "nasdaq_symbol": "NDX",
-        "yahoo_symbol": "^NDX",
-    },
+    {"name": "纳斯达克100", "symbol": "NDX100", "market": "US","asset_type": "指数","provider": "global_index","eastmoney_symbol": "100.NDX100","yahoo_symbol": "^NDX"},
     {
         "name": "标普500",
         "symbol": "SPX",
