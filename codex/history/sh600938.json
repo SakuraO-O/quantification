@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-22 08:21",
+  "generated_at": "2026-06-23 08:19",
   "symbol": "sh600938",
   "history": [
     {
@@ -37296,6 +37296,43 @@
       "asset_type": "股票",
       "last_year_dividend": 1.15,
       "dividend_yield": 3.75,
+      "pe_percentile_period": ""
+    },
+    {
+      "date": "2026-06-22",
+      "open": 31.15,
+      "high": 31.16,
+      "low": 30.3,
+      "close": 30.54,
+      "volume": 607622.0,
+      "pe": null,
+      "daily_return": -0.52,
+      "return_ytd": 5.17,
+      "return_1w": -8.45,
+      "return_1m": -15.68,
+      "return_1y": 22.6,
+      "return_3y": 89.1,
+      "MA20": 33.91,
+      "MA60": 36.73,
+      "MA120": 35.52,
+      "MA200": 32.09,
+      "ma20_slope_5d": -3.93,
+      "ma60_slope_10d": -3.8,
+      "ma120_slope_20d": 2.65,
+      "ma200_slope_40d": 6.97,
+      "pe_percentile": null,
+      "short_trend": "短期转弱",
+      "mid_trend": "中期修复",
+      "long_trend": "长期转弱",
+      "overall_status": "趋势修复",
+      "valuation_status": "",
+      "signal_tags": "趋势修复, 长期转弱, 短期转弱",
+      "name": "中国海油",
+      "symbol": "sh600938",
+      "market": "CN",
+      "asset_type": "股票",
+      "last_year_dividend": 1.15,
+      "dividend_yield": 3.77,
       "pe_percentile_period": ""
     }
   ]
