@@ -38,6 +38,25 @@ ASSETS = [
     {"name": "国证现金流", "symbol": "980092", "market": "CN", "asset_type": "指数", "provider": "cnindex"},
     {"name": "中证消费", "symbol": "000932", "market": "CN", "asset_type": "指数", "provider": "csindex"},
     {"name": "全指医药", "symbol": "000991", "market": "CN", "asset_type": "指数", "provider": "csindex"},
+    {
+        "name": "纳斯达克100",
+        "symbol": "NDX100",
+        "market": "US",
+        "asset_type": "指数",
+        "provider": "global_index",
+        "eastmoney_symbol": "100.NDX100",
+        "nasdaq_symbol": "NDX",
+        "yahoo_symbol": "^NDX",
+    },
+    {
+        "name": "标普500",
+        "symbol": "SPX",
+        "market": "US",
+        "asset_type": "指数",
+        "provider": "global_index",
+        "eastmoney_symbol": "100.SPX",
+        "yahoo_symbol": "^GSPC",
+    },
     {"name": "长江电力", "symbol": "sh600900", "market": "CN", "asset_type": "股票", "provider": "tencent"},
     {"name": "中远海控", "symbol": "sh601919", "market": "CN", "asset_type": "股票", "provider": "tencent"},
     {"name": "招商银行", "symbol": "sh600036", "market": "CN", "asset_type": "股票", "provider": "tencent"},
@@ -84,4 +103,3 @@ REPORT_COLUMNS = [
     "valuation_status",
     "error",
 ]
-

@@ -2,6 +2,7 @@
 
 import time
 from datetime import datetime, timedelta
+from urllib.parse import quote
 
 import numpy as np
 import pandas as pd
@@ -37,6 +38,18 @@ def normalize_frame(rows):
         frame[column] = pd.to_numeric(frame[column], errors="coerce")
     frame = frame.dropna(subset=["date", "high", "low", "close"])
     return frame[["date", "open", "high", "low", "close", "volume", "pe"]].sort_values("date").drop_duplicates("date").reset_index(drop=True)
+
+
+def array_value(values, index):
+    if not values or index >= len(values):
+        return np.nan
+    return values[index]
+
+
+def parse_market_number(value):
+    if value in (None, "", "--"):
+        return np.nan
+    return str(value).replace(",", "").replace("$", "")
 
 
 def fetch_tencent(session, symbol):
@@ -108,6 +121,173 @@ def fetch_eastmoney_stock(session, symbol):
             }
         )
     return normalize_frame(rows)
+
+
+def fetch_eastmoney_global_index(session, symbol):
+    url = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
+    today = datetime.now(MARKET_TIMEZONE).date()
+    start = today - timedelta(days=TENCENT_LOOKBACK_DAYS)
+    params = {
+        "secid": symbol,
+        "klt": "101",
+        "fqt": "0",
+        "beg": start.strftime("%Y%m%d"),
+        "end": today.strftime("%Y%m%d"),
+        "lmt": TENCENT_LOOKBACK_ROWS,
+        "fields1": "f1,f2,f3,f4,f5,f6",
+        "fields2": "f51,f52,f53,f54,f55,f56",
+    }
+    last_error = None
+    for attempt in range(3):
+        try:
+            response = session.get(url, params=params, headers={"Referer": "https://quote.eastmoney.com/"}, timeout=HTTP_TIMEOUT)
+            response.raise_for_status()
+            payload = response.json()
+            raw_rows = (payload.get("data") or {}).get("klines") or []
+            if not raw_rows:
+                raise ValueError(f"东方财富全球指数未返回行情: {symbol}")
+            break
+        except Exception as exc:
+            last_error = exc
+            if attempt == 2:
+                raise last_error
+            time.sleep(0.8 * (attempt + 1))
+    rows = []
+    for raw in raw_rows:
+        parts = raw.split(",")
+        if len(parts) < 6:
+            continue
+        rows.append(
+            {
+                "date": parts[0],
+                "open": parts[1],
+                "close": parts[2],
+                "high": parts[3],
+                "low": parts[4],
+                "volume": parts[5],
+                "pe": np.nan,
+            }
+        )
+    return normalize_frame(rows)
+
+
+def fetch_yahoo_index(session, symbol):
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{quote(symbol, safe='')}"
+    today = datetime.now(MARKET_TIMEZONE)
+    start = today - timedelta(days=TENCENT_LOOKBACK_DAYS)
+    params = {
+        "period1": int(start.timestamp()),
+        "period2": int(today.timestamp()),
+        "interval": "1d",
+        "events": "history",
+    }
+    last_error = None
+    for attempt in range(3):
+        try:
+            response = session.get(url, params=params, headers={"Referer": "https://finance.yahoo.com/"}, timeout=HTTP_TIMEOUT)
+            response.raise_for_status()
+            payload = response.json()
+            chart = payload.get("chart") or {}
+            error = chart.get("error")
+            if error:
+                raise ValueError(f"Yahoo Finance 返回异常: {error}")
+            results = chart.get("result") or []
+            if not results:
+                raise ValueError(f"Yahoo Finance 未返回行情: {symbol}")
+            result = results[0]
+            timestamps = result.get("timestamp") or []
+            quote_data = ((result.get("indicators") or {}).get("quote") or [{}])[0]
+            if not timestamps:
+                raise ValueError(f"Yahoo Finance 未返回行情: {symbol}")
+            break
+        except Exception as exc:
+            last_error = exc
+            if attempt == 2:
+                raise last_error
+            time.sleep(0.8 * (attempt + 1))
+    rows = []
+    for index, timestamp in enumerate(timestamps):
+        rows.append(
+            {
+                "date": datetime.fromtimestamp(timestamp, MARKET_TIMEZONE).strftime("%Y-%m-%d"),
+                "open": array_value(quote_data.get("open"), index),
+                "close": array_value(quote_data.get("close"), index),
+                "high": array_value(quote_data.get("high"), index),
+                "low": array_value(quote_data.get("low"), index),
+                "volume": array_value(quote_data.get("volume"), index),
+                "pe": np.nan,
+            }
+        )
+    return normalize_frame(rows)
+
+
+def fetch_nasdaq_index(session, symbol):
+    url = f"https://api.nasdaq.com/api/quote/{symbol}/historical"
+    today = datetime.now(MARKET_TIMEZONE).date()
+    start = today - timedelta(days=TENCENT_LOOKBACK_DAYS)
+    params = {
+        "assetclass": "index",
+        "fromdate": start.isoformat(),
+        "todate": today.isoformat(),
+        "limit": TENCENT_LOOKBACK_ROWS,
+    }
+    headers = {
+        "Accept": "application/json, text/plain, */*",
+        "Origin": "https://www.nasdaq.com",
+        "Referer": f"https://www.nasdaq.com/market-activity/index/{symbol.lower()}/historical",
+    }
+    last_error = None
+    for attempt in range(3):
+        try:
+            response = session.get(url, params=params, headers=headers, timeout=HTTP_TIMEOUT)
+            response.raise_for_status()
+            payload = response.json()
+            status = payload.get("status") or {}
+            if status.get("rCode") not in (None, 200):
+                raise ValueError(f"Nasdaq 返回异常: {status}")
+            rows = (((payload.get("data") or {}).get("tradesTable") or {}).get("rows")) or []
+            if not rows:
+                raise ValueError(f"Nasdaq 未返回行情: {symbol}")
+            break
+        except Exception as exc:
+            last_error = exc
+            if attempt == 2:
+                raise last_error
+            time.sleep(0.8 * (attempt + 1))
+    return normalize_frame(
+        [
+            {
+                "date": datetime.strptime(row.get("date"), "%m/%d/%Y").strftime("%Y-%m-%d"),
+                "open": parse_market_number(row.get("open")),
+                "close": parse_market_number(row.get("close")),
+                "high": parse_market_number(row.get("high")),
+                "low": parse_market_number(row.get("low")),
+                "volume": parse_market_number(row.get("volume")),
+                "pe": np.nan,
+            }
+            for row in rows
+        ]
+    )
+
+
+def fetch_global_index(session, asset):
+    errors = []
+    candidates = [
+        ("东方财富全球指数", fetch_eastmoney_global_index, asset.get("eastmoney_symbol")),
+        ("Nasdaq", fetch_nasdaq_index, asset.get("nasdaq_symbol")),
+        ("Yahoo Finance", fetch_yahoo_index, asset.get("yahoo_symbol")),
+    ]
+    for label, fetcher, symbol in candidates:
+        if not symbol:
+            continue
+        try:
+            history = fetcher(session, symbol)
+            if len(history) >= MIN_HISTORY_ROWS:
+                return history
+            errors.append(f"{label} 仅返回 {len(history)} 个交易日")
+        except Exception as exc:
+            errors.append(f"{label}: {exc}")
+    raise ValueError(f"全球指数行情获取失败: {'; '.join(errors)}")
 
 
 def fetch_csindex(session, symbol):
@@ -192,5 +372,6 @@ def fetch_history(session, asset):
         return fetch_csindex(session, asset["symbol"])
     if provider == "cnindex":
         return fetch_cnindex(session, asset["symbol"])
+    if provider == "global_index":
+        return fetch_global_index(session, asset)
     raise ValueError(f"不支持的数据源: {provider}")
-
