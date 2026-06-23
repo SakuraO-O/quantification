@@ -250,6 +250,17 @@
       font-size: inherit;
       font-weight: inherit;
     }
+    .sort-btn.sorted { color: var(--ink); }
+    .sort-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 12px;
+      color: #93a0aa;
+      font-size: 11px;
+      line-height: 1;
+    }
+    .sort-btn.sorted .sort-icon { color: var(--blue); }
     td { font-size: 13px; }
     tbody tr { cursor: pointer; transition: background 120ms ease; }
     tbody tr:hover { background: #f0f6fa; }
@@ -499,22 +510,22 @@
           <table>
             <thead>
               <tr>
-                <th><button class="sort-btn" data-sort="name">资产 ↕</button></th>
-                <th><button class="sort-btn" data-sort="date">日期 ↕</button></th>
-                <th class="number"><button class="sort-btn" data-sort="close">收盘 ↕</button></th>
-                <th class="number"><button class="sort-btn" data-sort="daily_return">涨幅 ↕</button></th>
-                <th class="number"><button class="sort-btn" data-sort="pe">PE ↕</button></th>
-                <th class="number"><button class="sort-btn" data-sort="pe_percentile">PE百分位 ↕</button></th>
-                <th><button class="sort-btn" data-sort="valuation_status">估值状态 ↕</button></th>
-                <th><button class="sort-btn" data-sort="short_trend">短期 ↕</button></th>
-                <th><button class="sort-btn" data-sort="mid_trend">中期 ↕</button></th>
-                <th><button class="sort-btn" data-sort="long_trend">长期 ↕</button></th>
-                <th><button class="sort-btn" data-sort="overall_status">综合状态 ↕</button></th>
-                <th class="number"><button class="sort-btn" data-sort="return_ytd">今年 ↕</button></th>
-                <th class="number"><button class="sort-btn" data-sort="return_1w">近1周 ↕</button></th>
-                <th class="number"><button class="sort-btn" data-sort="return_1m">近1月 ↕</button></th>
-                <th class="number"><button class="sort-btn" data-sort="return_1y">近1年 ↕</button></th>
-                <th class="number"><button class="sort-btn" data-sort="return_3y">近3年 ↕</button></th>
+                <th><button class="sort-btn" data-sort="name">资产 ⇅</button></th>
+                <th><button class="sort-btn" data-sort="date">日期 ⇅</button></th>
+                <th class="number"><button class="sort-btn" data-sort="close">收盘 ⇅</button></th>
+                <th class="number"><button class="sort-btn" data-sort="daily_return">涨幅 ⇅</button></th>
+                <th class="number"><button class="sort-btn" data-sort="pe">PE ⇅</button></th>
+                <th class="number"><button class="sort-btn" data-sort="pe_percentile">PE百分位 ⇅</button></th>
+                <th><button class="sort-btn" data-sort="valuation_status">估值状态 ⇅</button></th>
+                <th><button class="sort-btn" data-sort="short_trend">短期 ⇅</button></th>
+                <th><button class="sort-btn" data-sort="mid_trend">中期 ⇅</button></th>
+                <th><button class="sort-btn" data-sort="long_trend">长期 ⇅</button></th>
+                <th><button class="sort-btn" data-sort="overall_status">综合状态 ⇅</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_ytd">今年 ⇅</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_1w">近1周 ⇅</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_1m">近1月 ⇅</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_1y">近1年 ⇅</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_3y">近3年 ⇅</button></th>
               </tr>
             </thead>
             <tbody id="index-table-body"></tbody>
@@ -537,20 +548,20 @@
           <table>
             <thead>
               <tr>
-                <th><button class="sort-btn" data-sort="name">资产 ↕</button></th>
-                <th><button class="sort-btn" data-sort="date">日期 ↕</button></th>
-                <th class="number"><button class="sort-btn" data-sort="close">收盘 ↕</button></th>
-                <th class="number"><button class="sort-btn" data-sort="daily_return">涨幅 ↕</button></th>
-                <th class="number"><button class="sort-btn" data-sort="dividend_yield">股息率 ↕</button></th>
-                <th><button class="sort-btn" data-sort="short_trend">短期 ↕</button></th>
-                <th><button class="sort-btn" data-sort="mid_trend">中期 ↕</button></th>
-                <th><button class="sort-btn" data-sort="long_trend">长期 ↕</button></th>
-                <th><button class="sort-btn" data-sort="overall_status">综合状态 ↕</button></th>
-                <th class="number"><button class="sort-btn" data-sort="return_ytd">今年 ↕</button></th>
-                <th class="number"><button class="sort-btn" data-sort="return_1w">近1周 ↕</button></th>
-                <th class="number"><button class="sort-btn" data-sort="return_1m">近1月 ↕</button></th>
-                <th class="number"><button class="sort-btn" data-sort="return_1y">近1年 ↕</button></th>
-                <th class="number"><button class="sort-btn" data-sort="return_3y">近3年 ↕</button></th>
+                <th><button class="sort-btn" data-sort="name">资产 ⇅</button></th>
+                <th><button class="sort-btn" data-sort="date">日期 ⇅</button></th>
+                <th class="number"><button class="sort-btn" data-sort="close">收盘 ⇅</button></th>
+                <th class="number"><button class="sort-btn" data-sort="daily_return">涨幅 ⇅</button></th>
+                <th class="number"><button class="sort-btn" data-sort="dividend_yield">股息率 ⇅</button></th>
+                <th><button class="sort-btn" data-sort="short_trend">短期 ⇅</button></th>
+                <th><button class="sort-btn" data-sort="mid_trend">中期 ⇅</button></th>
+                <th><button class="sort-btn" data-sort="long_trend">长期 ⇅</button></th>
+                <th><button class="sort-btn" data-sort="overall_status">综合状态 ⇅</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_ytd">今年 ⇅</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_1w">近1周 ⇅</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_1m">近1月 ⇅</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_1y">近1年 ⇅</button></th>
+                <th class="number"><button class="sort-btn" data-sort="return_3y">近3年 ⇅</button></th>
               </tr>
             </thead>
             <tbody id="stock-table-body"></tbody>
@@ -604,7 +615,11 @@
       {name:"沪深300",symbol:"000300",asset_type:"指数",date:"--",close:null,short_trend:"数据不足",mid_trend:"数据不足",long_trend:"数据不足",overall_status:"数据不足",signals:["等待首次发布"],valuation_status:"估值数据缺失"}
     ];
     let assets = fallbackAssets;
-    let historyRows = [];
+    const historyManifest = new Map();
+    const historyCache = new Map();
+    const historyRequests = new Map();
+    let historyManifestPromise = null;
+    let fallbackHistoryPromise = null;
     const accessPassword = "流水不争先";
     const authStorageKey = "trend_observer_authenticated";
     const memoryStorage = {};
@@ -745,6 +760,25 @@
       if (filter === "fall") return asset.overall_status === "下跌通道";
       if (filter === "missing") return asset.valuation_status === "估值数据缺失";
       return true;
+    }
+    function normalizeSortLabel(button) {
+      if (!button.dataset.sortLabel) {
+        button.dataset.sortLabel = button.textContent.replace(/[↕⇅▲▼]/g, "").trim();
+      }
+      return button.dataset.sortLabel;
+    }
+    function updateSortIndicators(assetType) {
+      const state = tableStates[assetType];
+      document.querySelectorAll(`[data-table-type="${assetType}"] [data-sort]`).forEach(button => {
+        const label = normalizeSortLabel(button);
+        const isSorted = state.sortKey === button.dataset.sort;
+        const icon = isSorted ? (state.sortDirection === "asc" ? "▲" : "▼") : "⇅";
+        const directionText = isSorted ? (state.sortDirection === "asc" ? "正序" : "倒序") : "未排序";
+        button.classList.toggle("sorted", isSorted);
+        button.innerHTML = `${escapeHtml(label)} <span class="sort-icon" aria-hidden="true">${icon}</span>`;
+        button.title = `${label}：${directionText}`;
+        button.setAttribute("aria-label", `${label}：${directionText}，点击切换排序`);
+      });
     }
     function visibleAssets(assetType) {
       const state = tableStates[assetType];
@@ -936,6 +970,7 @@
     function renderTable(assetType) {
       const body = document.querySelector(assetType === "指数" ? "#index-table-body" : "#stock-table-body");
       body.innerHTML = renderAssetRows(assetType) || `<tr><td colspan="${assetType === "指数" ? 16 : 14}">没有匹配结果</td></tr>`;
+      updateSortIndicators(assetType);
       document.querySelectorAll(`[data-asset-type="${assetType}"][data-row-open]`).forEach(row => {
         row.addEventListener("click", () => openDetail(row.dataset.rowOpen, row.dataset.assetType));
         row.addEventListener("keydown", event => {
@@ -1182,6 +1217,90 @@
       renderPriceChart(rows);
       if (showPeChart) renderPeChart(rows);
     }
+    function renderHistoryPlaceholder(asset, message) {
+      document.querySelector("#index-chart-panel").hidden = false;
+      document.querySelector("#chart-panel-title").textContent = `${asset.asset_type}趋势`;
+      const showPeChart = asset.asset_type === "指数";
+      document.querySelector("#pe-chart-row").hidden = !showPeChart;
+      document.querySelector("#pe-percentile-chart").hidden = !showPeChart;
+      document.querySelector("#pe-chart-latest").textContent = showPeChart
+        ? `PE ${displayNumber(asset.pe)} · PE百分位 ${displayPercent(asset.pe_percentile)}`
+        : "";
+      document.querySelector("#price-trend-chart").innerHTML = `<div class="chart-empty">${escapeHtml(message)}</div>`;
+      document.querySelector("#price-chart-legend").innerHTML = "";
+      document.querySelector("#pe-percentile-chart").innerHTML = showPeChart ? `<div class="chart-empty">${escapeHtml(message)}</div>` : "";
+    }
+    async function loadHistoryManifest() {
+      if (historyManifestPromise) return historyManifestPromise;
+      historyManifestPromise = fetch("./history/manifest.json", {cache: "no-store"})
+        .then(response => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          return response.json();
+        })
+        .then(manifest => {
+          const files = Array.isArray(manifest.assets) ? manifest.assets.filter(item => item.symbol && item.path) : [];
+          files.forEach(item => historyManifest.set(item.symbol, item.path));
+          return historyManifest;
+        })
+        .catch(error => {
+          console.warn("未能读取 history/manifest.json，详情页将尝试备用历史文件。", error);
+          return historyManifest;
+        });
+      return historyManifestPromise;
+    }
+    async function loadFallbackHistory(asset) {
+      if (!fallbackHistoryPromise) {
+        fallbackHistoryPromise = fetch("./trend_history.json", {cache: "no-store"})
+          .then(response => {
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return response.json();
+          })
+          .then(payload => Array.isArray(payload.history) ? payload.history : []);
+      }
+      const rows = await fallbackHistoryPromise;
+      return rows.filter(row => row.symbol === asset.symbol && row.asset_type === asset.asset_type);
+    }
+    async function loadAssetHistory(asset) {
+      const cacheKey = `${asset.asset_type}:${asset.symbol}`;
+      if (historyCache.has(cacheKey)) return historyCache.get(cacheKey);
+      if (historyRequests.has(cacheKey)) return historyRequests.get(cacheKey);
+      const request = (async () => {
+        await loadHistoryManifest();
+        const path = historyManifest.get(asset.symbol);
+        let rows = [];
+        if (path) {
+          const response = await fetch(`./history/${encodeURIComponent(path)}`, {cache: "no-store"});
+          if (!response.ok) throw new Error(`${path} HTTP ${response.status}`);
+          const payload = await response.json();
+          rows = Array.isArray(payload.history) ? payload.history : [];
+        } else {
+          rows = await loadFallbackHistory(asset);
+        }
+        const scopedRows = rows.filter(row => row.symbol === asset.symbol && row.asset_type === asset.asset_type);
+        historyCache.set(cacheKey, scopedRows);
+        return scopedRows;
+      })().finally(() => {
+        historyRequests.delete(cacheKey);
+      });
+      historyRequests.set(cacheKey, request);
+      return request;
+    }
+    function loadAndRenderAssetHistory(asset) {
+      loadAssetHistory(asset)
+        .then(relatedHistory => {
+          const currentAsset = detailSequence[currentDetailIndex];
+          if (!currentAsset || currentAsset.symbol !== asset.symbol || currentAsset.asset_type !== asset.asset_type) return;
+          document.querySelector("#history-note").textContent = relatedHistory.length ? `已加载 ${relatedHistory.length} 条历史行情。` : "历史数据暂未加载。";
+          renderIndexCharts(currentAsset, relatedHistory);
+        })
+        .catch(error => {
+          const currentAsset = detailSequence[currentDetailIndex];
+          if (!currentAsset || currentAsset.symbol !== asset.symbol || currentAsset.asset_type !== asset.asset_type) return;
+          console.warn(`未能读取 ${asset.name} 历史行情。`, error);
+          document.querySelector("#history-note").textContent = "历史数据暂未加载。";
+          renderHistoryPlaceholder(currentAsset, "历史数据暂未加载。");
+        });
+    }
     function openDetail(symbol, assetType = "") {
       const orderedAssets = assetType ? visibleAssets(assetType) : assets;
       const requestedIndex = orderedAssets.findIndex(x => x.symbol === symbol);
@@ -1225,10 +1344,16 @@
         if (type === "valuation") displayValue = `<span class="badge ${toneFromValuation(value)}">${escapeHtml(value || "--")}</span>`;
         return `<div class="detail-item"><div class="detail-label">${escapeHtml(label)}</div><div class="detail-value">${displayValue}</div></div>`;
       }).join("");
-      const relatedHistory = historyRows.filter(row => row.symbol === asset.symbol);
-      document.querySelector("#history-note").textContent = relatedHistory.length ? `已加载 ${relatedHistory.length} 条历史行情。` : "历史数据暂未加载。";
-      document.querySelector("#index-chart-panel").hidden = false;
-      renderIndexCharts(asset, relatedHistory);
+      const cacheKey = `${asset.asset_type}:${asset.symbol}`;
+      if (historyCache.has(cacheKey)) {
+        const relatedHistory = historyCache.get(cacheKey);
+        document.querySelector("#history-note").textContent = relatedHistory.length ? `已加载 ${relatedHistory.length} 条历史行情。` : "历史数据暂未加载。";
+        renderIndexCharts(asset, relatedHistory);
+      } else {
+        document.querySelector("#history-note").textContent = "历史数据加载中...";
+        renderHistoryPlaceholder(asset, "历史数据加载中...");
+        loadAndRenderAssetHistory(asset);
+      }
     }
     function moveDetail(step) {
       const nextIndex = currentDetailIndex + step;
@@ -1257,30 +1382,8 @@
         document.querySelector("#as-of").textContent = "示例数据 · 等待首次发布";
         console.warn("未能读取 dashboard_data.json，正在展示页面内置示例。", error);
       }
-      historyRows = [];
-      try {
-        const manifestResponse = await fetch("./history/manifest.json", {cache: "no-store"});
-        if (!manifestResponse.ok) throw new Error(`HTTP ${manifestResponse.status}`);
-        const manifest = await manifestResponse.json();
-        const files = Array.isArray(manifest.assets) ? manifest.assets.filter(item => item.path) : [];
-        const payloads = await Promise.all(files.map(async item => {
-          const response = await fetch(`./history/${encodeURIComponent(item.path)}`, {cache: "no-store"});
-          if (!response.ok) throw new Error(`${item.path} HTTP ${response.status}`);
-          return response.json();
-        }));
-        historyRows = payloads.flatMap(payload => Array.isArray(payload.history) ? payload.history : []);
-      } catch (error) {
-        try {
-          const response = await fetch("./trend_history.json", {cache: "no-store"});
-          if (response.ok) {
-            const payload = await response.json();
-            historyRows = Array.isArray(payload.history) ? payload.history : [];
-          }
-        } catch (fallbackError) {
-          historyRows = [];
-        }
-      }
       renderDashboard();
+      loadHistoryManifest();
     }
     function initializeAuth() {
       if (readSessionValue(authStorageKey) === "1") {
