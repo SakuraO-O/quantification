@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-06-27 08:19",
+  "generated_at": "2026-06-28 08:13",
   "assets": [
     {
       "name": "沪深300",
@@ -264,7 +264,7 @@
       "last_year_dividend": null,
       "dividend_yield": null,
       "pe": 7.14,
-      "pe_percentile": 63.31,
+      "pe_percentile": 63.34,
       "pe_percentile_period": "近10年",
       "valuation_status": "合理",
       "error": "",
@@ -679,7 +679,7 @@
       "return_1w": 0.71,
       "return_1m": -1.85,
       "return_1y": 9.54,
-      "return_3y": null,
+      "return_3y": 69.4,
       "MA20": 80.74,
       "MA60": 79.63,
       "MA120": 78.61,
@@ -712,11 +712,11 @@
       "date": "2026-06-26",
       "close": 37.02,
       "daily_return": -0.38,
-      "return_ytd": -6.9,
+      "return_ytd": -6.89,
       "return_1w": 0.82,
       "return_1m": -4.12,
       "return_1y": -11.58,
-      "return_3y": null,
+      "return_3y": 37.37,
       "MA20": 38.02,
       "MA60": 38.3,
       "MA120": 38.49,
@@ -754,8 +754,8 @@
       "return_ytd": 20.26,
       "return_1w": 2.88,
       "return_1m": 2.2,
-      "return_1y": 5.39,
-      "return_3y": null,
+      "return_1y": 5.36,
+      "return_3y": 103.06,
       "MA20": 13.7,
       "MA60": 13.19,
       "MA120": 12.64,
@@ -792,7 +792,7 @@
       "return_1w": -1.05,
       "return_1m": -5.44,
       "return_1y": 6.11,
-      "return_3y": null,
+      "return_3y": 28.49,
       "MA20": 4.97,
       "MA60": 4.92,
       "MA120": 4.93,
@@ -828,16 +828,16 @@
       "date": "2026-06-26",
       "close": 22.48,
       "daily_return": -4.71,
-      "return_ytd": -32.7,
+      "return_ytd": -32.69,
       "return_1w": -6.99,
-      "return_1m": -23.7,
-      "return_1y": 52.71,
-      "return_3y": null,
+      "return_1m": -23.69,
+      "return_1y": 52.72,
+      "return_3y": 98.06,
       "MA20": 26.45,
-      "MA60": 30.21,
+      "MA60": 30.2,
       "MA120": 31.0,
       "MA200": 27.57,
-      "ma20_slope_5d": -5.04,
+      "ma20_slope_5d": -5.03,
       "ma60_slope_10d": -2.19,
       "ma120_slope_20d": -0.06,
       "ma200_slope_40d": 10.16,
@@ -861,15 +861,15 @@
     }
   ],
   "history_manifest": {
-    "generated_at": "2026-06-27 08:19",
+    "generated_at": "2026-06-28 08:13",
     "assets": [
       {
         "name": "沪深300",
         "symbol": "000300",
         "asset_type": "指数",
         "path": "000300.json",
-        "rows": 2670,
-        "start_date": "2015-06-30",
+        "rows": 2669,
+        "start_date": "2015-07-01",
         "end_date": "2026-06-26"
       },
       {
@@ -877,8 +877,8 @@
         "symbol": "000510",
         "asset_type": "指数",
         "path": "000510.json",
-        "rows": 2656,
-        "start_date": "2015-06-30",
+        "rows": 2655,
+        "start_date": "2015-07-01",
         "end_date": "2026-06-26"
       },
       {
@@ -886,8 +886,8 @@
         "symbol": "000905",
         "asset_type": "指数",
         "path": "000905.json",
-        "rows": 2670,
-        "start_date": "2015-06-30",
+        "rows": 2669,
+        "start_date": "2015-07-01",
         "end_date": "2026-06-26"
       },
       {
@@ -922,8 +922,8 @@
         "symbol": "H30269",
         "asset_type": "指数",
         "path": "H30269.json",
-        "rows": 2205,
-        "start_date": "2015-06-30",
+        "rows": 2204,
+        "start_date": "2015-07-01",
         "end_date": "2026-06-26"
       },
       {
@@ -940,8 +940,8 @@
         "symbol": "000932",
         "asset_type": "指数",
         "path": "000932.json",
-        "rows": 2670,
-        "start_date": "2015-06-30",
+        "rows": 2669,
+        "start_date": "2015-07-01",
         "end_date": "2026-06-26"
       },
       {
@@ -949,8 +949,8 @@
         "symbol": "000991",
         "asset_type": "指数",
         "path": "000991.json",
-        "rows": 2670,
-        "start_date": "2015-06-30",
+        "rows": 2669,
+        "start_date": "2015-07-01",
         "end_date": "2026-06-26"
       },
       {
@@ -1021,8 +1021,8 @@
         "symbol": "sz000333",
         "asset_type": "股票",
         "path": "sz000333.json",
-        "rows": 640,
-        "start_date": "2023-11-03",
+        "rows": 1230,
+        "start_date": "2021-05-31",
         "end_date": "2026-06-26"
       },
       {
@@ -1030,8 +1030,8 @@
         "symbol": "sz000651",
         "asset_type": "股票",
         "path": "sz000651.json",
-        "rows": 640,
-        "start_date": "2023-11-03",
+        "rows": 1230,
+        "start_date": "2021-05-31",
         "end_date": "2026-06-26"
       },
       {
@@ -1039,8 +1039,8 @@
         "symbol": "sz000429",
         "asset_type": "股票",
         "path": "sz000429.json",
-        "rows": 640,
-        "start_date": "2023-11-03",
+        "rows": 1230,
+        "start_date": "2021-05-31",
         "end_date": "2026-06-26"
       },
       {
@@ -1048,8 +1048,8 @@
         "symbol": "sh600795",
         "asset_type": "股票",
         "path": "sh600795.json",
-        "rows": 640,
-        "start_date": "2023-11-03",
+        "rows": 1230,
+        "start_date": "2021-05-31",
         "end_date": "2026-06-26"
       },
       {
@@ -1057,8 +1057,8 @@
         "symbol": "sz000807",
         "asset_type": "股票",
         "path": "sz000807.json",
-        "rows": 640,
-        "start_date": "2023-11-03",
+        "rows": 1230,
+        "start_date": "2021-05-31",
         "end_date": "2026-06-26"
       }
     ]

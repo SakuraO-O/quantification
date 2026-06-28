@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-06-27 08:19",
+  "generated_at": "2026-06-28 08:13",
   "symbol": "SPX",
   "history": [
     {
@@ -47109,7 +47109,7 @@
       "high": 7392.95,
       "low": 7294.18,
       "close": 7354.02,
-      "volume": 5811616000.0,
+      "volume": 5929655552.0,
       "pe": null,
       "daily_return": -0.05,
       "return_ytd": 7.23,

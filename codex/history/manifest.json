@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-06-27 08:19",
+  "generated_at": "2026-06-28 08:13",
   "assets": [
     {
       "name": "沪深300",
       "symbol": "000300",
       "asset_type": "指数",
       "path": "000300.json",
-      "rows": 2670,
-      "start_date": "2015-06-30",
+      "rows": 2669,
+      "start_date": "2015-07-01",
       "end_date": "2026-06-26"
     },
     {
@@ -15,8 +15,8 @@
       "symbol": "000510",
       "asset_type": "指数",
       "path": "000510.json",
-      "rows": 2656,
-      "start_date": "2015-06-30",
+      "rows": 2655,
+      "start_date": "2015-07-01",
       "end_date": "2026-06-26"
     },
     {
@@ -24,8 +24,8 @@
       "symbol": "000905",
       "asset_type": "指数",
       "path": "000905.json",
-      "rows": 2670,
-      "start_date": "2015-06-30",
+      "rows": 2669,
+      "start_date": "2015-07-01",
       "end_date": "2026-06-26"
     },
     {
@@ -60,8 +60,8 @@
       "symbol": "H30269",
       "asset_type": "指数",
       "path": "H30269.json",
-      "rows": 2205,
-      "start_date": "2015-06-30",
+      "rows": 2204,
+      "start_date": "2015-07-01",
       "end_date": "2026-06-26"
     },
     {
@@ -78,8 +78,8 @@
       "symbol": "000932",
       "asset_type": "指数",
       "path": "000932.json",
-      "rows": 2670,
-      "start_date": "2015-06-30",
+      "rows": 2669,
+      "start_date": "2015-07-01",
       "end_date": "2026-06-26"
     },
     {
@@ -87,8 +87,8 @@
       "symbol": "000991",
       "asset_type": "指数",
       "path": "000991.json",
-      "rows": 2670,
-      "start_date": "2015-06-30",
+      "rows": 2669,
+      "start_date": "2015-07-01",
       "end_date": "2026-06-26"
     },
     {
@@ -159,8 +159,8 @@
       "symbol": "sz000333",
       "asset_type": "股票",
       "path": "sz000333.json",
-      "rows": 640,
-      "start_date": "2023-11-03",
+      "rows": 1230,
+      "start_date": "2021-05-31",
       "end_date": "2026-06-26"
     },
     {
@@ -168,8 +168,8 @@
       "symbol": "sz000651",
       "asset_type": "股票",
       "path": "sz000651.json",
-      "rows": 640,
-      "start_date": "2023-11-03",
+      "rows": 1230,
+      "start_date": "2021-05-31",
       "end_date": "2026-06-26"
     },
     {
@@ -177,8 +177,8 @@
       "symbol": "sz000429",
       "asset_type": "股票",
       "path": "sz000429.json",
-      "rows": 640,
-      "start_date": "2023-11-03",
+      "rows": 1230,
+      "start_date": "2021-05-31",
       "end_date": "2026-06-26"
     },
     {
@@ -186,8 +186,8 @@
       "symbol": "sh600795",
       "asset_type": "股票",
       "path": "sh600795.json",
-      "rows": 640,
-      "start_date": "2023-11-03",
+      "rows": 1230,
+      "start_date": "2021-05-31",
       "end_date": "2026-06-26"
     },
     {
@@ -195,8 +195,8 @@
       "symbol": "sz000807",
       "asset_type": "股票",
       "path": "sz000807.json",
-      "rows": 640,
-      "start_date": "2023-11-03",
+      "rows": 1230,
+      "start_date": "2021-05-31",
       "end_date": "2026-06-26"
     }
   ]
