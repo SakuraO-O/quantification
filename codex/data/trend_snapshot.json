@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-06-28 08:13",
+  "generated_at": "2026-06-29 08:18",
   "assets": [
     {
       "name": "沪深300",
@@ -264,7 +264,7 @@
       "last_year_dividend": null,
       "dividend_yield": null,
       "pe": 7.14,
-      "pe_percentile": 63.34,
+      "pe_percentile": 63.37,
       "pe_percentile_period": "近10年",
       "valuation_status": "合理",
       "error": "",
@@ -861,15 +861,15 @@
     }
   ],
   "history_manifest": {
-    "generated_at": "2026-06-28 08:13",
+    "generated_at": "2026-06-29 08:18",
     "assets": [
       {
         "name": "沪深300",
         "symbol": "000300",
         "asset_type": "指数",
         "path": "000300.json",
-        "rows": 2669,
-        "start_date": "2015-07-01",
+        "rows": 2668,
+        "start_date": "2015-07-02",
         "end_date": "2026-06-26"
       },
       {
@@ -877,8 +877,8 @@
         "symbol": "000510",
         "asset_type": "指数",
         "path": "000510.json",
-        "rows": 2655,
-        "start_date": "2015-07-01",
+        "rows": 2654,
+        "start_date": "2015-07-02",
         "end_date": "2026-06-26"
       },
       {
@@ -886,8 +886,8 @@
         "symbol": "000905",
         "asset_type": "指数",
         "path": "000905.json",
-        "rows": 2669,
-        "start_date": "2015-07-01",
+        "rows": 2668,
+        "start_date": "2015-07-02",
         "end_date": "2026-06-26"
       },
       {
@@ -922,8 +922,8 @@
         "symbol": "H30269",
         "asset_type": "指数",
         "path": "H30269.json",
-        "rows": 2204,
-        "start_date": "2015-07-01",
+        "rows": 2203,
+        "start_date": "2015-07-02",
         "end_date": "2026-06-26"
       },
       {
@@ -940,8 +940,8 @@
         "symbol": "000932",
         "asset_type": "指数",
         "path": "000932.json",
-        "rows": 2669,
-        "start_date": "2015-07-01",
+        "rows": 2668,
+        "start_date": "2015-07-02",
         "end_date": "2026-06-26"
       },
       {
@@ -949,8 +949,8 @@
         "symbol": "000991",
         "asset_type": "指数",
         "path": "000991.json",
-        "rows": 2669,
-        "start_date": "2015-07-01",
+        "rows": 2668,
+        "start_date": "2015-07-02",
         "end_date": "2026-06-26"
       },
       {
