@@ -30,7 +30,8 @@ def format_feishu_message(snapshot):
                 continue
 
         close = "--" if pd.isna(row.get("close")) else f"{row['close']:.2f}"
-        lines.append(f"{row['name']}（{row['symbol']}）｜{row.get('date') or '--'}｜收盘 {close}")
+        daily_return = "--" if pd.isna(row.get("daily_return")) else f"{row['daily_return']:+.2f}%"
+        lines.append(f"{row['name']}（{row['symbol']}）｜{row.get('date') or '--'}｜收盘 {close}｜涨幅 {daily_return}")
         lines.append(f"趋势：{row['short_trend']}｜{row['mid_trend']}｜{row['long_trend']}")
         lines.append(f"综合：{format_overall_status(row['overall_status'])}")
         if row["asset_type"] == "指数":
@@ -62,4 +63,3 @@ def post_feishu_message(snapshot):
     if result.get("code", result.get("StatusCode", 0)) != 0:
         raise RuntimeError(f"飞书通知发送失败: {result}")
     print("飞书通知已发送。")
-
