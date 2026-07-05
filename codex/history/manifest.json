@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-07-04 08:16",
+  "generated_at": "2026-07-05 08:11",
   "assets": [
     {
       "name": "沪深300",
       "symbol": "000300",
       "asset_type": "指数",
       "path": "000300.json",
-      "rows": 2670,
-      "start_date": "2015-07-07",
+      "rows": 2669,
+      "start_date": "2015-07-08",
       "end_date": "2026-07-03"
     },
     {
@@ -15,8 +15,8 @@
       "symbol": "000510",
       "asset_type": "指数",
       "path": "000510.json",
-      "rows": 2656,
-      "start_date": "2015-07-07",
+      "rows": 2655,
+      "start_date": "2015-07-08",
       "end_date": "2026-07-03"
     },
     {
@@ -24,8 +24,8 @@
       "symbol": "000905",
       "asset_type": "指数",
       "path": "000905.json",
-      "rows": 2670,
-      "start_date": "2015-07-07",
+      "rows": 2669,
+      "start_date": "2015-07-08",
       "end_date": "2026-07-03"
     },
     {
@@ -60,8 +60,8 @@
       "symbol": "H30269",
       "asset_type": "指数",
       "path": "H30269.json",
-      "rows": 2205,
-      "start_date": "2015-07-07",
+      "rows": 2204,
+      "start_date": "2015-07-08",
       "end_date": "2026-07-03"
     },
     {
@@ -78,8 +78,8 @@
       "symbol": "000932",
       "asset_type": "指数",
       "path": "000932.json",
-      "rows": 2670,
-      "start_date": "2015-07-07",
+      "rows": 2669,
+      "start_date": "2015-07-08",
       "end_date": "2026-07-03"
     },
     {
@@ -87,35 +87,17 @@
       "symbol": "000991",
       "asset_type": "指数",
       "path": "000991.json",
-      "rows": 2670,
-      "start_date": "2015-07-07",
+      "rows": 2669,
+      "start_date": "2015-07-08",
       "end_date": "2026-07-03"
-    },
-    {
-      "name": "纳斯达克100",
-      "symbol": "NDX100",
-      "asset_type": "指数",
-      "path": "NDX100.json",
-      "rows": 1274,
-      "start_date": "2021-06-07",
-      "end_date": "2026-07-02"
-    },
-    {
-      "name": "标普500",
-      "symbol": "SPX",
-      "asset_type": "指数",
-      "path": "SPX.json",
-      "rows": 1274,
-      "start_date": "2021-06-07",
-      "end_date": "2026-07-02"
     },
     {
       "name": "长江电力",
       "symbol": "sh600900",
       "asset_type": "股票",
       "path": "sh600900.json",
-      "rows": 1219,
-      "start_date": "2021-06-07",
+      "rows": 640,
+      "start_date": "2023-11-10",
       "end_date": "2026-07-03"
     },
     {
@@ -123,8 +105,8 @@
       "symbol": "sh601919",
       "asset_type": "股票",
       "path": "sh601919.json",
-      "rows": 1230,
-      "start_date": "2021-06-07",
+      "rows": 640,
+      "start_date": "2023-11-10",
       "end_date": "2026-07-03"
     },
     {
@@ -132,8 +114,8 @@
       "symbol": "sh600036",
       "asset_type": "股票",
       "path": "sh600036.json",
-      "rows": 1230,
-      "start_date": "2021-06-07",
+      "rows": 640,
+      "start_date": "2023-11-10",
       "end_date": "2026-07-03"
     },
     {
@@ -141,8 +123,8 @@
       "symbol": "sh601088",
       "asset_type": "股票",
       "path": "sh601088.json",
-      "rows": 1220,
-      "start_date": "2021-06-07",
+      "rows": 640,
+      "start_date": "2023-10-27",
       "end_date": "2026-07-03"
     },
     {
@@ -150,8 +132,8 @@
       "symbol": "sh600938",
       "asset_type": "股票",
       "path": "sh600938.json",
-      "rows": 1018,
-      "start_date": "2022-04-21",
+      "rows": 640,
+      "start_date": "2023-11-10",
       "end_date": "2026-07-03"
     },
     {
@@ -159,8 +141,8 @@
       "symbol": "sz000333",
       "asset_type": "股票",
       "path": "sz000333.json",
-      "rows": 1230,
-      "start_date": "2021-06-07",
+      "rows": 640,
+      "start_date": "2023-11-10",
       "end_date": "2026-07-03"
     },
     {
