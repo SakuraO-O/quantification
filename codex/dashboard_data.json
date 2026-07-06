@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-05 08:11",
+  "generated_at": "2026-07-06 08:15",
   "assets": [
     {
       "name": "沪深300",
@@ -263,7 +263,7 @@
       "last_year_dividend": null,
       "dividend_yield": null,
       "pe": 7.07,
-      "pe_percentile": 60.48,
+      "pe_percentile": 60.51,
       "pe_percentile_period": "近10年",
       "valuation_status": "合理",
       "error": "",
@@ -423,18 +423,18 @@
       "mid_trend": "数据不足",
       "long_trend": "数据不足",
       "overall_status": "数据不足",
-      "signal_tags": "数据不足, 全球指数行情获取失败: 东方财富全球指数: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')); Yahoo Finance: 429 Client Error: Too Many Requests for url: https://query1.finance.yahoo.com/v8/finance/chart/%5ENDX?period1=1622938293&period2=1783210293&interval=1d&events=history",
+      "signal_tags": "数据不足, 全球指数行情获取失败: 东方财富全球指数: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')); Yahoo Finance: 429 Client Error: Too Many Requests for url: https://query1.finance.yahoo.com/v8/finance/chart/%5ENDX?period1=1623024939&period2=1783296939&interval=1d&events=history",
       "last_year_dividend": null,
       "dividend_yield": null,
       "pe": null,
       "pe_percentile": null,
       "pe_percentile_period": null,
       "valuation_status": "估值数据缺失",
-      "error": "全球指数行情获取失败: 东方财富全球指数: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')); Yahoo Finance: 429 Client Error: Too Many Requests for url: https://query1.finance.yahoo.com/v8/finance/chart/%5ENDX?period1=1622938293&period2=1783210293&interval=1d&events=history",
+      "error": "全球指数行情获取失败: 东方财富全球指数: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')); Yahoo Finance: 429 Client Error: Too Many Requests for url: https://query1.finance.yahoo.com/v8/finance/chart/%5ENDX?period1=1623024939&period2=1783296939&interval=1d&events=history",
       "signals": [
         "数据不足",
         "全球指数行情获取失败: 东方财富全球指数: ('Connection aborted.'",
-        "RemoteDisconnected('Remote end closed connection without response')); Yahoo Finance: 429 Client Error: Too Many Requests for url: https://query1.finance.yahoo.com/v8/finance/chart/%5ENDX?period1=1622938293&period2=1783210293&interval=1d&events=history"
+        "RemoteDisconnected('Remote end closed connection without response')); Yahoo Finance: 429 Client Error: Too Many Requests for url: https://query1.finance.yahoo.com/v8/finance/chart/%5ENDX?period1=1623024939&period2=1783296939&interval=1d&events=history"
       ]
     },
     {
@@ -462,18 +462,18 @@
       "mid_trend": "数据不足",
       "long_trend": "数据不足",
       "overall_status": "数据不足",
-      "signal_tags": "数据不足, 全球指数行情获取失败: 东方财富全球指数: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')); Yahoo Finance: 429 Client Error: Too Many Requests for url: https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=1622938300&period2=1783210300&interval=1d&events=history",
+      "signal_tags": "数据不足, 全球指数行情获取失败: 东方财富全球指数: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')); Yahoo Finance: 429 Client Error: Too Many Requests for url: https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=1623024946&period2=1783296946&interval=1d&events=history",
       "last_year_dividend": null,
       "dividend_yield": null,
       "pe": null,
       "pe_percentile": null,
       "pe_percentile_period": null,
       "valuation_status": "估值数据缺失",
-      "error": "全球指数行情获取失败: 东方财富全球指数: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')); Yahoo Finance: 429 Client Error: Too Many Requests for url: https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=1622938300&period2=1783210300&interval=1d&events=history",
+      "error": "全球指数行情获取失败: 东方财富全球指数: ('Connection aborted.', RemoteDisconnected('Remote end closed connection without response')); Yahoo Finance: 429 Client Error: Too Many Requests for url: https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=1623024946&period2=1783296946&interval=1d&events=history",
       "signals": [
         "数据不足",
         "全球指数行情获取失败: 东方财富全球指数: ('Connection aborted.'",
-        "RemoteDisconnected('Remote end closed connection without response')); Yahoo Finance: 429 Client Error: Too Many Requests for url: https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=1622938300&period2=1783210300&interval=1d&events=history"
+        "RemoteDisconnected('Remote end closed connection without response')); Yahoo Finance: 429 Client Error: Too Many Requests for url: https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?period1=1623024946&period2=1783296946&interval=1d&events=history"
       ]
     },
     {
