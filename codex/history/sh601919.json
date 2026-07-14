@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-13 08:08",
+  "generated_at": "2026-07-14 08:03",
   "symbol": "sh601919",
   "history": [
     {
@@ -45510,6 +45510,43 @@
       "asset_type": "股票",
       "last_year_dividend": 1.0,
       "dividend_yield": 7.15,
+      "pe_percentile_period": ""
+    },
+    {
+      "date": "2026-07-13",
+      "open": 13.93,
+      "high": 14.15,
+      "low": 13.91,
+      "close": 14.12,
+      "volume": 872816.0,
+      "pe": null,
+      "daily_return": 1.0,
+      "return_ytd": -2.35,
+      "return_1w": 1.0,
+      "return_1m": 2.39,
+      "return_1y": 0.57,
+      "return_3y": 129.59,
+      "MA20": 13.65,
+      "MA60": 13.88,
+      "MA120": 14.25,
+      "MA200": 14.28,
+      "ma20_slope_5d": -0.37,
+      "ma60_slope_10d": -1.17,
+      "ma120_slope_20d": -1.2,
+      "ma200_slope_40d": -1.02,
+      "pe_percentile": null,
+      "short_trend": "短期震荡",
+      "mid_trend": "中期下跌",
+      "long_trend": "长期下跌",
+      "overall_status": "下跌通道",
+      "valuation_status": "",
+      "signal_tags": "下跌通道, 长期下跌, 中期下跌",
+      "name": "中远海控",
+      "symbol": "sh601919",
+      "market": "CN",
+      "asset_type": "股票",
+      "last_year_dividend": 1.0,
+      "dividend_yield": 7.08,
       "pe_percentile_period": ""
     }
   ]

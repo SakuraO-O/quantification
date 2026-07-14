@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-13 08:08",
+  "generated_at": "2026-07-14 08:03",
   "symbol": "sh600900",
   "history": [
     {
@@ -45103,6 +45103,43 @@
       "asset_type": "股票",
       "last_year_dividend": 1.0,
       "dividend_yield": 3.57,
+      "pe_percentile_period": ""
+    },
+    {
+      "date": "2026-07-13",
+      "open": 27.93,
+      "high": 28.48,
+      "low": 27.8,
+      "close": 28.42,
+      "volume": 2008092.0,
+      "pe": null,
+      "daily_return": 1.39,
+      "return_ytd": 4.99,
+      "return_1w": 4.52,
+      "return_1m": 1.9,
+      "return_1y": -2.94,
+      "return_3y": 41.67,
+      "MA20": 27.12,
+      "MA60": 27.14,
+      "MA120": 26.88,
+      "MA200": 27.21,
+      "ma20_slope_5d": 0.08,
+      "ma60_slope_10d": 0.46,
+      "ma120_slope_20d": -0.18,
+      "ma200_slope_40d": -0.57,
+      "pe_percentile": null,
+      "short_trend": "短期震荡",
+      "mid_trend": "中期修复",
+      "long_trend": "长期修复",
+      "overall_status": "趋势修复",
+      "valuation_status": "",
+      "signal_tags": "趋势修复",
+      "name": "长江电力",
+      "symbol": "sh600900",
+      "market": "CN",
+      "asset_type": "股票",
+      "last_year_dividend": 1.0,
+      "dividend_yield": 3.52,
       "pe_percentile_period": ""
     }
   ]

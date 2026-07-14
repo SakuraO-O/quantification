@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-07-13 08:08",
+  "generated_at": "2026-07-14 08:03",
   "symbol": "sh600036",
   "history": [
     {
@@ -45510,6 +45510,43 @@
       "asset_type": "股票",
       "last_year_dividend": 2.02,
       "dividend_yield": 5.48,
+      "pe_percentile_period": ""
+    },
+    {
+      "date": "2026-07-13",
+      "open": 36.81,
+      "high": 37.4,
+      "low": 36.71,
+      "close": 37.25,
+      "volume": 933085.0,
+      "pe": null,
+      "daily_return": 1.0,
+      "return_ytd": -7.64,
+      "return_1w": 1.42,
+      "return_1m": -1.27,
+      "return_1y": -11.73,
+      "return_3y": 49.24,
+      "MA20": 36.26,
+      "MA60": 37.01,
+      "MA120": 37.55,
+      "MA200": 38.55,
+      "ma20_slope_5d": -0.66,
+      "ma60_slope_10d": -0.97,
+      "ma120_slope_20d": -1.58,
+      "ma200_slope_40d": -2.7,
+      "pe_percentile": null,
+      "short_trend": "短期震荡",
+      "mid_trend": "中期下跌",
+      "long_trend": "长期下跌",
+      "overall_status": "下跌通道",
+      "valuation_status": "",
+      "signal_tags": "下跌通道, 长期下跌, 中期下跌",
+      "name": "招商银行",
+      "symbol": "sh600036",
+      "market": "CN",
+      "asset_type": "股票",
+      "last_year_dividend": 2.02,
+      "dividend_yield": 5.42,
       "pe_percentile_period": ""
     }
   ]
