@@ -23,6 +23,7 @@ def empty_result(asset, error):
         "mid_trend": "数据不足",
         "long_trend": "数据不足",
         "overall_status": "数据不足",
+        "investment_advice": "数据不足",
         "signal_tags": f"数据不足, {error}",
         "valuation_status": "估值数据缺失" if asset["asset_type"] == "指数" else "",
         "error": error,
@@ -59,4 +60,3 @@ def build_results(assets=None):
     results = round_output(pd.DataFrame(latest_rows)[REPORT_COLUMNS])
     history_output = pd.concat(history_frames, ignore_index=True) if history_frames else pd.DataFrame()
     return results, history_output
-

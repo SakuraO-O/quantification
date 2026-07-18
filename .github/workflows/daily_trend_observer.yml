@@ -1,9 +1,6 @@
-name: Daily Trend Observer
+name: Legacy Trend Observer Export
 
 on:
-  schedule:
-    # Run at 07:10 Asia/Shanghai (23:10 UTC), away from the top-of-hour load spike.
-    - cron: "10 23 * * *"
   workflow_dispatch:
 
 env:
@@ -12,15 +9,13 @@ env:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: legacy-export
   cancel-in-progress: false
 
 jobs:
-  observe-and-notify:
+  legacy-export:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -40,14 +35,14 @@ jobs:
       - name: Install dependencies
         run: python -m pip install -r codex/requirements.txt
 
-      - name: Generate report and send Feishu notification
-        run: python -m codex.trend_observer.cli --notify
+      - name: Generate compatibility JSON export
+        run: python -B -m codex.trend_observer.cli legacy-export
 
       - name: Commit generated market data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f codex/data/trend_snapshot.json codex/dashboard_data.json codex/history
+          git add -f codex/data/trend_snapshot.json codex/data/market_valuation_snapshot.json codex/dashboard_data.json codex/history
           if git diff --cached --quiet; then
             echo "No generated market data changes to commit."
           else
@@ -64,31 +59,6 @@ jobs:
             codex/trend_observer_report.md
             codex/trend_history.csv
             codex/data/trend_snapshot.json
+            codex/data/market_valuation_snapshot.json
             codex/history/**
           retention-days: 30
-
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Prepare dashboard site
-        run: |
-          mkdir -p codex/site
-          cp codex/dashboard_example.html codex/site/index.html
-          cp codex/dashboard_data.json codex/site/dashboard_data.json
-          cp -R codex/history codex/site/history
-
-      - name: Upload dashboard site
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: codex/site
-
-  deploy-pages:
-    needs: observe-and-notify
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy dashboard to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4

@@ -38,14 +38,15 @@ def load_dividend_config(path=DIVIDENDS_CONFIG):
     }
 
 
-def apply_dividend_config(assets, path=DIVIDENDS_CONFIG):
+def apply_dividend_config(assets, path=DIVIDENDS_CONFIG, *, allow_subset=False):
     config = load_dividend_config(path)
     stock_assets = {asset["symbol"]: asset for asset in assets if asset.get("asset_type") == "股票"}
     unknown_symbols = sorted(set(config) - set(stock_assets))
-    if unknown_symbols:
+    if unknown_symbols and not allow_subset:
         raise ValueError(f"{path.name} 包含未配置的股票代码: {', '.join(unknown_symbols)}")
     for symbol, dividend in config.items():
-        stock_assets[symbol]["last_year_dividend"] = None if pd.isna(dividend) else dividend
+        if symbol in stock_assets:
+            stock_assets[symbol]["last_year_dividend"] = None if pd.isna(dividend) else dividend
     return assets
 
 
@@ -53,4 +54,3 @@ def calculate_dividend_yield(dividend, close):
     if pd.isna(dividend) or pd.isna(close) or close <= 0:
         return np.nan
     return round(dividend / close * 100, 2)
-

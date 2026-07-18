@@ -1,0 +1,31 @@
+project_id = "quantification"
+
+[api]
+enabled = true
+schemas = ["public", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[auth]
+enabled = true
+site_url = "https://sakurao-o.github.io/quantification/"
+additional_redirect_urls = [
+  "https://sakurao-o.github.io/quantification/**",
+  "http://127.0.0.1:8766/**",
+]
+
+[auth.email]
+enable_signup = false
+enable_confirmations = true
+max_frequency = "1m"
+otp_length = 8
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[functions.dashboard-api]
+verify_jwt = false
+
+[functions.portfolio-config]
+verify_jwt = false

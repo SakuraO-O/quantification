@@ -1,0 +1,92 @@
+name: Trend Observer V2 Data Pipeline
+
+on:
+  schedule:
+    # 18:45 and 20:30 Asia/Shanghai: mainland market and valuation overlap check.
+    - cron: "45 10 * * *"
+    - cron: "30 12 * * *"
+    # 07:30 Asia/Shanghai: Hong Kong and overseas previous-market-day sync.
+    - cron: "30 23 * * *"
+    # Monday-Saturday every 10 minutes from 08:00 through 09:30 Asia/Shanghai.
+    - cron: "0,10,20,30,40,50 0 * * 1-6"
+    - cron: "0,10,20,30 1 * * 1-6"
+  workflow_dispatch:
+    inputs:
+      command:
+        description: "V2 command to run"
+        required: true
+        default: "sync-market"
+        type: choice
+        options: ["bootstrap", "sync-market", "publish-dashboard", "dispatch-feishu"]
+      market:
+        description: "Optional market for sync-market"
+        required: false
+        type: choice
+        options: ["", "CN", "HK", "US"]
+      force:
+        description: "Use overlap backfill even when the watermark is current"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: trend-observer-v2-${{ github.event.schedule || inputs.command }}
+  cancel-in-progress: false
+
+jobs:
+  pipeline:
+    # V2 is safe to add before a Supabase project exists: scheduled executions
+    # become no-ops until the two server-side secrets are configured.
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      TZ: Asia/Shanghai
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+      FEISHU_SECRET: ${{ secrets.FEISHU_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: configuration
+        name: Check V2 configuration
+        run: |
+          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_SECRET_KEY" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Supabase secrets are not configured; V2 task skipped."
+          fi
+      - uses: actions/setup-python@v5
+        if: steps.configuration.outputs.enabled == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+      - if: steps.configuration.outputs.enabled == 'true'
+        run: python -m pip install -r codex/requirements.txt
+      - name: Run planned V2 task
+        if: steps.configuration.outputs.enabled == 'true'
+        env:
+          SCHEDULE: ${{ github.event.schedule }}
+          MANUAL_COMMAND: ${{ inputs.command }}
+          MANUAL_MARKET: ${{ inputs.market }}
+          MANUAL_FORCE: ${{ inputs.force }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            args=("$MANUAL_COMMAND")
+            if [ -n "$MANUAL_MARKET" ]; then args+=(--market "$MANUAL_MARKET"); fi
+            if [ "$MANUAL_FORCE" = "true" ]; then args+=(--force); fi
+            python -B -m codex.trend_observer.cli "${args[@]}"
+          elif [ "$SCHEDULE" = "45 10 * * *" ]; then
+            python -B -m codex.trend_observer.cli sync-market --market CN
+          elif [ "$SCHEDULE" = "30 12 * * *" ]; then
+            python -B -m codex.trend_observer.cli sync-market --market CN --force
+          elif [ "$SCHEDULE" = "30 23 * * *" ]; then
+            python -B -m codex.trend_observer.cli sync-market --market HK --force
+            python -B -m codex.trend_observer.cli sync-market --market US --force
+          else
+            python -B -m codex.trend_observer.cli publish-dashboard
+            python -B -m codex.trend_observer.cli dispatch-feishu
+          fi
