@@ -8,3 +8,8 @@ dashboard_data.json
 trend_history.csv
 trend_history.json
 codex/site/
+.env
+.env.*
+!.env.example
+supabase/.temp/
+supabase/functions/.env

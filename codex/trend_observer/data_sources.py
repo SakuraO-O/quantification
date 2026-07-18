@@ -40,6 +40,11 @@ def normalize_frame(rows):
     return frame[["date", "open", "high", "low", "close", "volume", "pe"]].sort_values("date").drop_duplicates("date").reset_index(drop=True)
 
 
+def with_source(frame, provider):
+    frame.attrs["source_provider"] = provider
+    return frame
+
+
 def array_value(values, index):
     if not values or index >= len(values):
         return np.nan
@@ -52,10 +57,16 @@ def parse_market_number(value):
     return str(value).replace(",", "").replace("$", "")
 
 
-def fetch_tencent(session, symbol):
+def _start_date(start_date, default_days):
+    if start_date is None:
+        return datetime.now(MARKET_TIMEZONE).date() - timedelta(days=default_days)
+    return pd.Timestamp(start_date).date()
+
+
+def fetch_tencent(session, symbol, start_date=None):
     url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
     today = datetime.now(MARKET_TIMEZONE).date()
-    start = today - timedelta(days=TENCENT_LOOKBACK_DAYS)
+    start = _start_date(start_date, TENCENT_LOOKBACK_DAYS)
     params = {"param": f"{symbol},day,{start:%Y-%m-%d},{today:%Y-%m-%d},{TENCENT_LOOKBACK_ROWS},qfq"}
     response = session.get(url, params=params, timeout=HTTP_TIMEOUT)
     response.raise_for_status()
@@ -86,10 +97,10 @@ def eastmoney_secid(symbol):
     raise ValueError(f"东方财富暂不支持该代码: {symbol}")
 
 
-def fetch_eastmoney_stock(session, symbol):
+def fetch_eastmoney_stock(session, symbol, start_date=None):
     url = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
     today = datetime.now(MARKET_TIMEZONE).date()
-    start = today - timedelta(days=TENCENT_LOOKBACK_DAYS)
+    start = _start_date(start_date, TENCENT_LOOKBACK_DAYS)
     params = {
         "secid": eastmoney_secid(symbol),
         "klt": "101",
@@ -123,10 +134,10 @@ def fetch_eastmoney_stock(session, symbol):
     return normalize_frame(rows)
 
 
-def fetch_eastmoney_global_index(session, symbol):
+def fetch_eastmoney_global_index(session, symbol, start_date=None):
     url = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
     today = datetime.now(MARKET_TIMEZONE).date()
-    start = today - timedelta(days=TENCENT_LOOKBACK_DAYS)
+    start = _start_date(start_date, TENCENT_LOOKBACK_DAYS)
     params = {
         "secid": symbol,
         "klt": "101",
@@ -171,12 +182,12 @@ def fetch_eastmoney_global_index(session, symbol):
     return normalize_frame(rows)
 
 
-def fetch_yahoo_index(session, symbol):
+def fetch_yahoo_index(session, symbol, start_date=None):
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{quote(symbol, safe='')}"
     today = datetime.now(MARKET_TIMEZONE)
-    start = today - timedelta(days=TENCENT_LOOKBACK_DAYS)
+    start = _start_date(start_date, TENCENT_LOOKBACK_DAYS)
     params = {
-        "period1": int(start.timestamp()),
+        "period1": int(datetime.combine(start, datetime.min.time(), tzinfo=MARKET_TIMEZONE).timestamp()),
         "period2": int(today.timestamp()),
         "interval": "1d",
         "events": "history",
@@ -221,10 +232,10 @@ def fetch_yahoo_index(session, symbol):
     return normalize_frame(rows)
 
 
-def fetch_nasdaq_index(session, symbol):
+def fetch_nasdaq_index(session, symbol, start_date=None):
     url = f"https://api.nasdaq.com/api/quote/{symbol}/historical"
     today = datetime.now(MARKET_TIMEZONE).date()
-    start = today - timedelta(days=TENCENT_LOOKBACK_DAYS)
+    start = _start_date(start_date, TENCENT_LOOKBACK_DAYS)
     params = {
         "assetclass": "index",
         "fromdate": start.isoformat(),
@@ -270,30 +281,30 @@ def fetch_nasdaq_index(session, symbol):
     )
 
 
-def fetch_global_index(session, asset):
+def fetch_global_index(session, asset, start_date=None):
     errors = []
     candidates = [
-        ("东方财富全球指数", fetch_eastmoney_global_index, asset.get("eastmoney_symbol")),
-        ("Nasdaq", fetch_nasdaq_index, asset.get("nasdaq_symbol")),
-        ("Yahoo Finance", fetch_yahoo_index, asset.get("yahoo_symbol")),
+        ("东方财富全球指数", "eastmoney", fetch_eastmoney_global_index, asset.get("eastmoney_symbol")),
+        ("Nasdaq", "nasdaq", fetch_nasdaq_index, asset.get("nasdaq_symbol")),
+        ("Yahoo Finance", "yahoo", fetch_yahoo_index, asset.get("yahoo_symbol")),
     ]
-    for label, fetcher, symbol in candidates:
+    for label, provider, fetcher, symbol in candidates:
         if not symbol:
             continue
         try:
-            history = fetcher(session, symbol)
-            if len(history) >= MIN_HISTORY_ROWS:
-                return history
+            history = fetcher(session, symbol, start_date=start_date)
+            if not history.empty and (start_date is not None or len(history) >= MIN_HISTORY_ROWS):
+                return with_source(history, provider)
             errors.append(f"{label} 仅返回 {len(history)} 个交易日")
         except Exception as exc:
             errors.append(f"{label}: {exc}")
     raise ValueError(f"全球指数行情获取失败: {'; '.join(errors)}")
 
 
-def fetch_csindex(session, symbol):
+def fetch_csindex(session, symbol, start_date=None):
     url = "https://www.csindex.com.cn/csindex-home/perf/index-perf"
     today = datetime.now(MARKET_TIMEZONE).date()
-    start = today - timedelta(days=365 * 11)
+    start = _start_date(start_date, 365 * 11)
     params = {"indexCode": symbol, "startDate": start.strftime("%Y%m%d"), "endDate": today.strftime("%Y%m%d")}
     last_error = None
     for attempt in range(3):
@@ -328,7 +339,7 @@ def fetch_csindex(session, symbol):
     )
 
 
-def fetch_cnindex(session, symbol):
+def fetch_cnindex(session, symbol, start_date=None):
     url = "https://hq.cnindex.com.cn/market/market/getIndexDailyData"
     response = session.get(url, params={"indexCode": symbol}, timeout=HTTP_TIMEOUT)
     response.raise_for_status()
@@ -353,25 +364,28 @@ def fetch_cnindex(session, symbol):
                 "pe": np.nan,
             }
         )
-    return normalize_frame(rows)
+    frame = normalize_frame(rows)
+    if start_date is not None:
+        frame = frame[frame["date"] >= pd.Timestamp(start_date)].reset_index(drop=True)
+    return frame
 
 
-def fetch_history(session, asset):
+def fetch_history(session, asset, start_date=None):
     provider = asset["provider"]
     if provider == "tencent" and asset["asset_type"] == "股票":
         try:
-            history = fetch_eastmoney_stock(session, asset["symbol"])
-            if len(history) >= MIN_HISTORY_ROWS:
-                return history
+            history = fetch_eastmoney_stock(session, asset["symbol"], start_date=start_date)
+            if not history.empty and (start_date is not None or len(history) >= MIN_HISTORY_ROWS):
+                return with_source(history, "eastmoney")
         except Exception:
             pass
-        return fetch_tencent(session, asset["symbol"])
+        return with_source(fetch_tencent(session, asset["symbol"], start_date=start_date), "tencent")
     if provider == "tencent":
-        return fetch_tencent(session, asset["symbol"])
+        return with_source(fetch_tencent(session, asset["symbol"], start_date=start_date), "tencent")
     if provider == "csindex":
-        return fetch_csindex(session, asset["symbol"])
+        return with_source(fetch_csindex(session, asset["symbol"], start_date=start_date), "csindex")
     if provider == "cnindex":
-        return fetch_cnindex(session, asset["symbol"])
+        return with_source(fetch_cnindex(session, asset["symbol"], start_date=start_date), "cnindex")
     if provider == "global_index":
-        return fetch_global_index(session, asset)
+        return fetch_global_index(session, asset, start_date=start_date)
     raise ValueError(f"不支持的数据源: {provider}")

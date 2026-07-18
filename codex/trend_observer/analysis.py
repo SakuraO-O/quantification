@@ -108,6 +108,47 @@ def valuation_status(value):
     return "高估"
 
 
+def determine_index_investment_advice(row):
+    """Return the index-only action label defined by the dashboard PRD.
+
+    This deliberately ignores portfolio amounts and style strength.  Those are
+    separate layers and must not turn a trend/valuation observation into a
+    transaction instruction.
+    """
+
+    if row.get("long_trend") == "长期下跌":
+        return "暂停参与"
+    if row.get("long_trend") in {None, "", "数据不足"} or row.get("mid_trend") in {None, "", "数据不足"}:
+        return "数据不足"
+    percentile = row.get("pe_percentile")
+    if pd.notna(percentile) and percentile >= 90:
+        return "仅持有"
+    if row["long_trend"] == "长期上升" and row["mid_trend"] == "中期上升" and pd.notna(percentile) and percentile < 35:
+        return "优先新增"
+    if (
+        row["long_trend"] == "长期上升"
+        and row["mid_trend"] in {"中期上升", "中期修复"}
+        and pd.notna(percentile)
+        and 35 <= percentile < 60
+    ):
+        return "可新增"
+    if row["long_trend"] == "长期上升":
+        return "仅持有"
+    return "观察等待"
+
+
+def determine_stock_trend_advice(row):
+    if row.get("long_trend") == "长期下跌":
+        return "暂停关注"
+    if row.get("long_trend") in {None, "", "数据不足"} or row.get("mid_trend") in {None, "", "数据不足"}:
+        return "数据不足"
+    if row["long_trend"] == "长期上升" and row["mid_trend"] in {"中期上升", "中期修复"}:
+        return "可关注"
+    if row["long_trend"] == "长期上升":
+        return "仅持有"
+    return "观察等待"
+
+
 def pe_percentile_period(frame):
     pe_rows = frame.dropna(subset=["pe"])
     if len(pe_rows) < PE_MIN_PERIODS:
@@ -135,7 +176,7 @@ def build_signals(row):
 def enrich_history(frame, asset):
     data = add_indicators(frame)
     required = ["MA20", "MA60", "MA120", "MA200", "ma20_slope_5d", "ma60_slope_10d", "ma120_slope_20d", "ma200_slope_40d"]
-    for column in ["short_trend", "mid_trend", "long_trend", "overall_status", "valuation_status", "signal_tags"]:
+    for column in ["short_trend", "mid_trend", "long_trend", "overall_status", "valuation_status", "investment_advice", "signal_tags"]:
         data[column] = ""
     data["name"] = asset["name"]
     data["symbol"] = asset["symbol"]
@@ -156,9 +197,13 @@ def enrich_history(frame, asset):
         data.at[idx, "long_trend"] = determine_long_trend(row)
         data.at[idx, "overall_status"] = determine_overall_status(data.loc[idx])
         data.at[idx, "valuation_status"] = valuation_status(row["pe_percentile"]) if asset["asset_type"] == "指数" else ""
+        data.at[idx, "investment_advice"] = (
+            determine_index_investment_advice(data.loc[idx])
+            if asset["asset_type"] == "指数"
+            else determine_stock_trend_advice(data.loc[idx])
+        )
         data.at[idx, "signal_tags"] = ", ".join(build_signals(data.loc[idx]))
     data.loc[~ready, "overall_status"] = "数据预热"
     if asset["asset_type"] == "指数":
         data.loc[~ready, "valuation_status"] = data.loc[~ready, "pe_percentile"].map(valuation_status)
     return data
-

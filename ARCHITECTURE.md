@@ -1,8 +1,55 @@
 # 趋势观察台架构
 
-本文档描述当前仓库的目录结构、执行流程与模块调用关系（模块化重构后版本）。
+本文档描述 V2 数据管道与迁移期兼容输出。Supabase 已配置后，数据库是事实源；JSON、GitHub Pages 和旧工作流只用于迁移核对与回退。
 
-## 当前目录树
+## V2 目标架构
+
+```mermaid
+%%{init: {"flowchart": {"curve": "stepAfter"}}}%%
+flowchart LR
+  A["GitHub Actions 定时唤醒"] --> B["市场日历与数据水位预检"]
+  B -->|"无更新"| C["记录跳过"]
+  B -->|"新增、修订或缺口"| D["数据源适配器"]
+  D --> E["Supabase 事实表与水位"]
+  E --> F["增量趋势、估值与风格计算"]
+  F --> G["dashboard_versions"]
+  G --> H["Edge API"]
+  G --> I["周一至周六飞书晨报"]
+  H --> J["趋势看板"]
+```
+
+### V2 目录与职责
+
+```text
+supabase/
+├── migrations/20260718091938_trend_observer_core.sql  # RLS、事实表、派生表与运行状态
+└── functions/dashboard-api/index.ts                 # 需 Auth 的只读 Edge API
+codex/trend_observer/
+├── assets.py             # 12 个指数、9 只股票与来源代码映射
+├── supabase_store.py     # Supabase REST 仓储、水位、版本与通知记录
+├── ingestion.py          # 两交易日重叠的增量行情/估值同步与退避
+├── allocation.py         # 六类手工配置的比例、偏离与理论调整金额
+├── style_compass.py      # 三组 20/60/120 日收益差与方向
+├── fundamentals.py       # 高股息四维研究结论（只处理已确认事实）
+├── corporate.py          # 财报、分红与行业披露的版本化适配器契约
+├── dashboard_versions.py # 不可变看板数据版本
+└── dispatch.py           # 周一至周六 08:00 后的版本去重推送
+```
+
+### 运行命令
+
+```bash
+python -B -m codex.trend_observer.cli bootstrap
+python -B -m codex.trend_observer.cli sync-market --market CN
+python -B -m codex.trend_observer.cli publish-dashboard
+python -B -m codex.trend_observer.cli dispatch-feishu
+```
+
+`sync-market` 在没有水位时执行历史初始化；之后只请求从数据库最新日期向前重叠两个交易日的窗口。连续三次失败后水位进入退避状态。`dispatch-feishu` 不调用任何行情来源，只读取完整且尚未发送过的 `dashboard_versions`。
+
+## 迁移期 V1 兼容架构
+
+## V1 兼容目录树
 
 ```
 quantification/
@@ -51,7 +98,7 @@ quantification/
 
 ---
 
-## 执行流程
+## V1 兼容执行流程
 
 ### 本地 / CI 主流程
 
@@ -122,13 +169,14 @@ python codex/trend_observer.py --notify
 
 `codex/dashboard_example.html` 在浏览器中：
 
-1. 密码门禁（sessionStorage）
-2. `loadLatestData()` fetch `./dashboard_data.json`（截面）
-3. fetch `./history/manifest.json` → 并行加载各 `./history/{symbol}.json`（图表用）
-4. fallback：`./trend_history.json`（Pages 站点**未复制**此文件，仅本地有效）
-5. 渲染 KPI / 优先关注 / 表格 / 详情 Modal / SVG 图表
+1. `dashboard_runtime.js` 检查 Edge API 地址与 Supabase Auth access token；
+2. 已配置时读取 `dashboard-api/overview`，并校验启用资产必须为 12 个指数和 9 只股票；
+3. 打开详情弹窗或切换时间范围时，按需读取 `dashboard-api/asset/{symbol}?range=...`；
+4. 未配置、未认证或 API 暂不可用时，明确标记并使用内嵌 Mock 数据；
+5. `editor` 通过 `portfolio-config` 原子写入六类目标比例或实际金额，重新加载时 `dashboard-api` 以最新持久化配置覆盖版本快照中的旧配置；
+6. 渲染资产配置、资金风格罗盘、优先关注、指数/股票列表及详情弹窗。
 
-> 看板目前仍读 `dashboard_data.json`，**不直接读** `trend_snapshot.json`；飞书则从 snapshot 派生，保证与 snapshot 同源。
+> V2 看板不再读取旧版 `dashboard_data.json` 或 `history/`。旧 JSON 仅保留给迁移期核对与 GitHub Pages 回退流程；正式事实源为 Supabase 中的最新完整 `dashboard_version`。
 
 ---
 
@@ -250,7 +298,7 @@ flowchart TB
 
 ---
 
-## 数据流
+## V1 兼容数据流
 
 1. `data_sources.py` 从中证、国证、腾讯、东方财富抓取日线行情。
 2. `analysis.py` 计算收益率、均线、斜率、短中长期趋势、综合状态、PE 百分位和估值状态。
@@ -261,7 +309,7 @@ flowchart TB
    - `codex/history/{symbol}.json`
    - CSV 和 Markdown 报告
 5. `feishu.py` 从统一快照生成飞书消息并发送。
-6. `dashboard_example.html` 读取 `dashboard_data.json` 和 `history/` 展示看板。
+6. 旧版 Pages 回退页读取 `dashboard_data.json` 和 `history/`；V2 正式看板改走上文所述 Edge API。
 
 ---
 
@@ -276,9 +324,9 @@ flowchart TB
 
 ### 仍存在的跨层耦合
 
-- **看板仍是单文件**：`dashboard_example.html` 内嵌 CSS/JS/图表，估值阈值（`valuationStatusFromPercent`）与 Python `valuation_status()` 仍各自维护。
-- **看板 vs 飞书数据源路径不同**：看板读 `dashboard_data.json`，飞书读 snapshot；内容同源（同一次 `export_all`），但文件分离。
-- **CI 站点未部署 snapshot**：Pages 只复制 `dashboard_data.json` + `history/`，不复制 `trend_snapshot.json`。
+- **看板仍保持静态部署**：`dashboard_example.html` 承载视觉与交互，`dashboard_runtime.js` 只负责 Edge API 适配、Mock 回退和按需详情加载。
+- **看板与飞书统一版本源**：二者都读取已完成的 `dashboard_versions`；看板通过只读 Edge API，飞书通过服务端派发任务。
+- **静态站点只部署前端资源**：Pages 同时复制 HTML、配置、认证和运行时脚本；V2 正式看板不消费 snapshot、旧 JSON 或 history。
 
 ---
 
@@ -289,6 +337,6 @@ flowchart TB
 | 腾讯 | `web.ifzq.gtimg.cn` | 指数/股票 K 线（前复权） |
 | 东方财富 | `push2his.eastmoney.com` | 股票 K 线（优先） |
 | 中证指数 | `csindex.com.cn` | 指数 K 线 + PE |
-| 国证指数 | `hq.cnindex.com.cn` | 国证现金流指数 |
+| 国证指数 | `hq.cnindex.com.cn` | 国证自由现金流指数 |
 
 飞书通知依赖环境变量 `FEISHU_WEBHOOK_URL`（必填）和 `FEISHU_SECRET`（可选签名）。
