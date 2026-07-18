@@ -59,10 +59,13 @@ class DashboardV2Test(unittest.TestCase):
         self.assertIn("__trendDashboardRuntime.saveAllocation", self.html)
 
     def test_pages_bundle_contains_runtime_scripts_and_schedule_reaches_0930(self):
-        pages = (self.root / ".github/workflows/daily_trend_observer.yml").read_text(encoding="utf-8")
+        pages = (self.root / ".github/workflows/deploy_dashboard.yml").read_text(encoding="utf-8")
+        legacy = (self.root / ".github/workflows/daily_trend_observer.yml").read_text(encoding="utf-8")
         pipeline = (self.root / ".github/workflows/trend_observer_v2.yml").read_text(encoding="utf-8")
         for script in ("dashboard_config.js", "dashboard_auth.js", "dashboard_runtime.js"):
             self.assertIn(script, pages)
+        self.assertIn("branches: [main]", pages)
+        self.assertNotIn("deploy-pages", legacy)
         self.assertIn('"0,10,20,30,40,50 0 * * 1-6"', pipeline)
         self.assertIn('"0,10,20,30 1 * * 1-6"', pipeline)
 

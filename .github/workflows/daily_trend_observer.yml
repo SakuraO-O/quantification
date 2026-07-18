@@ -9,11 +9,9 @@ env:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: legacy-export
   cancel-in-progress: false
 
 jobs:
@@ -64,30 +62,3 @@ jobs:
             codex/data/market_valuation_snapshot.json
             codex/history/**
           retention-days: 30
-
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Prepare dashboard site
-        run: |
-          mkdir -p codex/site
-          cp codex/dashboard_example.html codex/site/index.html
-          cp codex/dashboard_config.js codex/dashboard_auth.js codex/dashboard_runtime.js codex/site/
-          cp codex/dashboard_data.json codex/site/dashboard_data.json
-          cp -R codex/history codex/site/history
-
-      - name: Upload dashboard site
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: codex/site
-
-  deploy-pages:
-    needs: legacy-export
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy dashboard to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
