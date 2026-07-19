@@ -17,7 +17,7 @@ on:
         required: true
         default: "sync-market"
         type: choice
-        options: ["bootstrap", "sync-market", "sync-valuation", "publish-dashboard", "dispatch-feishu"]
+        options: ["bootstrap", "sync-market", "sync-valuation", "sync-fundamentals", "publish-dashboard", "dispatch-feishu"]
       market:
         description: "Optional market for sync-market"
         required: false
@@ -86,6 +86,7 @@ jobs:
           elif [ "$SCHEDULE" = "30 23 * * *" ]; then
             python -B -m codex.trend_observer.cli sync-market --market HK --force
             python -B -m codex.trend_observer.cli sync-market --market US --force
+            python -B -m codex.trend_observer.cli sync-fundamentals
           else
             python -B -m codex.trend_observer.cli publish-dashboard
             python -B -m codex.trend_observer.cli dispatch-feishu
