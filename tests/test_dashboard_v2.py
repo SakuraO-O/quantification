@@ -34,6 +34,8 @@ class DashboardV2Test(unittest.TestCase):
         self.assertIn("sessionStorage.setItem(storage.access", self.auth)
         self.assertNotIn("localStorage.setItem(storage.access", self.auth)
         self.assertIn("apikey: key", self.runtime)
+        self.assertNotIn("auth-publishable", self.html)
+        self.assertNotIn("auth-key-row", self.html)
 
     def test_asset_detail_is_structured_and_bounded(self):
         self.assertIn('from("fundamental_assessments")', self.api)

@@ -3,7 +3,6 @@
 
   const config = window.TREND_DASHBOARD_CONFIG || {};
   const storage = {
-    publishable: "trend-dashboard-publishable-key",
     access: "trend-dashboard-access-token",
     refresh: "trend-dashboard-refresh-token",
     expires: "trend-dashboard-token-expires-at"
@@ -11,7 +10,7 @@
   let pendingResolve = null;
   let pendingPromise = null;
 
-  const publishableKey = () => String(config.publishableKey || localStorage.getItem(storage.publishable) || "").trim();
+  const publishableKey = () => String(config.publishableKey || "").trim();
   const validPublishableKey = key => key.startsWith("sb_publishable_") || key.startsWith("eyJ");
 
   function clearSession() {
@@ -27,7 +26,7 @@
   }
 
   async function tokenRequest(grantType, body, key = publishableKey()) {
-    if (!validPublishableKey(key)) throw new Error("请填写 Supabase Publishable Key。");
+    if (!validPublishableKey(key)) throw new Error("看板配置缺少有效的 Supabase Publishable Key。");
     const response = await fetch(`${config.supabaseUrl}/auth/v1/token?grant_type=${grantType}`, {
       method: "POST",
       headers: {"Content-Type": "application/json", apikey: key},
@@ -64,9 +63,7 @@
 
   function showGate(message = "") {
     const gate = document.querySelector("#auth-gate");
-    const keyRow = document.querySelector("#auth-key-row");
     if (!gate) return;
-    keyRow.hidden = validPublishableKey(publishableKey());
     gate.hidden = false;
     document.body.classList.add("auth-locked");
     setError(message);
@@ -112,17 +109,11 @@
     const submit = document.querySelector("#auth-submit");
     const email = document.querySelector("#auth-email").value.trim();
     const password = document.querySelector("#auth-password").value;
-    const enteredKey = document.querySelector("#auth-publishable").value.trim();
-    const key = enteredKey || publishableKey();
     setError("");
     submit.disabled = true;
     submit.textContent = "登录中…";
     try {
-      if (enteredKey) {
-        if (!validPublishableKey(enteredKey)) throw new Error("Publishable Key 格式不正确。");
-        localStorage.setItem(storage.publishable, enteredKey);
-      }
-      const payload = await tokenRequest("password", {email, password}, key);
+      const payload = await tokenRequest("password", {email, password});
       saveSession(payload);
       document.querySelector("#auth-password").value = "";
       hideGate();
