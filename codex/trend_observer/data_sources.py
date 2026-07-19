@@ -2,6 +2,7 @@
 
 import time
 from datetime import datetime, timedelta
+from io import StringIO
 from urllib.parse import quote
 
 import numpy as np
@@ -232,6 +233,42 @@ def fetch_yahoo_index(session, symbol, start_date=None):
     return normalize_frame(rows)
 
 
+def fetch_fred_close_series(session, series_id, start_date=None):
+    """Fetch a public daily close series from FRED as a resilient last-resort source.
+
+    FRED's SP500 series contains closing prices rather than OHLCV.  For trend
+    calculations a close is sufficient, so the close is mirrored into the OHLC
+    fields and the record remains explicitly labelled as ``fred`` downstream.
+    """
+    url = "https://fred.stlouisfed.org/graph/fredgraph.csv"
+    last_error = None
+    for attempt in range(3):
+        try:
+            response = session.get(url, params={"id": series_id}, timeout=HTTP_TIMEOUT)
+            response.raise_for_status()
+            raw = pd.read_csv(StringIO(response.text))
+            if "observation_date" not in raw or series_id not in raw:
+                raise ValueError(f"FRED 返回格式异常: {series_id}")
+            raw = raw.rename(columns={"observation_date": "date", series_id: "close"})
+            raw["close"] = pd.to_numeric(raw["close"], errors="coerce")
+            raw = raw.dropna(subset=["close"])
+            if start_date is not None:
+                raw = raw[pd.to_datetime(raw["date"]) >= pd.Timestamp(start_date)]
+            if raw.empty:
+                raise ValueError(f"FRED 未返回行情: {series_id}")
+            rows = [
+                {"date": row.date, "open": row.close, "high": row.close, "low": row.close,
+                 "close": row.close, "volume": np.nan, "pe": np.nan}
+                for row in raw.itertuples(index=False)
+            ]
+            return normalize_frame(rows)
+        except Exception as exc:
+            last_error = exc
+            if attempt == 2:
+                raise last_error
+            time.sleep(0.8 * (attempt + 1))
+
+
 def fetch_nasdaq_index(session, symbol, start_date=None):
     url = f"https://api.nasdaq.com/api/quote/{symbol}/historical"
     today = datetime.now(MARKET_TIMEZONE).date()
@@ -287,6 +324,7 @@ def fetch_global_index(session, asset, start_date=None):
         ("东方财富全球指数", "eastmoney", fetch_eastmoney_global_index, asset.get("eastmoney_symbol")),
         ("Nasdaq", "nasdaq", fetch_nasdaq_index, asset.get("nasdaq_symbol")),
         ("Yahoo Finance", "yahoo", fetch_yahoo_index, asset.get("yahoo_symbol")),
+        ("FRED", "fred", fetch_fred_close_series, asset.get("fred_series")),
     ]
     for label, provider, fetcher, symbol in candidates:
         if not symbol:

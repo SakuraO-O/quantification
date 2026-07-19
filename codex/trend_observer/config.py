@@ -59,6 +59,7 @@ ASSETS = [
         "provider": "global_index",
         "eastmoney_symbol": "100.SPX",
         "yahoo_symbol": "^GSPC",
+        "fred_series": "SP500",
     },
     {"name": "长江电力", "symbol": "sh600900", "market": "CN", "asset_type": "股票", "provider": "tencent", "industry_template": "utility_concession"},
     {"name": "招商银行", "symbol": "sh600036", "market": "CN", "asset_type": "股票", "provider": "tencent", "industry_template": "bank"},
