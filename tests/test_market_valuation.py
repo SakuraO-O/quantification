@@ -87,9 +87,10 @@ class MarketValuationTest(unittest.TestCase):
         self.assertEqual(result["pe"], 32.74)
         self.assertEqual(result["date"], "2026-07-02")
         self.assertEqual(result["history_start"], "2016-08-01")
-        self.assertEqual(result["history_end"], "2026-07-01")
+        self.assertEqual(result["history_end"], "2026-07-02")
         self.assertEqual(result["history_count"], 120)
-        self.assertEqual(result["percentile_10y"], 99.17)
+        self.assertEqual(result["percentile_10y"], 100.0)
+        self.assertEqual(result["history"][-1], {"date": "2026-07-02", "value": 32.74})
 
         with self.assertRaisesRegex(ValueError, "不足120个月"):
             parse_worldperatio(worldperatio_html(119))

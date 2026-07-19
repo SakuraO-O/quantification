@@ -17,7 +17,7 @@ on:
         required: true
         default: "sync-market"
         type: choice
-        options: ["bootstrap", "sync-market", "publish-dashboard", "dispatch-feishu"]
+        options: ["bootstrap", "sync-market", "sync-valuation", "publish-dashboard", "dispatch-feishu"]
       market:
         description: "Optional market for sync-market"
         required: false

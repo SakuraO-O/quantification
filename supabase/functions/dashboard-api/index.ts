@@ -34,7 +34,7 @@ Deno.serve(async (request) => {
   if (path === "/overview") {
     const { data: allocationRows, error: allocationError } = await admin
       .from("portfolio_allocations")
-      .select("allocation_type,category,data_date,value,version")
+      .select("allocation_type,category,data_date,value,version,created_at")
       .order("version", { ascending: false })
       .order("data_date", { ascending: false });
     if (allocationError) return json(request, { error: "allocation_query_failed" }, 500);
@@ -54,6 +54,8 @@ Deno.serve(async (request) => {
         const deviation = actual - target;
         return {
           category,
+          target_data_date: latest.get(`target_ratio:${category}`)?.data_date,
+          actual_data_date: latest.get(`actual_amount:${category}`)?.data_date,
           target_ratio: target,
           actual_amount: amount,
           actual_ratio: actual,
@@ -64,6 +66,8 @@ Deno.serve(async (request) => {
       });
       allocation = {
         rows,
+        updated_at: [...latest.values()].map((row) => String(row.created_at ?? "")).sort().at(-1) ?? null,
+        data_date: [...latest.values()].map((row) => String(row.data_date ?? "")).sort().at(-1) ?? null,
         summary: { total_amount: actualTotal },
         versions: {
           target_ratio: latest.get(`target_ratio:${categories[0]}`)?.version,
@@ -81,7 +85,8 @@ Deno.serve(async (request) => {
     const symbol = decodeURIComponent(path.slice("/asset/".length));
     const asset = assets.find((item) => item.symbol === symbol);
     if (!asset) return json(request, { error: "asset_not_found" }, 404);
-    const { data: security } = await admin.from("securities").select("security_id").eq("symbol", symbol).eq("is_active", true).maybeSingle();
+    const { data: security } = await admin.from("securities").select("security_id")
+      .eq("symbol", symbol).eq("market", String(asset.market ?? "")).eq("is_active", true).maybeSingle();
     if (!security) return json(request, { error: "asset_not_found" }, 404);
     const range = url.searchParams.get("range") ?? "1y";
     const months = ({ "3m": 3, "6m": 6, "1y": 12, "3y": 36, "5y": 60 } as Record<string, number>)[range] ?? 12;

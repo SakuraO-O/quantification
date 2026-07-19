@@ -27,7 +27,7 @@ from .supabase_store import SupabaseStore
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="趋势观察台数据管道。")
-    parser.add_argument("command", nargs="?", default="legacy-export", choices=("legacy-export", "bootstrap", "sync-market", "publish-dashboard", "dispatch-feishu"))
+    parser.add_argument("command", nargs="?", default="legacy-export", choices=("legacy-export", "bootstrap", "sync-market", "sync-valuation", "publish-dashboard", "dispatch-feishu"))
     parser.add_argument("--notify", action="store_true", help="仅兼容旧 JSON 流程：导出后发送飞书。")
     parser.add_argument("--market", choices=("CN", "HK", "US"), help="sync-market 时仅同步指定市场。")
     parser.add_argument("--force", action="store_true", help="忽略当日水位并进行重叠补抓。")
@@ -69,7 +69,11 @@ def run_bootstrap(store: SupabaseStore) -> None:
 def run_market_sync(store: SupabaseStore, market: str | None, force: bool, trigger: str) -> None:
     run_bootstrap(store)
     assets = [asset for asset in active_assets() if not market or asset["market"] == market]
-    results = MarketSynchronizer(store).sync_assets(assets, force=force, trigger_type=trigger)
+    synchronizer = MarketSynchronizer(store)
+    valuation_results = synchronizer.sync_valuations(assets, force=force, trigger_type=trigger)
+    for item in valuation_results:
+        print(f"估值 {item.asset}｜{item.status}｜接收 {item.rows_received} 行｜变化 {item.rows_changed} 行｜{item.message}")
+    results = synchronizer.sync_assets(assets, force=force, trigger_type=trigger)
     for item in results:
         print(f"{item.asset}｜{item.status}｜接收 {item.rows_received} 行｜变化 {item.rows_changed} 行｜{item.message}")
     if any(item.status == "failed" for item in results):
@@ -87,6 +91,11 @@ def main(argv=None):
                 run_bootstrap(store)
             elif args.command == "sync-market":
                 run_market_sync(store, args.market, args.force, args.trigger)
+            elif args.command == "sync-valuation":
+                run_bootstrap(store)
+                assets = [asset for asset in active_assets() if not args.market or asset["market"] == args.market]
+                for item in MarketSynchronizer(store).sync_valuations(assets, force=args.force, trigger_type=args.trigger):
+                    print(f"估值 {item.asset}｜{item.status}｜接收 {item.rows_received} 行｜变化 {item.rows_changed} 行｜{item.message}")
             elif args.command == "publish-dashboard":
                 version = DashboardPublisher(store).publish()
                 print(f"已发布看板版本：{version['dashboard_version_id']}")

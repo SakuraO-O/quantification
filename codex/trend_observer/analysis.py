@@ -29,7 +29,9 @@ def add_indicators(frame):
     data["ma60_slope_10d"] = data["MA60"] / data["MA60"].shift(10) - 1
     data["ma120_slope_20d"] = data["MA120"] / data["MA120"].shift(20) - 1
     data["ma200_slope_40d"] = data["MA200"] / data["MA200"].shift(40) - 1
-    if data["pe"].notna().sum() >= PE_MIN_PERIODS:
+    if "pe_percentile_override" in data:
+        data["pe_percentile"] = data["pe_percentile_override"]
+    elif data["pe"].notna().sum() >= PE_MIN_PERIODS:
         data["pe_percentile"] = data["pe"].rolling(PE_WINDOW_ROWS, min_periods=PE_MIN_PERIODS).apply(percentile_last, raw=True)
     else:
         data["pe_percentile"] = np.nan
@@ -189,6 +191,8 @@ def enrich_history(frame, asset):
         else np.nan
     )
     data["pe_percentile_period"] = pe_percentile_period(data) if asset["asset_type"] == "指数" else ""
+    if asset["asset_type"] == "指数" and "pe_percentile_period_override" in data:
+        data["pe_percentile_period"] = data["pe_percentile_period_override"].fillna(data["pe_percentile_period"])
     ready = ~data[required].isna().any(axis=1)
     for idx in data[ready].index:
         row = data.loc[idx]

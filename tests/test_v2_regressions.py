@@ -32,6 +32,7 @@ class RepairStore:
         self.incoming = incoming
         self.saved_signals = []
         self.saved_market = []
+        self.saved_valuations = []
         self.watermarks = []
 
     def calendar_is_trading_day(self, market, value): return True
@@ -46,7 +47,7 @@ class RepairStore:
                  "source": "eastmoney"} for row in self.incoming.itertuples(index=False)]
     def valuation_history(self, sid): return []
     def save_market_rows(self, rows): self.saved_market.extend(rows); return rows
-    def save_valuation_rows(self, rows): return rows
+    def save_valuation_rows(self, rows): self.saved_valuations.extend(rows); return rows
     def save_signal_rows(self, rows): self.saved_signals.extend(rows); return rows
     def save_watermark(self, row): self.watermarks.append(row)
     def add_run_item(self, *args, **kwargs): pass
@@ -106,6 +107,21 @@ class V2RegressionTest(unittest.TestCase):
         self.assertEqual(result.status, "succeeded")
         self.assertEqual(result.rows_changed, 0)
         self.assertEqual(len(store.saved_signals), 280)
+
+    def test_market_sync_never_persists_a_price_adapter_pe(self):
+        dates = pd.date_range("2025-01-01", periods=280, freq="B")
+        incoming = pd.DataFrame({
+            "date": dates, "open": range(100, 380), "high": range(101, 381), "low": range(99, 379),
+            "close": range(100, 380), "volume": range(1000, 1280), "pe": [20.0] * 280,
+        })
+        incoming.attrs["source_provider"] = "unverified-price-provider"
+        asset = next(item for item in active_assets() if item["asset_type"] == "指数")
+        store = RepairStore(asset, incoming)
+        with patch("codex.trend_observer.ingestion.make_session", return_value=nullcontext(object())), \
+             patch("codex.trend_observer.ingestion.fetch_history", return_value=incoming):
+            result = MarketSynchronizer(store).sync_asset(asset, now=datetime(2026, 7, 18, 9, 0, tzinfo=ZoneInfo("Asia/Shanghai")), force=True)
+        self.assertEqual(result.status, "succeeded")
+        self.assertEqual(store.saved_valuations, [])
 
 
 if __name__ == "__main__":
