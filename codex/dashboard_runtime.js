@@ -73,32 +73,39 @@
   function mapAsset(asset, type) {
     const fallback = (type === "index" ? indices : stocks).find(item => item.name === asset.name) || {};
     const assessment = asset.fundamental_assessment || {};
+    const delayed = asset.data_status === "delayed";
+    const blankDecimal = { toFixed: () => "—", valueOf: () => Number.NaN };
+    const currentNumber = (value, fallbackValue) => delayed ? null : numberOr(value, fallbackValue);
+    const currentText = (value, fallbackValue, unavailable = "数据延迟") => delayed ? unavailable : value || fallbackValue || "数据不足";
     return {
       ...fallback,
       name: asset.name || fallback.name || asset.symbol,
       code: asset.symbol || fallback.code,
       date: asset.trade_date || fallback.date || "—",
-      close: numberOr(asset.close, fallback.close),
-      day: returnPercent(asset.daily_return) ?? fallback.day ?? 0,
-      pe: numberOr(asset.pe, fallback.pe),
-      pep: numberOr(asset.pe_percentile, fallback.pep),
-      value: asset.valuation_status || fallback.value || "数据不足",
-      advice: asset.investment_advice || fallback.advice || "数据不足",
-      status: asset.overall_status || fallback.status || "数据不足",
-      short: asset.short_trend || fallback.short || "数据不足",
-      mid: asset.mid_trend || fallback.mid || "数据不足",
-      long: asset.long_trend || fallback.long || "数据不足",
-      ytd: returnPercent(asset.return_ytd) ?? fallback.ytd ?? 0,
-      w: returnPercent(asset.return_1w) ?? fallback.w ?? 0,
-      m: returnPercent(asset.return_1m) ?? fallback.m ?? 0,
-      y: returnPercent(asset.return_1y) ?? fallback.y ?? 0,
-      y3: returnPercent(asset.return_3y) ?? fallback.y3 ?? 0,
-      ma120: numberOr(asset.ma120, fallback.ma120),
-      ma200: numberOr(asset.ma200, fallback.ma200),
-      s120: returnPercent(asset.ma120_slope_20d) ?? fallback.s120,
-      s200: returnPercent(asset.ma200_slope_40d) ?? fallback.s200,
+      dataStatus: asset.data_status || "current",
+      dataIssue: asset.data_issue || null,
+      lastValidDate: asset.last_valid_trade_date || null,
+      close: currentNumber(asset.close, fallback.close),
+      day: delayed ? null : returnPercent(asset.daily_return) ?? fallback.day ?? 0,
+      pe: currentNumber(asset.pe, fallback.pe),
+      pep: delayed ? null : numberOr(asset.pe_percentile, fallback.pep),
+      value: currentText(asset.valuation_status, fallback.value),
+      advice: currentText(asset.investment_advice, fallback.advice, "暂不判断"),
+      status: currentText(asset.overall_status, fallback.status),
+      short: currentText(asset.short_trend, fallback.short),
+      mid: currentText(asset.mid_trend, fallback.mid),
+      long: currentText(asset.long_trend, fallback.long),
+      ytd: delayed ? null : returnPercent(asset.return_ytd) ?? fallback.ytd ?? 0,
+      w: delayed ? null : returnPercent(asset.return_1w) ?? fallback.w ?? 0,
+      m: delayed ? null : returnPercent(asset.return_1m) ?? fallback.m ?? 0,
+      y: delayed ? null : returnPercent(asset.return_1y) ?? fallback.y ?? 0,
+      y3: delayed ? null : returnPercent(asset.return_3y) ?? fallback.y3 ?? 0,
+      ma120: currentNumber(asset.ma120, fallback.ma120),
+      ma200: currentNumber(asset.ma200, fallback.ma200),
+      s120: delayed ? null : returnPercent(asset.ma120_slope_20d) ?? fallback.s120,
+      s200: delayed ? null : returnPercent(asset.ma200_slope_40d) ?? fallback.s200,
       div: numberOr(asset.last_year_dividend, fallback.div ?? 0),
-      yield: numberOr(asset.dividend_yield, fallback.yield ?? 0),
+      yield: delayed ? blankDecimal : numberOr(asset.dividend_yield, fallback.yield ?? 0),
       dividendSafety: assessment.dividend_safety_status || asset.dividend_safety_status || fallback.dividendSafety || "数据不足",
       fund: assessment.fundamental_status || asset.fundamental_status || fallback.fund || "数据不足",
       period: assessment.report_period || fallback.period || "数据不足",
@@ -145,6 +152,7 @@
       })));
     }
     runtimeState.version = payload.version || null;
+    runtimeState.completeness = payload.completeness || {};
   }
 
   function renderAll() {
@@ -161,7 +169,7 @@
     const indexWithPe = indices.filter(item => item.pep !== null && item.pep !== undefined);
     const highestPe = [...indexWithPe].sort((a,b) => b.pep - a.pep)[0];
     const lowestPe = [...indexWithPe].sort((a,b) => a.pep - b.pep)[0];
-    const highestYield = [...stocks].sort((a,b) => b.yield - a.yield)[0];
+    const highestYield = stocks.filter(item => Number.isFinite(item.yield)).sort((a,b) => b.yield - a.yield)[0];
     const dividendWatch = stocks.find(item => item.dividendSafety === "承压") || stocks.find(item => item.dividendSafety === "关注") || stocks[0];
     const candidates = [
       highestPe && {type:"index", asset:highestPe, label:"PE百分位", value:`${highestPe.pep.toFixed(2)}%`, cls:"risk"},
@@ -377,7 +385,10 @@
     try {
       const payload = await apiFetch("/overview");
       applyOverview(payload);
-      setSourceStatus("api", `Edge API · 版本 ${String(payload.version || "—").slice(0, 8)}`, payload.generated_at);
+      const issues = payload.completeness && (payload.completeness.asset_issues || payload.completeness.missing_asset_signals);
+      const issueLabels = Array.isArray(issues) ? issues.map(item => item && item.symbol).filter(Boolean) : [];
+      const suffix = issueLabels.length ? ` · ${issueLabels.join("、")} 数据延迟` : "";
+      setSourceStatus("api", `Edge API · 版本 ${String(payload.version || "—").slice(0, 8)}${suffix}`, payload.generated_at);
       renderAll();
     } catch (error) {
       if (String(error.message).includes("unauthorized")) {

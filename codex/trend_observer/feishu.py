@@ -77,7 +77,17 @@ def format_dashboard_version_message(version):
     payload = version.get("payload", version)
     latest_date = payload.get("latest_market_date") or "--"
     lines = [f"{FEISHU_KEYWORD} | 趋势观察晨报 | 数据截至 {latest_date}", ""]
+    issues = (version.get("completeness") or {}).get("asset_issues") or []
+    if issues:
+        labels = "、".join(
+            f"{item.get('symbol', '--')}（{item.get('reason', '数据延迟')}）"
+            for item in issues if isinstance(item, dict)
+        )
+        lines.extend([f"⚠️ 数据延迟：{labels or '部分资产'}。延迟资产的最新指标已置空，历史数据仍可查看。", ""])
     for row in _dashboard_assets(payload, "指数"):
+        if row.get("data_status") == "delayed":
+            lines.extend([f"{row['name']}（{row['symbol']}）｜最新数据延迟｜历史截至 {row.get('last_valid_trade_date') or '--'}", ""])
+            continue
         close = "--" if pd.isna(row.get("close")) else f"{float(row['close']):.2f}"
         daily_return = "--" if pd.isna(row.get("daily_return")) else f"{float(row['daily_return']) * 100:+.2f}%"
         pe = "--" if pd.isna(row.get("pe")) else f"{float(row['pe']):.2f}"
@@ -92,6 +102,9 @@ def format_dashboard_version_message(version):
             ]
         )
     for row in _dashboard_assets(payload, "股票"):
+        if row.get("data_status") == "delayed":
+            lines.append(f"{row['name']}（{row['symbol']}）｜最新数据延迟｜历史截至 {row.get('last_valid_trade_date') or '--'}")
+            continue
         dividend_yield = row.get("dividend_yield")
         if pd.isna(dividend_yield) or not (float(dividend_yield) < 3 or float(dividend_yield) > 5):
             continue

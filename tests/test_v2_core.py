@@ -9,6 +9,9 @@ import pandas as pd
 from codex.trend_observer.allocation import calculate_allocation
 from codex.trend_observer.analysis import determine_index_investment_advice
 from codex.trend_observer.assets import active_assets, provider_symbol_rows, security_rows
+from codex.trend_observer.config import ASSETS, PORTFOLIO_CATEGORIES
+from codex.trend_observer.dashboard_versions import DashboardPublisher
+from codex.trend_observer.feishu import format_dashboard_version_message
 from codex.trend_observer.fundamentals import assess_high_dividend_fundamentals
 from codex.trend_observer.dispatch import dispatch_morning_report
 from codex.trend_observer.style_compass import calculate_style_compass, style_recommendation
@@ -80,6 +83,54 @@ class V2CoreTest(unittest.TestCase):
         publisher = (root / "codex/trend_observer/dashboard_versions.py").read_text(encoding="utf-8")
         payload_block = publisher.split("payload = {", 1)[1].split("completeness =", 1)[0]
         self.assertNotIn("generated_at", payload_block)
+
+    def test_delayed_asset_publishes_dashboard_with_current_fields_blank(self):
+        class Store:
+            def __init__(self):
+                self.assets = [
+                    asset | {"security_id": f"{asset['market']}:{asset['symbol']}", "is_active": True}
+                    for asset in ASSETS
+                ]
+                self.published = None
+
+            def select(self, table, filters=None, **kwargs):
+                if table == "securities":
+                    return self.assets
+                if table == "asset_daily_signals":
+                    security_id = (filters or {})["security_id"].removeprefix("eq.")
+                    symbol = security_id.split(":", 1)[1]
+                    trade_date = "2026-07-16" if symbol == "SPX" else "2026-07-17"
+                    return [{
+                        "trade_date": trade_date, "close": 100, "daily_return": 0.01,
+                        "overall_status": "健康上升", "investment_advice": "仅持有",
+                    }]
+                if table == "portfolio_allocations":
+                    rows = []
+                    for category in PORTFOLIO_CATEGORIES:
+                        rows.append({"allocation_type": "target_ratio", "category": category, "value": 100 / len(PORTFOLIO_CATEGORIES)})
+                        rows.append({"allocation_type": "actual_amount", "category": category, "value": 100})
+                    return rows
+                return []
+
+            def previous_trading_date(self, market, value):
+                return datetime(2026, 7, 17).date()
+
+            def history(self, security_id):
+                return []
+
+            def publish_dashboard_version(self, payload, **kwargs):
+                self.published = {"payload": payload} | kwargs
+                return self.published
+
+        version = DashboardPublisher(Store()).publish()
+        spx = next(asset for asset in version["payload"]["assets"] if asset["symbol"] == "SPX")
+        self.assertTrue(version["is_complete"])
+        self.assertEqual(version["completeness"]["data_status"], "degraded")
+        self.assertEqual(spx["data_status"], "delayed")
+        self.assertEqual(spx["trade_date"], "2026-07-17")
+        self.assertEqual(spx["last_valid_trade_date"], "2026-07-16")
+        self.assertIsNone(spx["close"])
+        self.assertIn("SPX", format_dashboard_version_message(version))
 
     def test_new_secret_key_is_not_sent_as_bearer_jwt(self):
         from codex.trend_observer.supabase_store import SupabaseSettings, SupabaseStore

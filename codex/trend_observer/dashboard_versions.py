@@ -13,6 +13,15 @@ from .style_compass import calculate_style_compass, style_recommendation
 from .supabase_store import SupabaseStore
 
 
+CURRENT_SIGNAL_FIELDS = (
+    "close", "daily_return", "return_ytd", "return_1w", "return_1m", "return_1y", "return_3y",
+    "ma20", "ma60", "ma120", "ma200", "ma20_slope_5d", "ma60_slope_10d",
+    "ma120_slope_20d", "ma200_slope_40d", "short_trend", "mid_trend", "long_trend",
+    "overall_status", "investment_advice", "pe", "pe_percentile", "pe_percentile_period",
+    "valuation_status", "dividend_yield",
+)
+
+
 class DashboardPublisher:
     def __init__(self, store: SupabaseStore):
         self.store = store
@@ -84,15 +93,27 @@ class DashboardPublisher:
             result.append(compass)
         return result
 
+    @staticmethod
+    def _unavailable_current_signal(expected_date, reason: str, last_valid_date: str | None = None) -> dict:
+        """Keep a failed asset visible without presenting stale values as current."""
+        return {
+            "trade_date": expected_date.isoformat() if expected_date else None,
+            "data_status": "delayed",
+            "data_issue": reason,
+            "last_valid_trade_date": last_valid_date,
+        } | {field: None for field in CURRENT_SIGNAL_FIELDS}
+
     def publish(self, source_run_id: str | None = None) -> dict:
         assets = self._active_assets()
         records = []
-        incomplete = []
+        asset_issues = []
+        valid_dates = []
         now = datetime.now(MARKET_TIMEZONE)
         expected_symbols = {asset["symbol"] for asset in ASSETS}
         actual_symbols = {asset["symbol"] for asset in assets}
-        if actual_symbols != expected_symbols or len(assets) != len(ASSETS):
-            incomplete.append(
+        catalog_valid = actual_symbols == expected_symbols and len(assets) == len(ASSETS)
+        if not catalog_valid:
+            asset_issues.append(
                 {
                     "reason": "资产清单不一致",
                     "missing": sorted(expected_symbols - actual_symbols),
@@ -101,14 +122,27 @@ class DashboardPublisher:
             )
         for asset in assets:
             signal = self._latest_signal(asset["security_id"])
+            expected_date = self.store.previous_trading_date(asset["market"], now.date())
             if not signal:
-                incomplete.append({"symbol": asset["symbol"], "reason": "缺少派生信号"})
-                signal = {"trade_date": None, "overall_status": "数据不足", "investment_advice": "数据不足"}
+                issue = {"symbol": asset["symbol"], "reason": "缺少派生信号", "expected": expected_date.isoformat()}
+                asset_issues.append(issue)
+                signal = self._unavailable_current_signal(expected_date, issue["reason"])
             else:
-                expected_date = self.store.previous_trading_date(asset["market"], now.date())
                 actual_date = pd.Timestamp(signal["trade_date"]).date()
                 if actual_date < expected_date:
-                    incomplete.append({"symbol": asset["symbol"], "reason": "行情日期滞后", "expected": expected_date.isoformat(), "actual": actual_date.isoformat()})
+                    issue = {
+                        "symbol": asset["symbol"], "reason": "行情日期滞后",
+                        "expected": expected_date.isoformat(), "actual": actual_date.isoformat(),
+                    }
+                    asset_issues.append(issue)
+                    signal = self._unavailable_current_signal(expected_date, issue["reason"], actual_date.isoformat())
+                else:
+                    valid_dates.append(actual_date.isoformat())
+                    signal = signal | {
+                        "data_status": "current",
+                        "data_issue": None,
+                        "last_valid_trade_date": actual_date.isoformat(),
+                    }
             record = {
                 "name": asset["name"], "symbol": asset["symbol"], "market": asset["market"], "asset_type": asset["asset_type"],
                 "industry_template": asset.get("industry_template"),
@@ -123,18 +157,25 @@ class DashboardPublisher:
                 }
             records.append(record)
         assets_by_name = {asset["name"]: asset for asset in assets}
-        dates = [record.get("trade_date") for record in records if record.get("trade_date")]
         allocation = self._allocation()
         payload = {
             "schema_version": 2,
-            "latest_market_date": max(dates) if dates else None,
+            "latest_market_date": max(valid_dates) if valid_dates else None,
             "assets": records,
             "allocation": allocation,
             "style_compass": self._style_compass(assets_by_name),
         }
-        completeness = {"missing_asset_signals": incomplete, "allocation_configured": allocation is not None}
-        # Allocation is editable user configuration, not a market-data blocker.
-        is_complete = not incomplete
+        completeness = {
+            "asset_issues": asset_issues,
+            # Kept for consumers that already read the V2 field name.
+            "missing_asset_signals": asset_issues,
+            "asset_catalog_valid": catalog_valid,
+            "allocation_configured": allocation is not None,
+            "data_status": "degraded" if asset_issues else "current",
+        }
+        # A temporary source failure never blocks the other assets or their history.
+        # Only an invalid asset catalogue is a release blocker.
+        is_complete = catalog_valid
         return self.store.publish_dashboard_version(
             payload, is_complete=is_complete, completeness=completeness, calculation_version=CALCULATION_VERSION, source_run_id=source_run_id
         )
