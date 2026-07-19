@@ -157,7 +157,7 @@
     let editMode='target',detailType='index',detailIndex=0,detailRange=12,indexSort={key:null,dir:'desc'},stockSort={key:null,dir:'desc'};
     const selectedMAs=new Set(['ma120','ma200']),selectedTrendBands=new Set(['long']);
     const money=n=>new Intl.NumberFormat('zh-CN',{style:'currency',currency:'CNY',maximumFractionDigits:0}).format(n);
-    const num=n=>n==null?'—':Number(n).toFixed(2); const pct=n=>n==null?'—':`${n>0?'+':''}${Number(n).toFixed(2)}%`;
+    const num=n=>n==null||!Number.isFinite(Number(n))?'—':Number(n).toFixed(2); const pct=n=>n==null||!Number.isFinite(Number(n))?'—':`${n>0?'+':''}${Number(n).toFixed(2)}%`;
     function chartDates(endDate,months){const end=new Date(`${endDate}T00:00:00`),start=new Date(end),mid=new Date(end);start.setDate(start.getDate()-months*30);mid.setDate(mid.getDate()-months*15);const fmt=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;return [fmt(start),fmt(mid),fmt(end)]}
     const tone=v=>/优先|可关注|可新增|改善|强趋势|上升|低估|稳健/.test(v)?'good':/暂停|恶化|下跌|极高估|高估|承压/.test(v)?'risk':/观察|修复|转弱|仅持有|稳定|合理/.test(v)?'warn':'info';
     const badge=v=>`<span class="badge ${tone(v)}">${v??'—'}</span>`;

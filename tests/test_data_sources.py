@@ -1,9 +1,10 @@
 import unittest
 
 import numpy as np
+import pandas as pd
 
 from codex.trend_observer.config import ASSETS
-from codex.trend_observer.data_sources import fetch_eastmoney_global_index, fetch_nasdaq_index, fetch_yahoo_index
+from codex.trend_observer.data_sources import fetch_eastmoney_global_index, fetch_fred_close_series, fetch_global_index, fetch_nasdaq_index, fetch_yahoo_index
 
 
 class FakeResponse:
@@ -39,6 +40,48 @@ class DataSourcesTest(unittest.TestCase):
         self.assertEqual(assets_by_symbol["SPX"]["provider"], "global_index")
         self.assertEqual(assets_by_symbol["SPX"]["eastmoney_symbol"], "100.SPX")
         self.assertEqual(assets_by_symbol["SPX"]["yahoo_symbol"], "^GSPC")
+        self.assertEqual(assets_by_symbol["SPX"]["fred_series"], "SP500")
+
+    def test_fetch_fred_close_series_normalizes_daily_closes(self):
+        class CsvResponse:
+            text = """observation_date,SP500
+2026-06-19,5980.00
+2026-06-22,6001.50
+"""
+
+            def raise_for_status(self):
+                return None
+
+        class CsvSession:
+            def get(self, url, **kwargs):
+                self.url, self.kwargs = url, kwargs
+                return CsvResponse()
+
+        session = CsvSession()
+        history = fetch_fred_close_series(session, "SP500")
+        self.assertEqual(len(history), 2)
+        self.assertEqual(history.iloc[-1]["close"], 6001.50)
+        self.assertEqual(history.iloc[-1]["open"], 6001.50)
+        self.assertTrue(np.isnan(history.iloc[-1]["volume"]))
+        self.assertEqual(session.kwargs["params"], {"id": "SP500"})
+
+    def test_global_index_uses_fred_when_primary_sources_fail(self):
+        fallback = np.nan
+        frame = pd.DataFrame({
+            "date": pd.to_datetime(["2026-06-19", "2026-06-22"]),
+            "open": [5980.0, 6001.5], "high": [5980.0, 6001.5], "low": [5980.0, 6001.5],
+            "close": [5980.0, 6001.5], "volume": [fallback, fallback], "pe": [fallback, fallback],
+        })
+        from unittest.mock import patch
+        with (
+            patch("codex.trend_observer.data_sources.fetch_eastmoney_global_index", side_effect=RuntimeError("unavailable")),
+            patch("codex.trend_observer.data_sources.fetch_yahoo_index", side_effect=RuntimeError("rate limited")),
+            patch("codex.trend_observer.data_sources.fetch_fred_close_series", return_value=frame),
+        ):
+            history = fetch_global_index(
+                object(), {"eastmoney_symbol": "100.SPX", "yahoo_symbol": "^GSPC", "fred_series": "SP500"}, start_date=pd.Timestamp("2026-06-19").date()
+            )
+        self.assertEqual(history.attrs["source_provider"], "fred")
 
     def test_fetch_eastmoney_global_index_normalizes_klines(self):
         session = FakeSession(
