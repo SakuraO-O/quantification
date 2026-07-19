@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 import math
+import signal
+import threading
 from typing import Any, Callable
 
 from .assets import security_id
@@ -36,6 +38,38 @@ FINANCE_FIELDS = {
     "NONPERLOAN": ("non_performing_loan_ratio", "percent"),
     "BLDKBBL": ("provision_coverage", "percent"),
 }
+SOURCE_TIMEOUT_SECONDS = 20
+MAX_ANNUAL_REPORTS = 5
+MAX_INTERIM_REPORTS = 4
+
+
+class SourceTimeoutError(TimeoutError):
+    """Raised when a public provider keeps a GitHub Actions runner waiting."""
+
+
+class _source_timeout:
+    """Unix main-thread deadline; GitHub Actions runs on Linux.
+
+    AKShare delegates to providers which do not consistently expose a timeout
+    argument.  A signal deadline therefore protects the whole call boundary.
+    """
+
+    def __init__(self, seconds: int):
+        self.seconds = seconds
+        self.previous_handler = None
+
+    def __enter__(self):
+        if threading.current_thread() is not threading.main_thread() or not hasattr(signal, "SIGALRM"):
+            return self
+        self.previous_handler = signal.getsignal(signal.SIGALRM)
+        signal.signal(signal.SIGALRM, lambda *_: (_ for _ in ()).throw(SourceTimeoutError(f"公开来源超过 {self.seconds} 秒未响应")))
+        signal.setitimer(signal.ITIMER_REAL, self.seconds)
+        return self
+
+    def __exit__(self, *_):
+        if self.previous_handler is not None:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            signal.signal(signal.SIGALRM, self.previous_handler)
 
 
 def _date(value: Any) -> date | None:
@@ -86,9 +120,15 @@ class FundamentalSource:
             import akshare as ak
         except ImportError as error:  # pragma: no cover - CI installs requirements
             raise RuntimeError("缺少 akshare；请安装 codex/requirements.txt。") from error
+        def finance(symbol: str):
+            with _source_timeout(SOURCE_TIMEOUT_SECONDS):
+                return ak.stock_financial_analysis_indicator_em(symbol=symbol, indicator="按报告期")
+        def dividends(symbol: str):
+            with _source_timeout(SOURCE_TIMEOUT_SECONDS):
+                return ak.stock_history_dividend_detail(symbol=symbol, indicator="分红")
         return cls(
-            finance=lambda symbol: ak.stock_financial_analysis_indicator_em(symbol=symbol, indicator="按报告期"),
-            dividends=lambda symbol: ak.stock_history_dividend_detail(symbol=symbol, indicator="分红"),
+            finance=finance,
+            dividends=dividends,
         )
 
 
@@ -124,31 +164,20 @@ class FundamentalSynchronizer:
         )
         return rows[0]["source_document_id"]
 
-    def _write_fact(self, asset: dict, *, report_period: date, metric_code: str, value: float | None, unit: str,
-                    period_type: str, announcement_date: date | None, source_document_id: str) -> bool:
-        sid = security_id(asset["symbol"], asset["market"])
-        current = self.store.select(
-            "financial_facts", select="financial_fact_id,version,value,source_document_id",
-            filters={"security_id": f"eq.{sid}", "report_period": f"eq.{report_period.isoformat()}",
-                     "metric_code": f"eq.{metric_code}", "is_current": "eq.true"}, limit=1,
-        )
-        if current and current[0].get("value") == value and current[0].get("source_document_id") == source_document_id:
-            return False
-        version = int(current[0]["version"]) + 1 if current else 1
-        if current:
-            self.store.patch("financial_facts", {"financial_fact_id": f"eq.{current[0]['financial_fact_id']}"}, {"is_current": False})
-        self.store.upsert(
-            "financial_facts",
-            {"security_id": sid, "report_period": report_period, "metric_code": metric_code, "value": value,
-             "unit": unit, "period_type": period_type, "announcement_date": announcement_date,
-             "source_document_id": source_document_id, "version": version, "is_current": True},
-            "security_id,report_period,metric_code,version",
-        )
-        return True
-
     def _write_finance(self, asset: dict, frame: Any) -> tuple[int, int]:
-        received = changed = 0
-        for raw in frame.to_dict("records"):
+        """Persist a compact research window in batches, not one REST call per metric."""
+
+        records = frame.to_dict("records")
+        annual = [row for row in records if "年报" in str(row.get("REPORT_TYPE") or "")]
+        interim = [row for row in records if "年报" not in str(row.get("REPORT_TYPE") or "")]
+        newest_first = lambda row: _date(row.get("REPORT_DATE")) or date.min
+        selected = sorted(annual, key=newest_first, reverse=True)[:MAX_ANNUAL_REPORTS]
+        selected += sorted(interim, key=newest_first, reverse=True)[:MAX_INTERIM_REPORTS]
+        sid = security_id(asset["symbol"], asset["market"])
+        documents: list[dict] = []
+        document_keys: list[tuple[str, str]] = []
+        candidates: list[dict] = []
+        for raw in selected:
             report_period = _date(raw.get("REPORT_DATE"))
             if not report_period:
                 continue
@@ -159,26 +188,43 @@ class FundamentalSynchronizer:
             record_id = f"{code}:{report_period.isoformat()}:{notice_date or 'unknown'}"
             evidence = {"code": code, "report_period": report_period, "notice_date": notice_date,
                         "report_type": report_type, "values": {field: _number(raw.get(field)) for field in FINANCE_FIELDS}}
-            source_document_id = self._source_document(
-                asset, source="eastmoney", record_id=record_id,
-                title=f"东方财富财务分析：{asset['name']} {raw.get('REPORT_DATE_NAME') or report_period}",
-                document_type="structured_financial_snapshot", report_period=report_period,
-                announcement_date=notice_date, url=FINANCE_URL.format(market=_market_suffix(asset), symbol=code), evidence=evidence,
-            )
+            content_hash = payload_hash(evidence)
+            documents.append({"security_id": sid, "source": "eastmoney", "source_record_id": record_id,
+                "title": f"东方财富财务分析：{asset['name']} {raw.get('REPORT_DATE_NAME') or report_period}",
+                "document_type": "structured_financial_snapshot", "report_period": report_period,
+                "announcement_date": notice_date, "document_url": FINANCE_URL.format(market=_market_suffix(asset), symbol=code),
+                "content_hash": content_hash})
+            document_keys.append((record_id, content_hash))
             for field, (metric_code, unit) in FINANCE_FIELDS.items():
                 value = _number(raw.get(field))
                 if value is None:
                     continue
-                received += 1
-                changed += int(self._write_fact(
-                    asset, report_period=report_period, metric_code=metric_code, value=value, unit=unit,
-                    period_type=period_type, announcement_date=notice_date, source_document_id=source_document_id,
-                ))
-        return received, changed
+                candidates.append({"report_period": report_period, "metric_code": metric_code, "value": value,
+                    "unit": unit, "period_type": period_type, "announcement_date": notice_date,
+                    "document_key": (record_id, content_hash)})
+        saved_documents = self.store.upsert("source_documents", documents, "source,source_record_id,content_hash")
+        document_ids = {(row["source_record_id"], row["content_hash"]): row["source_document_id"] for row in saved_documents}
+        current_rows = self.store.select("financial_facts", select="financial_fact_id,report_period,metric_code,value,version,source_document_id",
+            filters={"security_id": f"eq.{sid}", "is_current": "eq.true"})
+        current = {(str(row["report_period"]), row["metric_code"]): row for row in current_rows}
+        changed_rows = []
+        for item in candidates:
+            source_document_id = document_ids[item.pop("document_key")]
+            identity = (item["report_period"].isoformat(), item["metric_code"])
+            prior = current.get(identity)
+            if prior and _number(prior.get("value")) == item["value"] and prior.get("source_document_id") == source_document_id:
+                continue
+            if prior:
+                self.store.patch("financial_facts", {"financial_fact_id": f"eq.{prior['financial_fact_id']}"}, {"is_current": False})
+            changed_rows.append({"security_id": sid, **item, "source_document_id": source_document_id,
+                "version": int(prior["version"]) + 1 if prior else 1, "is_current": True})
+        self.store.upsert("financial_facts", changed_rows, "security_id,report_period,metric_code,version")
+        return len(candidates), len(changed_rows)
 
     def _write_dividends(self, asset: dict, frame: Any) -> tuple[int, int]:
         sid = security_id(asset["symbol"], asset["market"])
-        received = changed = 0
+        documents: list[dict] = []
+        candidates: list[dict] = []
         for raw in frame.to_dict("records"):
             announcement_date = _date(raw.get("公告日期"))
             ex_date = _date(raw.get("除权除息日"))
@@ -194,24 +240,21 @@ class FundamentalSynchronizer:
             cash_per_share = cash_per_ten / 10.0
             code = _stock_code(asset)
             record_id = f"{code}:{announcement_date.isoformat()}:{ex_date or 'unannounced'}:{stage}:{cash_per_ten}"
-            source_document_id = self._source_document(
-                asset, source="sina", record_id=record_id, title=f"新浪分红派息：{asset['name']} {announcement_date}",
-                document_type="structured_dividend_event", report_period=date(fiscal_year, 12, 31),
-                announcement_date=announcement_date, url=DIVIDEND_URL.format(symbol=code),
-                evidence={"code": code, "announcement_date": announcement_date, "ex_date": ex_date,
-                          "stage": stage, "cash_per_ten": cash_per_ten},
-            )
-            row = {"security_id": sid, "fiscal_year": fiscal_year, "event_stage": stage, "announcement_id": record_id,
-                   "cash_dividend_per_share": cash_per_share, "ex_date": ex_date,
-                   "announcement_date": announcement_date, "source_document_id": source_document_id}
-            existing = self.store.select("dividend_events", select="dividend_event_id", filters={
-                "security_id": f"eq.{sid}", "fiscal_year": f"eq.{fiscal_year}", "event_stage": f"eq.{stage}",
-                "announcement_id": f"eq.{record_id}",
-            }, limit=1)
-            self.store.upsert("dividend_events", row, "security_id,fiscal_year,event_stage,announcement_id")
-            received += 1
-            changed += int(not existing)
-        return received, changed
+            content_hash = payload_hash({"code": code, "announcement_date": announcement_date, "ex_date": ex_date,
+                "stage": stage, "cash_per_ten": cash_per_ten})
+            documents.append({"security_id": sid, "source": "sina", "source_record_id": record_id,
+                "title": f"新浪分红派息：{asset['name']} {announcement_date}", "document_type": "structured_dividend_event",
+                "report_period": date(fiscal_year, 12, 31), "announcement_date": announcement_date,
+                "document_url": DIVIDEND_URL.format(symbol=code), "content_hash": content_hash})
+            candidates.append({"security_id": sid, "fiscal_year": fiscal_year, "event_stage": stage, "announcement_id": record_id,
+                "cash_dividend_per_share": cash_per_share, "ex_date": ex_date, "announcement_date": announcement_date,
+                "document_key": (record_id, content_hash)})
+        saved_documents = self.store.upsert("source_documents", documents, "source,source_record_id,content_hash")
+        document_ids = {(row["source_record_id"], row["content_hash"]): row["source_document_id"] for row in saved_documents}
+        existing = {row["announcement_id"] for row in self.store.select("dividend_events", select="announcement_id", filters={"security_id": f"eq.{sid}"})}
+        rows = [{**item, "source_document_id": document_ids[item.pop("document_key")]} for item in candidates]
+        self.store.upsert("dividend_events", rows, "security_id,fiscal_year,event_stage,announcement_id")
+        return len(rows), sum(row["announcement_id"] not in existing for row in rows)
 
     @staticmethod
     def _latest_by_metric(rows: list[dict]) -> tuple[date | None, dict[str, float]]:

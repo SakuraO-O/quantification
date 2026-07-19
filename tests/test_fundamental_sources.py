@@ -1,10 +1,11 @@
 import unittest
 from datetime import date
+import time
 
 import pandas as pd
 
 from codex.trend_observer.assets import active_assets, security_id
-from codex.trend_observer.fundamental_sources import FundamentalSource, FundamentalSynchronizer
+from codex.trend_observer.fundamental_sources import FundamentalSource, FundamentalSynchronizer, SourceTimeoutError, _source_timeout
 
 
 class MemoryStore:
@@ -141,6 +142,11 @@ class FundamentalSourceTest(unittest.TestCase):
             self.assertEqual(sync.sync_asset(asset, today=date(2026, 7, 19), force=True).status, "failed")
         self.assertEqual(sync.sync_asset(asset, today=date(2026, 7, 19), force=False).status, "skipped")
         self.assertEqual(len(calls), 3)
+
+    def test_provider_deadline_interrupts_a_stalled_call(self):
+        with self.assertRaises(SourceTimeoutError):
+            with _source_timeout(0.02):
+                time.sleep(0.1)
 
 
 if __name__ == "__main__":
