@@ -206,6 +206,11 @@ def parse_worldperatio(html):
     current_month = current_date.year * 12 + current_date.month
     if months != list(range(current_month - 119, current_month + 1)):
         raise ValueError("WorldPERatio近10年历史PE月份不连续或未覆盖当前月份")
+    # The page's headline is the current observation, while the embedded
+    # series is month-end history.  Replace the current month's historical
+    # point so the stored latest PE and its percentile use the same value.
+    # Appending it would turn a 120-month window into 121 observations.
+    recent[-1] = (current_date, current_pe)
     percentile = sum(value <= current_pe for _, value in recent) / len(recent) * 100
     return {
         "pe": current_pe,
@@ -214,6 +219,9 @@ def parse_worldperatio(html):
         "history_start": recent[0][0].isoformat(),
         "history_end": recent[-1][0].isoformat(),
         "history_count": len(recent),
+        # Kept as normalized values only.  Callers may persist these facts,
+        # never the HTML response from which they were parsed.
+        "history": [{"date": point_date.isoformat(), "value": value} for point_date, value in recent],
     }
 
 

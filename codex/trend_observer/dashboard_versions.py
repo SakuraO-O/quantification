@@ -82,6 +82,11 @@ class DashboardPublisher:
             left_history = left_history.rename(columns={"trade_date": "date"})
             right_history = right_history.rename(columns={"trade_date": "date"})
             compass = calculate_style_compass(left_history, right_history)
+            # The compass is only comparable through the latest date both assets can support.
+            compass["as_of_date"] = min(
+                pd.Timestamp(left_history["date"].max()).date().isoformat(),
+                pd.Timestamp(right_history["date"].max()).date().isoformat(),
+            )
             left_signal, right_signal = self._latest_signal(left_asset["security_id"]), self._latest_signal(right_asset["security_id"])
             compass |= {
                 "left": {"name": left_name, "pe_percentile": (left_signal or {}).get("pe_percentile"), "investment_advice": (left_signal or {}).get("investment_advice")},

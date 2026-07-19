@@ -75,8 +75,9 @@
     const assessment = asset.fundamental_assessment || {};
     const delayed = asset.data_status === "delayed";
     const blankDecimal = { toFixed: () => "—", valueOf: () => Number.NaN };
-    const currentNumber = (value, fallbackValue) => delayed ? null : numberOr(value, fallbackValue);
-    const currentText = (value, fallbackValue, unavailable = "数据延迟") => delayed ? unavailable : value || fallbackValue || "数据不足";
+    // API payload is authoritative: missing fields must not inherit fabricated Mock values.
+    const currentNumber = value => delayed ? null : numberOr(value);
+    const currentText = (value, unavailable = "数据延迟") => delayed ? unavailable : value || "数据不足";
     return {
       ...fallback,
       name: asset.name || fallback.name || asset.symbol,
@@ -85,31 +86,31 @@
       dataStatus: asset.data_status || "current",
       dataIssue: asset.data_issue || null,
       lastValidDate: asset.last_valid_trade_date || null,
-      close: currentNumber(asset.close, fallback.close),
-      day: delayed ? null : returnPercent(asset.daily_return) ?? fallback.day ?? 0,
-      pe: currentNumber(asset.pe, fallback.pe),
-      pep: delayed ? null : numberOr(asset.pe_percentile, fallback.pep),
-      value: currentText(asset.valuation_status, fallback.value),
-      advice: currentText(asset.investment_advice, fallback.advice, "暂不判断"),
-      status: currentText(asset.overall_status, fallback.status),
-      short: currentText(asset.short_trend, fallback.short),
-      mid: currentText(asset.mid_trend, fallback.mid),
-      long: currentText(asset.long_trend, fallback.long),
-      ytd: delayed ? null : returnPercent(asset.return_ytd) ?? fallback.ytd ?? 0,
-      w: delayed ? null : returnPercent(asset.return_1w) ?? fallback.w ?? 0,
-      m: delayed ? null : returnPercent(asset.return_1m) ?? fallback.m ?? 0,
-      y: delayed ? null : returnPercent(asset.return_1y) ?? fallback.y ?? 0,
-      y3: delayed ? null : returnPercent(asset.return_3y) ?? fallback.y3 ?? 0,
-      ma120: currentNumber(asset.ma120, fallback.ma120),
-      ma200: currentNumber(asset.ma200, fallback.ma200),
-      s120: delayed ? null : returnPercent(asset.ma120_slope_20d) ?? fallback.s120,
-      s200: delayed ? null : returnPercent(asset.ma200_slope_40d) ?? fallback.s200,
-      div: numberOr(asset.last_year_dividend, fallback.div ?? 0),
-      yield: delayed ? blankDecimal : numberOr(asset.dividend_yield, fallback.yield ?? 0),
-      dividendSafety: assessment.dividend_safety_status || asset.dividend_safety_status || fallback.dividendSafety || "数据不足",
-      fund: assessment.fundamental_status || asset.fundamental_status || fallback.fund || "数据不足",
-      period: assessment.report_period || fallback.period || "数据不足",
-      announce: asset.latest_announcement_date || fallback.announce || "数据不足",
+      close: currentNumber(asset.close),
+      day: delayed ? null : returnPercent(asset.daily_return),
+      pe: currentNumber(asset.pe),
+      pep: delayed ? null : numberOr(asset.pe_percentile),
+      value: currentText(asset.valuation_status),
+      advice: currentText(asset.investment_advice, "暂不判断"),
+      status: currentText(asset.overall_status),
+      short: currentText(asset.short_trend),
+      mid: currentText(asset.mid_trend),
+      long: currentText(asset.long_trend),
+      ytd: delayed ? null : returnPercent(asset.return_ytd),
+      w: delayed ? null : returnPercent(asset.return_1w),
+      m: delayed ? null : returnPercent(asset.return_1m),
+      y: delayed ? null : returnPercent(asset.return_1y),
+      y3: delayed ? null : returnPercent(asset.return_3y),
+      ma120: currentNumber(asset.ma120),
+      ma200: currentNumber(asset.ma200),
+      s120: delayed ? null : returnPercent(asset.ma120_slope_20d),
+      s200: delayed ? null : returnPercent(asset.ma200_slope_40d),
+      div: numberOr(asset.last_year_dividend) ?? blankDecimal,
+      yield: delayed ? blankDecimal : (numberOr(asset.dividend_yield) ?? blankDecimal),
+      dividendSafety: assessment.dividend_safety_status || asset.dividend_safety_status || "数据不足",
+      fund: assessment.fundamental_status || asset.fundamental_status || "数据不足",
+      period: assessment.report_period || "数据不足",
+      announce: asset.latest_announcement_date || "数据不足",
       template: templateAlias(asset.industry_template) || fallback.template,
       sourceTemplate: asset.industry_template,
       anchor: fallback.anchor || templateAnchor(asset.industry_template),
@@ -125,6 +126,9 @@
     if (apiIndices.length !== 12 || apiStocks.length !== 9) {
       throw new Error(`资产清单不完整：指数 ${apiIndices.length}/12，股票 ${apiStocks.length}/9`);
     }
+    const indexOrder = ["沪深300", "中证500", "中证A500", "创业板100", "科创50", "红利低波", "国证自由现金流", "恒生指数", "中证消费", "全指医药", "标普500", "纳斯达克100"];
+    const indexRank = new Map(indexOrder.map((name, index) => [name, index]));
+    apiIndices.sort((left, right) => (indexRank.get(left.name) ?? Number.MAX_SAFE_INTEGER) - (indexRank.get(right.name) ?? Number.MAX_SAFE_INTEGER));
     indices.splice(0, indices.length, ...apiIndices);
     stocks.splice(0, stocks.length, ...apiStocks);
 
@@ -139,11 +143,22 @@
       })));
     }
 
+    const allocationUpdated = payload.allocation && payload.allocation.updated_at;
+    const allocationDataDate = payload.allocation && payload.allocation.data_date;
+    const allocationNode = document.querySelector("#allocation-updated-at");
+    if (allocationNode) {
+      const updated = allocationUpdated ? new Date(allocationUpdated).toLocaleString("zh-CN", {hour12:false}) : "—";
+      allocationNode.textContent = `配置更新于 ${updated}${allocationDataDate ? ` · 数据日期 ${allocationDataDate}` : ""}`;
+    }
+
     const compass = Array.isArray(payload.style_compass) ? payload.style_compass : [];
     if (compass.length) {
       pairs.splice(0, pairs.length, ...compass.map(item => ({
         left: item.left && item.left.name,
         right: item.right && item.right.name,
+        date: item.as_of_date || "—",
+        leftReturns: [20, 60, 120].map(window => returnPercent(item[`return_${window}d_left`])),
+        rightReturns: [20, 60, 120].map(window => returnPercent(item[`return_${window}d_right`])),
         d: [20, 60, 120].map(window => returnPercent(item[`return_${window}d_diff`]) ?? 0),
         lp: numberOr(item.left && item.left.pe_percentile),
         rp: numberOr(item.right && item.right.pe_percentile),
@@ -163,25 +178,184 @@
     renderStock();
   }
 
+  const CATEGORY_ORDER = ["海外", "红利", "成长", "债券", "大宗商品", "现金"];
+  const categoryRank = new Map(CATEGORY_ORDER.map((name, index) => [name, index]));
+  let allocationSort = { key: "category", direction: "asc" };
+
+  renderAllocation = function renderAllocationWithConfiguredOrder() {
+    const total = categories.reduce((sum, category) => sum + category.actual, 0);
+    const rows = categories.map(category => {
+      const actual = total > 0 ? category.actual / total * 100 : 0;
+      const deviation = actual - category.target;
+      const state = Math.abs(deviation) <= 2 ? "接近目标" : Math.abs(deviation) <= 5 ? "关注" : deviation < 0 ? "明显低配" : "明显超配";
+      return {...category, actual, deviation, state, adjust: total * category.target / 100 - category.actual};
+    });
+    const stack = (selector, values) => {
+      document.querySelector(selector).innerHTML = categories.map((category, index) =>
+        `<div class="stack-seg" data-cat="${category.name}" data-allocation-tooltip="${category.name} ${values[index].toFixed(1)}%" style="width:${values[index]}%"><span>${values[index].toFixed(1)}%</span></div>`
+      ).join("");
+    };
+    stack("#target-stack", categories.map(category => category.target));
+    stack("#actual-stack", rows.map(row => row.actual));
+    bindAllocationTooltips();
+    document.querySelector("#alloc-legend").innerHTML = categories.map(category => `<span><i style="background:${category.color}"></i>${category.name}</span>`).join("");
+    const sorted = [...rows].sort((left, right) => {
+      if (allocationSort.key === "deviation") {
+        return (Math.abs(right.deviation) - Math.abs(left.deviation)) * (allocationSort.direction === "asc" ? -1 : 1);
+      }
+      return (categoryRank.get(left.name) ?? Number.MAX_SAFE_INTEGER) - (categoryRank.get(right.name) ?? Number.MAX_SAFE_INTEGER);
+    });
+    document.querySelectorAll("[data-allocation-sort]").forEach(button => {
+      const active = allocationSort.key === "deviation";
+      button.textContent = `偏离 ${active ? (allocationSort.direction === "asc" ? "↑" : "↓") : "↕"}`;
+      button.classList.toggle("active", active);
+    });
+    document.querySelector("#allocation-body").innerHTML = sorted.map(row => {
+      const stateClass = /^明显/.test(row.state) ? "risk" : row.state === "关注" ? "warn" : "info";
+      return `<tr><td><i class="category-dot" style="background:${row.color}"></i>${row.name}</td><td class="num">${row.target.toFixed(1)}%</td><td class="num">${row.actual.toFixed(1)}%</td><td class="num ${row.deviation > 0 ? "pos" : row.deviation < 0 ? "neg" : ""}">${row.deviation > 0 ? "+" : ""}${row.deviation.toFixed(1)}pp</td><td><span class="badge ${stateClass}">${row.state}</span></td><td class="num ${row.adjust > 0 ? "pos" : row.adjust < 0 ? "neg" : ""}">${row.adjust > 0 ? "+" : ""}${money(row.adjust)}</td></tr>`;
+    }).join("");
+    const high = rows.filter(row => row.deviation > 0).sort((left, right) => right.deviation - left.deviation)[0];
+    const low = rows.filter(row => row.deviation < 0).sort((left, right) => left.deviation - right.deviation)[0];
+    const summary = document.querySelector("#alloc-summary");
+    if (summary && high && low) summary.textContent = `${high.name}实际占比${high.actual.toFixed(1)}%，较目标高${high.deviation.toFixed(1)}个百分点；${low.name}低配${Math.abs(low.deviation).toFixed(1)}个百分点，是当前最需要补足的类别。`;
+  };
+
+  function bindAllocationTooltips() {
+    const tooltipId = "dashboard-allocation-tooltip";
+    const hide = () => document.querySelector(`#${tooltipId}`)?.remove();
+    document.querySelectorAll("[data-allocation-tooltip]").forEach(segment => {
+      const show = event => {
+        let tooltip = document.querySelector(`#${tooltipId}`);
+        if (!tooltip) {
+          tooltip = document.createElement("div");
+          tooltip.id = tooltipId;
+          tooltip.className = "chart-tooltip";
+          document.body.appendChild(tooltip);
+        }
+        tooltip.textContent = segment.dataset.allocationTooltip || "";
+        tooltip.style.left = `${Math.min(event.clientX + 14, window.innerWidth - 180)}px`;
+        tooltip.style.top = `${Math.min(event.clientY + 14, window.innerHeight - 60)}px`;
+      };
+      segment.onpointerenter = show;
+      segment.onpointermove = show;
+      segment.onpointerleave = hide;
+    });
+  }
+
+  function updateTargetTotalHint() {
+    const hint = document.querySelector("#target-total");
+    const values = [...document.querySelectorAll("[data-edit-index]")].map(input => numberOr(input.value, 0));
+    const total = values.reduce((sum, value) => sum + value, 0);
+    const valid = Math.abs(total - 100) < 1e-8;
+    if (hint) {
+      hint.textContent = `目标配置合计：${total.toFixed(1)}%${valid ? "" : "（必须等于100%）"}`;
+      hint.classList.toggle("invalid", !valid);
+    }
+    return valid;
+  }
+
+  openEdit = function openAllocationEditor(mode) {
+    editMode = mode;
+    document.querySelector("#edit-title").textContent = mode === "target" ? "编辑目标比例" : "编辑实际金额";
+    const today = new Date().toLocaleDateString("en-CA", {timeZone:"Asia/Shanghai"});
+    const hint = mode === "target" ? '<div class="target-total" id="target-total"></div>' : "";
+    document.querySelector("#edit-grid").innerHTML = categories.map((category, index) =>
+      `<div class="edit-row"><label><i class="category-dot" style="background:${category.color}"></i>${category.name}</label><input type="number" min="0" ${mode === "target" ? 'max="100" step="0.1"' : 'step="0.01"'} data-edit-index="${index}" value="${mode === "target" ? category.target : category.actual}"></div>`
+    ).join("") + hint + `<div class="edit-row"><label>数据日期</label><input type="date" id="edit-date" value="${today}"></div>`;
+    if (mode === "target") {
+      document.querySelectorAll("[data-edit-index]").forEach(input => input.addEventListener("input", updateTargetTotalHint));
+      updateTargetTotalHint();
+    }
+    document.querySelector("#edit-error").textContent = "";
+    document.querySelector("#edit-modal").showModal();
+  };
+
+  async function saveAllocationEditor() {
+    const inputs = [...document.querySelectorAll("[data-edit-index]")];
+    const rawValues = inputs.map(input => Number(input.value));
+    const errorNode = document.querySelector("#edit-error");
+    const date = document.querySelector("#edit-date").value;
+    const button = document.querySelector("#save-edit");
+    const precision = editMode === "target" ? 1 : 2;
+    const scale = 10 ** precision;
+    if (!date) return void (errorNode.textContent = "请选择数据日期。");
+    if (rawValues.some(value => !Number.isFinite(value) || value < 0)) return void (errorNode.textContent = "请填写有效的非负数值。");
+    if (editMode === "target" && rawValues.some(value => value > 100 || Math.abs(value * scale - Math.round(value * scale)) > 1e-8)) return void (errorNode.textContent = "目标配置比例须为0至100之间的数值，最多1位小数。");
+    if (editMode === "actual" && rawValues.some(value => Math.abs(value * scale - Math.round(value * scale)) > 1e-8)) return void (errorNode.textContent = "实际配置金额须为非负数，最多2位小数。");
+    const values = rawValues.map(value => Number(value.toFixed(precision)));
+    const total = values.reduce((sum, value) => sum + value, 0);
+    if (editMode === "target" && Math.abs(total - 100) > 1e-8) return void (errorNode.textContent = `目标配置比例合计须等于100%，当前为${total.toFixed(1)}%。`);
+    if (editMode === "actual" && total <= 0) return void (errorNode.textContent = "至少一个类别的实际金额须大于0。");
+    try {
+      button.disabled = true; button.textContent = "保存中…"; errorNode.textContent = "";
+      await saveAllocation(editMode === "target" ? "target_ratio" : "actual_amount", date, categories.map((category, index) => ({category:category.name, value:values[index]})));
+      values.forEach((value, index) => { categories[index][editMode] = value; });
+      renderAllocation(); document.querySelector("#edit-modal").close();
+    } catch (error) {
+      errorNode.textContent = /Failed to fetch/i.test(error.message || "")
+        ? "本地文件预览无法连接 Supabase；请在正式 HTTPS 页面保存配置。"
+        : (error.message || "保存失败，请稍后重试。");
+    } finally {
+      button.disabled = false; button.textContent = "确定";
+    }
+  }
+
+  document.addEventListener("click", event => {
+    if (!event.target.closest("#save-edit")) return;
+    event.preventDefault(); event.stopImmediatePropagation();
+    saveAllocationEditor();
+  }, true);
+
+  renderCompass = function renderCompassWithActualDates() {
+    document.querySelector("#compass-grid").innerHTML = pairs.map(pair => {
+      const score = scoreFor(pair.d), direction = score >= 20 ? "偏左" : score <= -20 ? "偏右" : "均衡";
+      const winner = direction === "偏左" ? "left" : direction === "偏右" ? "right" : null;
+      const winnerAdvice = winner === "left" ? pair.la : pair.ra;
+      const winnerPe = winner === "left" ? pair.lp : pair.rp;
+      const recommendation = !winner ? "保持均衡" : ["优先新增", "可新增"].includes(winnerAdvice) && winnerPe != null && winnerPe <= 50 ? `向${winner === "left" ? "左" : "右"}侧倾斜` : "暂不倾斜";
+      const why = !winner ? "多周期收益差未形成显著方向" : recommendation === "暂不倾斜" ? "占优指数的趋势建议或估值未通过新增约束" : "风格占优，且趋势与估值允许新增";
+      const lefts = pair.leftReturns || [null, null, null], rights = pair.rightReturns || [null, null, null];
+      return `<article class="panel compass"><div class="pair-head"><div class="pair-title">${pair.left} <span class="muted">vs</span> ${pair.right}</div><div class="pair-date">${pair.date || "—"}</div></div><div class="score-line"><div class="score-track"></div><div class="score-dot" style="left:${(score + 100) / 2}%"></div><div class="score-labels"><span>${pair.left}</span><span>均衡</span><span>${pair.right}</span></div></div><div class="score-box"><div><div class="score-value">${score}</div><small class="muted">综合分数</small></div><div class="direction"><b>${direction}</b><span>原始风格方向</span></div></div><div class="periods"><div class="period-row header"><span>周期</span><span>左侧</span><span>右侧</span><span>收益差</span></div>${[20, 60, 120].map((window, index) => `<div class="period-row"><span>${window}日</span><span>${pct(lefts[index])}</span><span>${pct(rights[index])}</span><span class="${pair.d[index] > 0 ? "pos" : pair.d[index] < 0 ? "neg" : ""}">${pct(pair.d[index])}</span></div>`).join("")}</div><div class="pair-facts"><div class="pair-side"><b>${pair.left}</b><div class="fact"><span>PE百分位</span><strong>${pair.lp == null ? "—" : pair.lp.toFixed(2) + "%"}</strong></div><div class="fact"><span>投资建议</span><strong>${pair.la}</strong></div></div><div class="pair-side"><b>${pair.right}</b><div class="fact"><span>PE百分位</span><strong>${pair.rp == null ? "—" : pair.rp.toFixed(2) + "%"}</strong></div><div class="fact"><span>投资建议</span><strong>${pair.ra}</strong></div></div></div><div class="recommend"><b>${recommendation}</b><small>${why}</small></div></article>`;
+    }).join("");
+  };
+
+  document.addEventListener("click", event => {
+    const button = event.target.closest("[data-allocation-sort]");
+    if (!button) return;
+    allocationSort = allocationSort.key === "deviation"
+      ? {key: "deviation", direction: allocationSort.direction === "desc" ? "asc" : "desc"}
+      : {key: "deviation", direction: "desc"};
+    renderAllocation();
+  });
+
   const originalRenderFocus = renderFocus;
   renderFocus = function renderDynamicFocus() {
     if (!indices.length || !stocks.length) return originalRenderFocus();
-    const indexWithPe = indices.filter(item => item.pep !== null && item.pep !== undefined);
-    const highestPe = [...indexWithPe].sort((a,b) => b.pep - a.pep)[0];
-    const lowestPe = [...indexWithPe].sort((a,b) => a.pep - b.pep)[0];
-    const highestYield = stocks.filter(item => Number.isFinite(item.yield)).sort((a,b) => b.yield - a.yield)[0];
-    const dividendWatch = stocks.find(item => item.dividendSafety === "承压") || stocks.find(item => item.dividendSafety === "关注") || stocks[0];
+    const focusStatuses = new Set(["强趋势", "下跌通道"]);
+    const isAvailable = asset => asset.dataStatus !== "delayed"
+      && Number.isFinite(asset.close)
+      && Number.isFinite(asset.day)
+      && !["数据不足", "数据延迟", "—"].includes(asset.status)
+      && !["数据不足", "数据延迟", "—"].includes(asset.mid)
+      && !["数据不足", "数据延迟", "—"].includes(asset.long);
     const candidates = [
-      highestPe && {type:"index", asset:highestPe, label:"PE百分位", value:`${highestPe.pep.toFixed(2)}%`, cls:"risk"},
-      lowestPe && {type:"index", asset:lowestPe, label:"PE百分位", value:`${lowestPe.pep.toFixed(2)}%`, cls:"good"},
-      highestYield && {type:"stock", asset:highestYield, label:"股息率", value:`${highestYield.yield.toFixed(2)}%`, cls:"good"},
-      dividendWatch && {type:"stock", asset:dividendWatch, label:"分红保障", value:dividendWatch.dividendSafety, cls:dividendWatch.dividendSafety === "稳健" ? "good" : "risk"}
-    ].filter(Boolean);
+      ...indices.filter(asset => isAvailable(asset) && Number.isFinite(asset.pep))
+        .filter(asset => asset.pep <= 35 || asset.pep >= 70 || focusStatuses.has(asset.status))
+        .map(asset => ({type: "index", asset, cls: asset.pep >= 70 || asset.status === "下跌通道" ? "risk" : "good"})),
+      ...stocks.filter(asset => isAvailable(asset) && Number.isFinite(asset.yield))
+        .filter(asset => asset.yield <= 3 || asset.yield >= 5 || focusStatuses.has(asset.status))
+        .map(asset => ({type: "stock", asset, cls: asset.yield <= 3 || asset.status === "下跌通道" ? "risk" : "good"}))
+    ];
+    const countNode = document.querySelector("#focus-count");
+    if (countNode) countNode.textContent = `共 ${candidates.length} 项`;
     document.querySelector("#focus-grid").innerHTML = candidates.map(item => {
       const list = item.type === "index" ? indices : stocks;
       const i = list.indexOf(item.asset);
-      return `<button class="focus-card ${item.cls}" data-focus-type="${item.type}" data-focus-index="${i}"><div class="focus-top"><div><div class="focus-name">${item.asset.name}</div><div class="focus-code">${displayCode(item.asset.code)} · ${item.type === "index" ? "指数" : "股票"}</div></div><div class="focus-price"><b>${num(item.asset.close)}</b><div class="${item.asset.day > 0 ? "pos" : "neg"}">${pct(item.asset.day)}</div></div></div><div class="focus-metrics"><div class="focus-reason"><small>${item.label}</small><b>${item.value}</b></div><div><small>综合状态</small><b>${item.asset.status}</b></div></div></button>`;
-    }).join("");
+      const valuationMetric = item.type === "index"
+        ? `<div><small>PE百分位</small><b>${item.asset.pep.toFixed(2)}%</b></div>`
+        : `<div><small>股息率</small><b>${item.asset.yield.toFixed(2)}%</b></div>`;
+      return `<button class="focus-card ${item.cls}" data-focus-type="${item.type}" data-focus-index="${i}"><div class="focus-top"><div><div class="focus-name">${escapeHtml(item.asset.name)}</div><div class="focus-code">${escapeHtml(displayCode(item.asset.code))} · ${item.type === "index" ? "指数" : "股票"}</div></div><div class="focus-price"><b>${num(item.asset.close)}</b><div class="${item.asset.day > 0 ? "pos" : "neg"}">${pct(item.asset.day)}</div></div></div><div class="focus-metrics">${valuationMetric}<div><small>综合状态</small><b>${escapeHtml(item.asset.status)}</b></div><div><small>中期趋势</small><b>${escapeHtml(item.asset.mid)}</b></div><div><small>长期趋势</small><b>${escapeHtml(item.asset.long)}</b></div></div></button>`;
+    }).join("") || '<div class="data-missing">当前没有满足优先关注条件且数据完整的资产。</div>';
   };
 
   const originalProfileFor = profileFor;
@@ -195,11 +369,11 @@
       assessment.cash_reinvestment_status || "数据不足",
       assessment.capital_structure_status || "数据不足"
     ];
-    profile.summary = assessment.fundamental_status || profile.summary;
+    profile.summary = assessment.fundamental_status || "数据不足";
     const evidence = Array.isArray(assessment.evidence) ? assessment.evidence : [];
     profile.evidence = evidence.length
       ? evidence.map(item => typeof item === "string" ? item : item.summary || item.metric_code || JSON.stringify(item)).slice(0, 5)
-      : profile.evidence;
+      : ["尚无可展示的结构化研究证据。"];
     if (assessment.main_risk) profile.evidence.push(`主要风险：${assessment.main_risk}`);
     return profile;
   };
@@ -211,6 +385,9 @@
     const dividends = Array.isArray(asset.dividendEvents) ? asset.dividendEvents : [];
     const industry = Array.isArray(asset.industryMetrics) ? asset.industryMetrics : [];
     const sources = Array.isArray(asset.sources) ? asset.sources : [];
+    if (runtimeState.source === "api" && !assessment.report_period) {
+      return '<section class="research-section"><h4>高股息研究摘要</h4><div class="data-missing">数据不足：尚未接入该股票的结构化财报、分红或行业指标。为避免误导，不展示原型或估算数值。</div></section>';
+    }
     if (runtimeState.source === "api" && assessment.report_period) {
       const profile = profileFor(asset);
       const factRows = facts.slice(0, 60).map(row => `<tr><td>${escapeHtml(row.report_period)}</td><td>${escapeHtml(row.metric_code)}</td><td class="num">${escapeHtml(row.value)}</td><td>${escapeHtml(row.unit)}</td><td>${escapeHtml(row.period_type)}</td><td>${escapeHtml(row.announcement_date)}</td></tr>`).join("");
@@ -225,20 +402,27 @@
 
   const originalStockDetail = stockDetail;
   stockDetail = function stockDetailFromApi(asset) {
-    let html = originalStockDetail(asset);
-    if (runtimeState.source === "api") {
-      html = html
-        .replace("最近8个季度 · 原型示例", "最近8个季度 · Mock 占位（真实适配器待接入）")
-        .replace("数据来源：年度报告、季度报告、行业经营披露；当前所有数值均为原型示例。", "数据来源：结构化来源元数据详见“基本面—年度”；不保存原始文件或响应全文。");
-    }
-    return html;
+    if (runtimeState.source !== "api") return originalStockDetail(asset);
+    const ranges = [[3,"近3个月"],[6,"近6个月"],[12,"近1年"],[36,"近3年"],[60,"近5年"]];
+    const movingAverages = [["ma20","MA20"],["ma60","MA60"],["ma120","MA120"],["ma200","MA200"]];
+    const trends = [["short","短期"],["mid","中期"],["long","长期"]];
+    const yieldText = Number.isFinite(Number(asset.yield)) ? `${Number(asset.yield).toFixed(2)}%` : "—";
+    const dividendText = Number.isFinite(Number(asset.div)) ? `${Number(asset.div).toFixed(2)} 元/股` : "—";
+    const pricePane = `<div class="modal-pane active" id="pane-price"><div class="chart-box"><div class="chart-title"><h4>价格与趋势</h4><small>趋势带默认仅展示长期</small></div><div class="chart-control-bar"><div class="chart-controls"><span class="control-label">时间范围</span>${ranges.map(([value, label]) => `<button class="chart-chip ${detailRange === value ? "active" : ""}" data-range="${value}">${label}</button>`).join("")}</div><div class="chart-controls"><span class="control-label">均线</span>${movingAverages.map(([value, label]) => `<button class="chart-chip ${selectedMAs.has(value) ? "active" : ""}" data-ma="${value}">${label}</button>`).join("")}<span class="control-label">趋势带</span>${trends.map(([value, label]) => `<button class="chart-chip ${selectedTrendBands.has(value) ? "active" : ""}" data-trend-band="${value}">${label}</button>`).join("")}</div></div><div class="chart-legend-row"><div class="chart-legend"><span><i style="background:#172b3a"></i>收盘</span><span><i style="background:#75a7d8"></i>MA20</span><span><i style="background:#8fc4b5"></i>MA60</span><span><i style="background:#b09bc9"></i>MA120</span><span><i style="background:#d7a68f"></i>MA200</span></div><div class="trend-key"><span><i style="background:#9fcfb7"></i>上升</span><span><i style="background:#aebfe2"></i>修复</span><span><i style="background:#e2c891"></i>转弱</span><span><i style="background:#e4aaa7"></i>下跌</span><span><i style="background:#cfd5da"></i>震荡</span></div></div><canvas id="price-chart"></canvas></div></div>`;
+    const assessment = asset.assessment || {};
+    const sourceRows = Array.isArray(asset.sources) ? asset.sources : [];
+    const sourceList = sourceRows.length
+      ? `<ul class="research-evidence">${sourceRows.slice(0, 12).map(row => `<li>${row.document_url ? `<a href="${escapeHtml(row.document_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(row.title || row.source_record_id)}</a>` : escapeHtml(row.title || row.source_record_id)} · ${escapeHtml(row.announcement_date)}</li>`).join("")}</ul>`
+      : '<div class="data-missing">暂无已保存的结构化来源元数据。</div>';
+    return `<div class="overview-grid">${metric("趋势建议", badge(asset.advice))}${metric("综合状态", badge(asset.status))}${metric("股息率", yieldText)}${metric("分红保障", badge(asset.dividendSafety))}${metric("基本面状态", badge(asset.fund))}${metric("最新报告期", assessment.report_period || "数据不足")}${metric("上一年度每股分红", dividendText)}${metric("主要变化", asset.change || "数据不足")}</div><div class="modal-tabs"><button class="modal-tab active" data-pane="price">价格与趋势</button><button class="modal-tab" data-pane="annual">基本面—年度</button><button class="modal-tab" data-pane="quarter">基本面—季度</button><button class="modal-tab" data-pane="source">数据说明</button></div>${pricePane}<div class="modal-pane" id="pane-annual">${annualResearch(asset)}</div><div class="modal-pane" id="pane-quarter"><div class="data-missing">数据不足：季度基本面适配器尚未接入稳定真实数据，不展示原型数字。</div></div><div class="modal-pane" id="pane-source"><div class="chart-box"><p>行情数据截至：${escapeHtml(asset.lastValidDate || asset.date)}</p><p>最新报告期：${escapeHtml(assessment.report_period || "数据不足")}</p><p>数据来源与追溯：</p>${sourceList}<p class="research-source">仅展示来源链接、公告编号、哈希及结构化字段；不保存原始公告或财报文件。</p></div></div>`;
   };
 
   const originalIndexDetail = indexDetail;
   indexDetail = function indexDetailFromApi(asset) {
     let html = originalIndexDetail(asset);
+    html = html.replace("原型曲线为交互示意，实际版本需展示真实历史数据、数据来源和抓取时间。", "");
     if (runtimeState.histories.has(asset.code)) {
-      html = html.replace("原型曲线为交互示意，实际版本需展示真实历史数据、数据来源和抓取时间。", "当前曲线来自 Edge API 返回的真实结构化历史数据。");
+      html = html.replace("当前曲线来自 Edge API 返回的真实结构化历史数据。", "");
     }
     return html;
   };
@@ -323,19 +507,36 @@
   drawPriceChart = function drawApiPriceChart(asset, type) {
     const detail = runtimeState.histories.get(asset.code);
     const historyRows = detail && Array.isArray(detail.history) ? detail.history : [];
-    if (historyRows.length < 2) return mockDrawPriceChart(asset, type);
     const canvas = document.querySelector("#price-chart");
     if (!canvas) return;
+    if (historyRows.length < 2) {
+      if (runtimeState.source === "api") return drawUnavailableChart(canvas, "暂无可用的真实价格历史数据");
+      return mockDrawPriceChart(asset, type);
+    }
     const dpr = window.devicePixelRatio || 1, w = canvas.clientWidth, h = canvas.clientHeight;
     canvas.width = w * dpr; canvas.height = h * dpr;
     const c = canvas.getContext("2d"); c.scale(dpr, dpr); c.clearRect(0, 0, w, h);
     const rows = historyRows.filter(row => numberOr(row.close) !== null);
-    const left = 60, right = w - 14, top = 18, bottom = h - 36;
+    if (rows.length < 2) return drawUnavailableChart(canvas, "暂无可用的真实收盘价数据");
+    const left = 60, right = w - 14;
+    const lanes = [
+      {key:"short", label:"短期", value:"short_trend"},
+      {key:"mid", label:"中期", value:"mid_trend"},
+      {key:"long", label:"长期", value:"long_trend"}
+    ].filter(lane => selectedTrendBands.has(lane.key));
+    const top = lanes.length ? lanes.length * 16 + 16 : 18, bottom = h - 36;
     const keys = {ma20:"#75a7d8",ma60:"#8fc4b5",ma120:"#b09bc9",ma200:"#d7a68f"};
     const values = rows.flatMap(row => [numberOr(row.close), ...[...selectedMAs].map(key => numberOr(row[key]))]).filter(value => value !== null);
     const min = Math.min(...values) * .98, max = Math.max(...values) * 1.02;
     const x = i => left + i * (right-left) / Math.max(rows.length-1, 1);
     const y = value => top + (max-value) * (bottom-top) / Math.max(max-min, 1e-9);
+    const stateColor = state => /上升|强势/.test(state || "") ? "#9fcfb7" : /修复/.test(state || "") ? "#aebfe2" : /转弱/.test(state || "") ? "#e2c891" : /下跌/.test(state || "") ? "#e4aaa7" : "#cfd5da";
+    c.font="10px sans-serif";
+    lanes.forEach((lane, laneIndex) => {
+      const laneTop = 6 + laneIndex * 16, segmentWidth = (right - left) / rows.length;
+      c.fillStyle="#687684"; c.fillText(lane.label, 6, laneTop + 9);
+      rows.forEach((row, index) => { c.fillStyle = stateColor(row[lane.value]); c.fillRect(left + index * segmentWidth, laneTop, Math.max(1, segmentWidth), 10); });
+    });
     c.strokeStyle="#e5eaee"; c.lineWidth=1;
     for(let i=0;i<5;i++){const gy=top+i*(bottom-top)/4;c.beginPath();c.moveTo(left,gy);c.lineTo(right,gy);c.stroke();}
     const stroke = (key,color,width) => {
@@ -348,6 +549,15 @@
     c.textAlign="left";c.fillText(rows[0].trade_date,left,h-8);
     c.textAlign="right";c.fillText(rows[rows.length-1].trade_date,right,h-8);
     c.textAlign="left";
+    bindChartTooltip(canvas, rows, event => {
+      const rect = canvas.getBoundingClientRect();
+      const index = Math.max(0, Math.min(rows.length - 1, Math.round((event.clientX - rect.left - left) / Math.max(right - left, 1) * (rows.length - 1))));
+      const row = rows[index];
+      const lines = [`日期：${row.trade_date}`, `收盘：${num(numberOr(row.close))}`];
+      [...selectedMAs].forEach(key => lines.push(`${key.toUpperCase()}：${num(numberOr(row[key]))}`));
+      lanes.forEach(lane => lines.push(`${lane.label}趋势：${row[lane.value] || "—"}`));
+      return lines;
+    });
   };
 
   const mockDrawPeChart = drawPeChart;
@@ -356,21 +566,117 @@
     const rows = detail && Array.isArray(detail.history)
       ? detail.history.filter(row => numberOr(row.pe_percentile) !== null)
       : [];
-    if (rows.length < 2) return mockDrawPeChart(asset);
     const canvas=document.querySelector("#pe-chart");if(!canvas)return;
+    if (rows.length < 2) {
+      if (runtimeState.source === "api") return drawUnavailableChart(canvas, "暂无可用的真实 PE 百分位历史数据");
+      return mockDrawPeChart(asset);
+    }
     const dpr=window.devicePixelRatio||1,w=canvas.clientWidth,h=canvas.clientHeight;
     canvas.width=w*dpr;canvas.height=h*dpr;const c=canvas.getContext("2d");c.scale(dpr,dpr);c.clearRect(0,0,w,h);
     const left=44,right=w-14,top=14,bottom=h-32,y=value=>top+(100-value)*(bottom-top)/100,x=i=>left+i*(right-left)/(rows.length-1);
     [[0,15,"#edf7f1"],[15,35,"#f3f8ee"],[35,70,"#f7f7f4"],[70,90,"#fbf4e8"],[90,100,"#faecec"]].forEach(([lo,hi,color])=>{c.fillStyle=color;c.fillRect(left,y(hi),right-left,y(lo)-y(hi));});
     c.strokeStyle="#596f9f";c.lineWidth=2;c.beginPath();rows.forEach((row,i)=>i?c.lineTo(x(i),y(Number(row.pe_percentile))):c.moveTo(x(i),y(Number(row.pe_percentile))));c.stroke();
     c.fillStyle="#687684";c.font="10px sans-serif";c.textAlign="left";c.fillText(rows[0].trade_date,left,h-8);c.textAlign="right";c.fillText(rows[rows.length-1].trade_date,right,h-8);c.textAlign="left";
+    bindChartTooltip(canvas, rows, event => {
+      const rect = canvas.getBoundingClientRect();
+      const index = Math.max(0, Math.min(rows.length - 1, Math.round((event.clientX - rect.left - left) / Math.max(right - left, 1) * (rows.length - 1))));
+      const row = rows[index];
+      return [`日期：${row.trade_date}`, `PE：${num(numberOr(row.pe))}`, `PE百分位：${num(numberOr(row.pe_percentile))}%`, `估值状态：${row.valuation_status || "—"}`];
+    });
   };
+
+  function bindChartTooltip(canvas, rows, formatter) {
+    const tooltipId = "dashboard-chart-tooltip";
+    const hide = () => document.querySelector(`#${tooltipId}`)?.remove();
+    canvas.onmouseleave = hide;
+    canvas.onmousemove = event => {
+      const lines = formatter(event);
+      let tooltip = document.querySelector(`#${tooltipId}`);
+      if (!tooltip) {
+        tooltip = document.createElement("div");
+        tooltip.id = tooltipId;
+        tooltip.className = "chart-tooltip";
+        document.body.appendChild(tooltip);
+      }
+      tooltip.innerHTML = lines.map((line, index) => {
+        const [label, ...rest] = String(line).split("：");
+        const value = rest.join("：") || "—";
+        return index === 0
+          ? `<strong>${escapeHtml(label)}：${escapeHtml(value)}</strong>`
+          : `<div class="chart-tooltip-row"><span>${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`;
+      }).join("");
+      tooltip.style.left = `${Math.min(event.clientX + 14, window.innerWidth - 260)}px`;
+      tooltip.style.top = `${Math.min(event.clientY + 14, window.innerHeight - 140)}px`;
+    };
+  }
+
+  // The browser's native `title` popup has an intentional hover delay and does
+  // not wrap reliably. Replace it with the same immediate, readable tooltip
+  // used by the market charts, while keeping the chart markup data-driven.
+  function bindResearchTooltips() {
+    const selector = ".research-year[title], .anchor-item[title], .quality-line-canvas[title]";
+    const tooltipId = "dashboard-research-tooltip";
+    const hide = () => document.querySelector(`#${tooltipId}`)?.remove();
+    const show = (target, event) => {
+      const raw = target.dataset.researchTooltip || target.getAttribute("title") || "";
+      if (!raw) return;
+      target.dataset.researchTooltip = raw;
+      target.removeAttribute("title");
+      let tooltip = document.querySelector(`#${tooltipId}`);
+      if (!tooltip) {
+        tooltip = document.createElement("div");
+        tooltip.id = tooltipId;
+        tooltip.className = "chart-tooltip";
+        document.body.appendChild(tooltip);
+      }
+      const lines = raw.split("｜").filter(Boolean);
+      tooltip.innerHTML = lines.map((line, index) => {
+        const [label, ...rest] = line.split("：");
+        const value = rest.join("：");
+        if (!value) return `<strong>${escapeHtml(line)}</strong>`;
+        return index === 0
+          ? `<strong>${escapeHtml(label)}：${escapeHtml(value)}</strong>`
+          : `<div class="chart-tooltip-row"><span>${escapeHtml(label)}</span><span>${escapeHtml(value)}</span></div>`;
+      }).join("");
+      tooltip.style.left = `${Math.min(event.clientX + 14, window.innerWidth - 300)}px`;
+      tooltip.style.top = `${Math.min(event.clientY + 14, window.innerHeight - 170)}px`;
+    };
+    document.addEventListener("pointerover", event => {
+      const target = event.target.closest(selector);
+      if (target) show(target, event);
+    });
+    document.addEventListener("pointermove", event => {
+      const target = event.target.closest(".research-year[data-research-tooltip], .anchor-item[data-research-tooltip], .quality-line-canvas[data-research-tooltip]");
+      if (target) show(target, event);
+    });
+    document.addEventListener("pointerout", event => {
+      const target = event.target.closest(".research-year[data-research-tooltip], .anchor-item[data-research-tooltip], .quality-line-canvas[data-research-tooltip]");
+      if (target && !target.contains(event.relatedTarget)) hide();
+    });
+  }
+
+  function drawUnavailableChart(canvas, message) {
+    const dpr = window.devicePixelRatio || 1, width = canvas.clientWidth, height = canvas.clientHeight;
+    canvas.width = width * dpr; canvas.height = height * dpr;
+    const context = canvas.getContext("2d"); context.scale(dpr, dpr); context.clearRect(0, 0, width, height);
+    context.fillStyle = "#687684"; context.font = "13px sans-serif"; context.textAlign = "center";
+    context.fillText(message, width / 2, height / 2); context.textAlign = "left";
+    canvas.onmousemove = null; canvas.onmouseleave = null;
+  }
 
   document.addEventListener("click", event => {
     const range = event.target.closest("[data-range]");
     if (!range || runtimeState.source !== "api") return;
     const asset = detailType === "index" ? indices[detailIndex] : stocks[detailIndex];
     loadAssetDetail(asset, Number(range.dataset.range)).then(redrawActivePriceChart).catch(error => console.warn("历史数据加载失败：", error));
+  });
+
+  document.addEventListener("trend-dashboard-range-change", event => {
+    if (runtimeState.source !== "api") return;
+    const {months, type, index} = event.detail || {};
+    const asset = type === "index" ? indices[index] : stocks[index];
+    if (!asset) return;
+    loadAssetDetail(asset, months).then(redrawActivePriceChart).catch(error => console.warn("历史数据加载失败：", error));
   });
 
   document.addEventListener("click", async event => {
@@ -416,5 +722,6 @@
     runtimeState.source = "mock";
     setSourceStatus("mock", "已退出 · 本地 Mock");
   });
+  bindResearchTooltips();
   boot();
 })();

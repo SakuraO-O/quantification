@@ -175,6 +175,26 @@ class SupabaseStore:
             data={"dataset_key": dataset_key, "severity": severity, "issue_type": issue_type, "details": details},
         )
 
+    def save_ingestion_source_record(self, row: dict) -> str:
+        """Save compact provenance metadata, never a source response body."""
+
+        identity = {
+            "dataset_key": f"eq.{row['dataset_key']}",
+            "source": f"eq.{row['source']}",
+            "source_record_id": f"eq.{row['source_record_id']}",
+            "content_hash": f"eq.{row['content_hash']}",
+        }
+        existing = self.select(
+            "ingestion_source_records", select="ingestion_source_record_id", filters=identity, limit=1
+        )
+        if existing:
+            return existing[0]["ingestion_source_record_id"]
+        rows = self._request(
+            "POST", "/rest/v1/ingestion_source_records", data=row,
+            headers={"Prefer": "return=representation"},
+        )
+        return rows[0]["ingestion_source_record_id"]
+
     def history(self, security_id: str, start_date: str | None = None) -> list[dict]:
         filters = {"security_id": f"eq.{security_id}"}
         if start_date:
@@ -226,7 +246,7 @@ class SupabaseStore:
     def valuation_history(self, security_id: str, valuation_type: str = "pe") -> list[dict]:
         return self.select(
             "valuation_daily",
-            select="trade_date,value",
+            select="trade_date,value,source,methodology",
             filters={"security_id": f"eq.{security_id}", "valuation_type": f"eq.{valuation_type}"},
             order="trade_date.asc",
         )

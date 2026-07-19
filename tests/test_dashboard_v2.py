@@ -43,6 +43,7 @@ class DashboardV2Test(unittest.TestCase):
         self.assertIn('from("source_documents")', self.api)
         self.assertIn(".limit(160)", self.api)
         self.assertNotIn("storage.", self.api)
+        self.assertIn('.eq("market", String(asset.market ?? ""))', self.api)
 
     def test_edge_functions_support_new_api_keys(self):
         self.assertIn("SUPABASE_PUBLISHABLE_KEYS", self.shared)
