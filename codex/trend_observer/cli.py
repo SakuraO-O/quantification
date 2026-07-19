@@ -18,6 +18,7 @@ from .config import (
 from .dashboard_versions import DashboardPublisher
 from .dispatch import dispatch_morning_report
 from .feishu import post_feishu_message
+from .fundamental_sources import FundamentalSynchronizer
 from .ingestion import MarketSynchronizer
 from .market_valuation import run_market_valuation
 from .outputs import export_all, format_markdown
@@ -27,7 +28,7 @@ from .supabase_store import SupabaseStore
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="趋势观察台数据管道。")
-    parser.add_argument("command", nargs="?", default="legacy-export", choices=("legacy-export", "bootstrap", "sync-market", "sync-valuation", "publish-dashboard", "dispatch-feishu"))
+    parser.add_argument("command", nargs="?", default="legacy-export", choices=("legacy-export", "bootstrap", "sync-market", "sync-valuation", "sync-fundamentals", "publish-dashboard", "dispatch-feishu"))
     parser.add_argument("--notify", action="store_true", help="仅兼容旧 JSON 流程：导出后发送飞书。")
     parser.add_argument("--market", choices=("CN", "HK", "US"), help="sync-market 时仅同步指定市场。")
     parser.add_argument("--force", action="store_true", help="忽略当日水位并进行重叠补抓。")
@@ -96,6 +97,10 @@ def main(argv=None):
                 assets = [asset for asset in active_assets() if not args.market or asset["market"] == args.market]
                 for item in MarketSynchronizer(store).sync_valuations(assets, force=args.force, trigger_type=args.trigger):
                     print(f"估值 {item.asset}｜{item.status}｜接收 {item.rows_received} 行｜变化 {item.rows_changed} 行｜{item.message}")
+            elif args.command == "sync-fundamentals":
+                run_bootstrap(store)
+                for item in FundamentalSynchronizer(store).sync_assets(active_assets(), force=args.force, trigger_type=args.trigger):
+                    print(f"基本面 {item.asset}｜{item.status}｜接收 {item.rows_received} 项｜变化 {item.rows_changed} 项｜{item.message}")
             elif args.command == "publish-dashboard":
                 version = DashboardPublisher(store).publish()
                 print(f"已发布看板版本：{version['dashboard_version_id']}")
