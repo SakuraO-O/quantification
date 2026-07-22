@@ -99,6 +99,7 @@ class FundamentalSourceTest(unittest.TestCase):
         event = store.tables["dividend_events"][0]
         self.assertEqual(event["fiscal_year"], 2025)
         self.assertEqual(event["cash_dividend_per_share"], 1)
+        self.assertNotIn("document_key", event)
         assessment = store.tables["fundamental_assessments"][0]
         self.assertEqual(assessment["report_period"], date(2025, 12, 31))
         self.assertEqual(assessment["dividend_safety_status"], "稳健")
