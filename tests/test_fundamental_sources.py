@@ -59,6 +59,8 @@ class MemoryStore:
         return []
 
     def save_watermark(self, row): self.watermarks.append(row)
+    def insert(self, table, rows):
+        return self.upsert(table, rows, "")
     def get_watermark(self, key):
         return next((row for row in reversed(self.watermarks) if row["dataset_key"] == key), None)
     def record_quality_issue(self, *args): self.issues.append(args)
@@ -147,6 +149,27 @@ class FundamentalSourceTest(unittest.TestCase):
         with self.assertRaises(SourceTimeoutError):
             with _source_timeout(0.02):
                 time.sleep(0.1)
+
+    def test_nat_dividend_date_is_treated_as_missing_not_a_float_year(self):
+        asset = next(item for item in active_assets() if item["symbol"] == "sh600900")
+        dividends = pd.DataFrame([{"公告日期": "2026-06-01", "派息": 10, "进度": "预案", "除权除息日": pd.NaT}])
+        store = MemoryStore()
+        sync = FundamentalSynchronizer(store, FundamentalSource(lambda _: finance_frame(), lambda _: dividends))
+        self.assertEqual(sync.sync_asset(asset, today=date(2026, 7, 19), force=True).status, "succeeded")
+        event = store.tables["dividend_events"][0]
+        self.assertEqual(event["fiscal_year"], 2025)
+        self.assertIsNone(event["ex_date"])
+
+    def test_all_failed_run_is_marked_partial_for_cli_to_surface(self):
+        store = MemoryStore()
+        sync = FundamentalSynchronizer(store, FundamentalSource(
+            lambda _: (_ for _ in ()).throw(RuntimeError("source down")),
+            lambda _: pd.DataFrame(),
+        ))
+        results = sync.sync_assets(active_assets(), today=date(2026, 7, 19), force=True)
+        self.assertTrue(results)
+        self.assertTrue(all(item.status == "failed" for item in results))
+        self.assertEqual(store.finished[1], "partial")
 
 
 if __name__ == "__main__":

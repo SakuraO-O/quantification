@@ -99,8 +99,11 @@ def main(argv=None):
                     print(f"估值 {item.asset}｜{item.status}｜接收 {item.rows_received} 行｜变化 {item.rows_changed} 行｜{item.message}")
             elif args.command == "sync-fundamentals":
                 run_bootstrap(store)
-                for item in FundamentalSynchronizer(store).sync_assets(active_assets(), force=args.force, trigger_type=args.trigger):
+                results = FundamentalSynchronizer(store).sync_assets(active_assets(), force=args.force, trigger_type=args.trigger)
+                for item in results:
                     print(f"基本面 {item.asset}｜{item.status}｜接收 {item.rows_received} 项｜变化 {item.rows_changed} 项｜{item.message}")
+                if results and all(item.status == "failed" for item in results):
+                    raise RuntimeError("全部股票基本面同步失败，请检查 ingestion_run_items 与 data_quality_issues。")
             elif args.command == "publish-dashboard":
                 version = DashboardPublisher(store).publish()
                 print(f"已发布看板版本：{version['dashboard_version_id']}")

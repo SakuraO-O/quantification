@@ -73,10 +73,13 @@ class _source_timeout:
 
 
 def _date(value: Any) -> date | None:
-    if value is None or (isinstance(value, float) and math.isnan(value)):
+    # ``pandas.NaT`` is not a float and still exposes ``date()``/``year``;
+    # passing it through produces a NaN fiscal year and breaks event writes.
+    if value is None or str(value) in {"NaT", "nan", "None"}:
         return None
     if hasattr(value, "date"):
-        return value.date()
+        result = value.date()
+        return None if str(result) in {"NaT", "nan", "None"} else result
     try:
         return date.fromisoformat(str(value)[:10])
     except (TypeError, ValueError):
@@ -253,8 +256,12 @@ class FundamentalSynchronizer:
         document_ids = {(row["source_record_id"], row["content_hash"]): row["source_document_id"] for row in saved_documents}
         existing = {row["announcement_id"] for row in self.store.select("dividend_events", select="announcement_id", filters={"security_id": f"eq.{sid}"})}
         rows = [{**item, "source_document_id": document_ids[item.pop("document_key")]} for item in candidates]
-        self.store.upsert("dividend_events", rows, "security_id,fiscal_year,event_stage,announcement_id")
-        return len(rows), sum(row["announcement_id"] not in existing for row in rows)
+        new_rows = [row for row in rows if row["announcement_id"] not in existing]
+        # Events are immutable.  Avoid PostgREST's composite-conflict path
+        # (which currently returns 400 in this project) after idempotently
+        # excluding existing announcement IDs above.
+        self.store.insert("dividend_events", new_rows)
+        return len(rows), len(new_rows)
 
     @staticmethod
     def _latest_by_metric(rows: list[dict]) -> tuple[date | None, dict[str, float]]:

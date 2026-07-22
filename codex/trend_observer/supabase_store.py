@@ -107,6 +107,22 @@ class SupabaseStore:
             headers={"Prefer": "resolution=merge-duplicates,return=representation"},
         ) or []
 
+    def insert(self, table: str, rows: list[dict] | dict) -> list[dict]:
+        """Insert rows without an ``on_conflict`` clause.
+
+        Used for immutable event records when a PostgREST schema cache cannot
+        resolve a newly created composite unique constraint.  Callers must
+        query and exclude existing identities first.
+        """
+
+        payload = rows if isinstance(rows, list) else [rows]
+        if not payload:
+            return []
+        return self._request(
+            "POST", f"/rest/v1/{table}", data=payload,
+            headers={"Prefer": "return=representation"},
+        ) or []
+
     def select(self, table: str, *, select: str = "*", filters: dict[str, str] | None = None, order: str | None = None, limit: int | None = None) -> list[dict]:
         params: dict[str, str] = {"select": select}
         params.update(filters or {})
