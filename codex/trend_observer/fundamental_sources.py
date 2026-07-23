@@ -255,7 +255,15 @@ class FundamentalSynchronizer:
         saved_documents = self.store.upsert("source_documents", documents, "source,source_record_id,content_hash")
         document_ids = {(row["source_record_id"], row["content_hash"]): row["source_document_id"] for row in saved_documents}
         existing = {row["announcement_id"] for row in self.store.select("dividend_events", select="announcement_id", filters={"security_id": f"eq.{sid}"})}
-        rows = [{**item, "source_document_id": document_ids[item.pop("document_key")]} for item in candidates]
+        # Remove the in-memory join key before serializing the event.  Sending
+        # it to PostgREST would make it look for a non-existent
+        # ``dividend_events.document_key`` column and reject the whole batch.
+        rows = []
+        for item in candidates:
+            payload = dict(item)
+            document_key = payload.pop("document_key")
+            payload["source_document_id"] = document_ids[document_key]
+            rows.append(payload)
         new_rows = [row for row in rows if row["announcement_id"] not in existing]
         # Events are immutable.  Avoid PostgREST's composite-conflict path
         # (which currently returns 400 in this project) after idempotently
