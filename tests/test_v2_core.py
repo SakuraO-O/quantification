@@ -14,7 +14,7 @@ from codex.trend_observer.dashboard_versions import DashboardPublisher
 from codex.trend_observer.feishu import format_dashboard_version_message
 from codex.trend_observer.fundamentals import assess_high_dividend_fundamentals
 from codex.trend_observer.dispatch import dispatch_morning_report
-from codex.trend_observer.style_compass import calculate_style_compass, style_recommendation
+from codex.trend_observer.style_compass import calculate_style_compass, style_recommendation, style_recommendation_details
 from codex.trend_observer.supabase_store import payload_hash
 
 
@@ -47,6 +47,10 @@ class V2CoreTest(unittest.TestCase):
             "仅持有",
         )
         self.assertEqual(
+            determine_index_investment_advice({"long_trend": "长期修复", "mid_trend": "中期修复", "pe_percentile": 95}),
+            "观察等待",
+        )
+        self.assertEqual(
             determine_index_investment_advice({"long_trend": "长期下跌", "mid_trend": "中期下跌", "pe_percentile": 10}),
             "暂停参与",
         )
@@ -59,13 +63,39 @@ class V2CoreTest(unittest.TestCase):
         self.assertEqual(rows["债券"]["deviation_state"], "明显低配")
         self.assertEqual(rows["海外"]["theoretical_adjustment_amount"], 0.0)
 
+    def test_allocation_deviation_state_thresholds(self):
+        targets = {"海外": 20, "红利": 20, "成长": 20, "债券": 20, "大宗商品": 10, "现金": 10}
+        actuals = {"海外": 200, "红利": 230, "成长": 140, "债券": 220, "大宗商品": 100, "现金": 100}
+        rows = {row["category"]: row for row in calculate_allocation(targets, actuals)}
+        self.assertEqual(rows["海外"]["deviation_state"], "均衡")
+        self.assertEqual(rows["红利"]["deviation_state"], "关注")
+        self.assertEqual(rows["成长"]["deviation_state"], "明显低配")
+        self.assertIn("deviation", rows["海外"])
+        self.assertNotIn("deviation_percentage_points", rows["海外"])
+
     def test_style_compass_uses_all_three_periods(self):
         left = pd.DataFrame({"date": pd.date_range("2025-01-01", periods=121), "close": list(range(100, 221))})
         right = pd.DataFrame({"date": pd.date_range("2025-01-01", periods=121), "close": [100 + index * 0.5 for index in range(121)]})
         result = calculate_style_compass(left, right)
         self.assertGreater(result["score"], 20)
         self.assertEqual(result["direction"], "偏左")
-        self.assertEqual(style_recommendation("偏左", "可新增", "仅持有"), "新增资金优先关注左侧资产")
+        self.assertEqual(style_recommendation("偏左", "可新增", "仅持有", 50, 80), "新增资金优先关注左侧资产")
+
+    def test_style_recommendation_applies_pe_constraint_and_reason(self):
+        self.assertEqual(
+            style_recommendation_details("偏右", "仅持有", 20, "可新增", 50)["recommendation"],
+            "新增资金优先关注右侧资产",
+        )
+        high_pe = style_recommendation_details("偏右", "仅持有", 20, "可新增", 50.1)
+        self.assertEqual(high_pe["recommendation"], "暂不倾斜")
+        self.assertIn("高于50%", high_pe["recommendation_reason"])
+        missing_pe = style_recommendation_details("偏左", "可新增", None, "仅持有", 20)
+        self.assertEqual(missing_pe["recommendation"], "暂不倾斜")
+        self.assertIn("PE百分位缺失", missing_pe["recommendation_reason"])
+        self.assertEqual(
+            style_recommendation_details("数据不足", None, None, None, None)["recommendation"],
+            "数据不足",
+        )
 
     def test_bank_assessment_does_not_require_free_cashflow(self):
         assessment = assess_high_dividend_fundamentals(
@@ -83,6 +113,25 @@ class V2CoreTest(unittest.TestCase):
         publisher = (root / "codex/trend_observer/dashboard_versions.py").read_text(encoding="utf-8")
         payload_block = publisher.split("payload = {", 1)[1].split("completeness =", 1)[0]
         self.assertNotIn("generated_at", payload_block)
+
+    def test_enum_migration_normalizes_by_percentile_without_chained_labels(self):
+        root = Path(__file__).resolve().parents[1]
+        migration = (root / "supabase/migrations/20260726010004_normalize_dashboard_enums.sql").read_text(encoding="utf-8")
+        self.assertIn("when pe_percentile >= 90 then '极高估'", migration)
+        self.assertIn("when pe_percentile >= 70 then '高估'", migration)
+        self.assertNotIn("when '高估' then '极高估'", migration)
+        self.assertIn("intentionally safe to rerun", migration)
+        self.assertIn(r"'\1高估'", migration)
+        self.assertNotIn(r"'\\1高估'", migration)
+
+    def test_allocation_test_mirror_matches_database_rpc_boundaries(self):
+        root = Path(__file__).resolve().parents[1]
+        mirror = (root / "codex/trend_observer/allocation.py").read_text(encoding="utf-8")
+        rpc = (root / "supabase/migrations/20260726022358_compute_portfolio_allocation.sql").read_text(encoding="utf-8")
+        self.assertIn("Test-only mirror", mirror)
+        self.assertIn("when abs(deviation) <= 2 then '均衡'", rpc)
+        self.assertIn("when abs(deviation) <= 5 then '关注'", rpc)
+        self.assertIn("'deviation'", rpc)
 
     def test_delayed_asset_publishes_dashboard_with_current_fields_blank(self):
         class Store:
@@ -118,6 +167,11 @@ class V2CoreTest(unittest.TestCase):
             def history(self, security_id):
                 return []
 
+            def rpc(self, function):
+                if function != "compute_portfolio_allocation":
+                    raise AssertionError(function)
+                return None
+
             def publish_dashboard_version(self, payload, **kwargs):
                 self.published = {"payload": payload} | kwargs
                 return self.published
@@ -130,7 +184,28 @@ class V2CoreTest(unittest.TestCase):
         self.assertEqual(spx["trade_date"], "2026-07-17")
         self.assertEqual(spx["last_valid_trade_date"], "2026-07-16")
         self.assertIsNone(spx["close"])
+        self.assertEqual(len(version["payload"]["style_compass"]), 3)
+        self.assertTrue(all(row["direction"] == "数据不足" for row in version["payload"]["style_compass"]))
         self.assertIn("SPX", format_dashboard_version_message(version))
+
+    def test_v2_stock_message_includes_dashboard_fields(self):
+        message = format_dashboard_version_message(
+            {
+                "payload": {
+                    "latest_market_date": "2026-07-24",
+                    "assets": [
+                        {
+                            "asset_type": "股票", "name": "示例股票", "symbol": "000001", "trade_date": "2026-07-24",
+                            "close": 10.2, "daily_return": 0.0123, "short_trend": "短期强势", "mid_trend": "中期上升",
+                            "long_trend": "长期上升", "overall_status": "强趋势", "dividend_yield": 5.1,
+                        }
+                    ],
+                }
+            }
+        )
+        self.assertIn("示例股票（000001）｜2026-07-24｜收盘 10.20｜涨幅 +1.23%", message)
+        self.assertIn("趋势：短期强势｜中期上升｜长期上升", message)
+        self.assertIn("综合：✅强趋势｜股息率：5.10%", message)
 
     def test_new_secret_key_is_not_sent_as_bearer_jwt(self):
         from codex.trend_observer.supabase_store import SupabaseSettings, SupabaseStore

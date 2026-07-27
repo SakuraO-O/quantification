@@ -61,6 +61,13 @@ class DashboardV2Test(unittest.TestCase):
         self.assertIn("saveAllocation", self.runtime)
         self.assertIn("__trendDashboardRuntime.saveAllocation", self.html)
 
+    def test_dashboard_supports_granular_fundamentals_permission(self):
+        self.assertIn('user.app_metadata?.permissions', self.api)
+        self.assertIn('"view_fundamentals"', self.api)
+        self.assertIn('fundamentals_access: false', self.api)
+        self.assertIn('runtimeState.permissions.has("view_fundamentals")', self.runtime)
+        self.assertIn('data-pane="annual"', self.runtime)
+
     def test_pages_bundle_contains_runtime_scripts_and_schedule_reaches_0930(self):
         pages = (self.root / ".github/workflows/deploy_dashboard.yml").read_text(encoding="utf-8")
         legacy = (self.root / ".github/workflows/daily_trend_observer.yml").read_text(encoding="utf-8")
@@ -71,11 +78,88 @@ class DashboardV2Test(unittest.TestCase):
         self.assertNotIn("deploy-pages", legacy)
         self.assertIn('"0,10,20,30,40,50 0 * * 1-6"', pipeline)
         self.assertIn('"0,10,20,30 1 * * 1-6"', pipeline)
+        self.assertIn("sync-valuation --market CN --force", pipeline)
+        self.assertNotIn("sync-market --market CN --force", pipeline)
+        fundamentals_start = pipeline.index('elif [ "$SCHEDULE" = "30 23 * * *" ]; then')
+        dispatch_window_start = pipeline.index("          else\n            python -B -m codex.trend_observer.cli publish-dashboard")
+        fundamentals_block = pipeline[fundamentals_start:dispatch_window_start]
+        self.assertIn("python -B -m codex.trend_observer.cli sync-fundamentals", fundamentals_block)
+        self.assertIn("python -B -m codex.trend_observer.cli publish-dashboard", fundamentals_block)
 
     def test_dashboard_publisher_uses_store_select_contract(self):
         publisher = (self.root / "codex/trend_observer/dashboard_versions.py").read_text(encoding="utf-8")
         self.assertNotIn("\n            columns=", publisher)
         self.assertIn('select="fiscal_year,cash_dividend_per_share', publisher)
+
+    def test_modal_chart_tooltips_render_in_the_dialog_top_layer(self):
+        # Index and stock price views share drawApiPriceChart; stock research
+        # charts use bindResearchTooltips. Both must use the dialog-aware host.
+        self.assertIn("drawApiPriceChart", self.runtime)
+        self.assertIn("bindResearchTooltips", self.runtime)
+        self.assertIn('canvas.closest("dialog[open]") || canvas.closest("dialog") || document.body', self.runtime)
+        self.assertIn('target.closest("dialog[open]") || target.closest("dialog") || document.body', self.runtime)
+        self.assertIn('window.innerWidth - bounds.width - 8', self.runtime)
+        self.assertIn('数据：本地 Mock', self.runtime)
+        self.assertIn('z-index:1000', self.html)
+
+    def test_detail_history_uses_loading_state_before_declaring_no_data(self):
+        self.assertIn("historyRanges: new Map()", self.runtime)
+        self.assertIn("detailErrors: new Map()", self.runtime)
+        self.assertEqual(self.runtime.count('drawLoadingChart(canvas, "正在加载")'), 2)
+        self.assertIn("function drawLoadingChart", self.runtime)
+
+    def test_open_detail_locks_page_scroll_to_modal_content(self):
+        self.assertIn("body:has(dialog[open]){overflow:hidden}", self.html)
+        self.assertIn(".modal-body{max-height:calc(90vh - 72px)", self.html)
+        self.assertIn("overscroll-behavior:contain", self.html)
+
+    def test_api_and_dashboard_use_canonical_display_enums(self):
+        self.assertIn('value="高估">高估</label>', self.html)
+        self.assertIn('value="极高估">极高估</label>', self.html)
+        self.assertNotIn('"偏高"', self.api)
+        self.assertIn('rpc("compute_portfolio_allocation")', self.api)
+        self.assertNotIn('Math.abs(deviation)', self.api)
+        self.assertNotIn('"接近目标"', self.runtime)
+
+    def test_dashboard_renders_server_owned_style_and_allocation_rules(self):
+        allocation_migration = (self.root / "supabase/migrations/20260726022358_compute_portfolio_allocation.sql").read_text(encoding="utf-8")
+        self.assertIn("compute_portfolio_allocation", allocation_migration)
+        self.assertIn("'deviation_state'", allocation_migration)
+        self.assertIn("'summary'", allocation_migration)
+        self.assertIn("recommendationReason: item.recommendation_reason", self.runtime)
+        self.assertIn("const recommendation = pair.recommendation", self.runtime)
+        self.assertIn("runtimeState.allocation?.summary?.text", self.runtime)
+        self.assertNotIn("winnerPe", self.runtime)
+        self.assertNotIn("Math.abs(deviation) <=", self.runtime)
+
+    def test_login_wait_keeps_mock_status_explicit(self):
+        self.assertIn('setSourceStatus("mock", "本地 Mock · 登录后读取生产数据")', self.runtime)
+        self.assertLess(
+            self.runtime.index('setSourceStatus("mock", "本地 Mock · 登录后读取生产数据")'),
+            self.runtime.index("await window.TrendDashboardAuth.ensureAuthenticated()"),
+        )
+
+    def test_filter_enums_and_mock_focus_follow_dashboard_rules(self):
+        self.assertIn('value="暂停参与">暂停参与</label>', self.html)
+        self.assertIn('value="趋势分歧">趋势分歧</label>', self.html)
+        self.assertIn('value="下跌通道">下跌通道</label>', self.html)
+        self.assertIn('value="暂停关注">暂停关注</label>', self.html)
+        self.assertNotIn("const data=[{type:'index'", self.html)
+        self.assertIn("const candidates = [", self.runtime)
+        self.assertIn("const statusMetric = focusStatuses.has(item.asset.status)", self.runtime)
+
+    def test_list_filters_are_multi_select(self):
+        self.assertEqual(self.html.count('class="filter-select"'), 6)
+        self.assertIn('class="filter-tag"', self.html)
+        self.assertIn('function initFilterSelects()', self.html)
+        self.assertIn("clear.title='清空筛选'", self.html)
+        self.assertIn("[...node.querySelectorAll('input:checked')].forEach(input=>input.checked=false)", self.html)
+        self.assertIn("function selectedFilters(selector)", self.html)
+        self.assertIn("adv.includes(a.advice)", self.html)
+
+    def test_only_one_local_stock_detail_fallback_remains(self):
+        self.assertEqual(self.html.count("function stockDetail(a)"), 1)
+        self.assertNotIn("季度基本面趋势</h4><small>最近8个季度 · 原型示例", self.runtime)
 
 
 if __name__ == "__main__":

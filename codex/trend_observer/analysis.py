@@ -52,7 +52,7 @@ def determine_short_trend(row):
     if row["close"] > row["MA20"] and row["ma20_slope_5d"] > 0.01:
         return "短期强势"
     if row["close"] < row["MA20"] and row["ma20_slope_5d"] < -0.01:
-        return "短期转弱"
+        return "短期下跌"
     return "短期震荡"
 
 
@@ -106,8 +106,8 @@ def valuation_status(value):
     if value < 70:
         return "合理"
     if value < 90:
-        return "偏高"
-    return "高估"
+        return "高估"
+    return "极高估"
 
 
 def determine_index_investment_advice(row):
@@ -123,8 +123,6 @@ def determine_index_investment_advice(row):
     if row.get("long_trend") in {None, "", "数据不足"} or row.get("mid_trend") in {None, "", "数据不足"}:
         return "数据不足"
     percentile = row.get("pe_percentile")
-    if pd.notna(percentile) and percentile >= 90:
-        return "仅持有"
     if row["long_trend"] == "长期上升" and row["mid_trend"] == "中期上升" and pd.notna(percentile) and percentile < 35:
         return "优先新增"
     if (
@@ -165,7 +163,7 @@ def pe_percentile_period(frame):
 
 def build_signals(row):
     signals = [row["overall_status"]]
-    for tag in ["长期下跌", "中期下跌", "长期转弱", "短期强势", "短期转弱"]:
+    for tag in ["长期下跌", "中期下跌", "长期转弱", "短期强势", "短期下跌"]:
         if tag in {row["long_trend"], row["mid_trend"], row["short_trend"]}:
             signals.append(tag)
     if row["asset_type"] == "指数":

@@ -40,10 +40,11 @@ supabase functions deploy portfolio-config
 ```bash
 python -B -m codex.trend_observer.cli bootstrap
 python -B -m codex.trend_observer.cli sync-market --market CN
+python -B -m codex.trend_observer.cli sync-valuation --market CN
 python -B -m codex.trend_observer.cli publish-dashboard
 ```
 
-启用资产清单固定为 **12 个指数和当前 9 只股票**。`sync-market` 会读取数据水位，正常情况下只请求新增日期及向前重叠的两个交易日；`--force` 仅用于补抓或修订检查。
+启用资产清单固定为 **12 个指数和当前 9 只股票**。`sync-market` 仅同步行情；`sync-valuation` 独立同步指数估值。二者都会读取数据水位，正常情况下只请求新增日期及向前重叠的两个交易日；`--force` 仅用于补抓或修订检查。
 
 飞书派发只读取完整的 `dashboard_versions`，周一至周六在 08:00—09:30 每 10 分钟检查；同一内容版本只成功派发一次，周日不发送：
 
@@ -51,7 +52,19 @@ python -B -m codex.trend_observer.cli publish-dashboard
 python -B -m codex.trend_observer.cli dispatch-feishu
 ```
 
-V2 自动任务位于 [.github/workflows/trend_observer_v2.yml](.github/workflows/trend_observer_v2.yml)。未配置 Supabase 密钥时会安全跳过，不会回退成全量抓取或发送旧通知。
+V2 自动任务位于 [.github/workflows/trend_observer_v2.yml](.github/workflows/trend_observer_v2.yml)。07:30 的港股、海外行情、估值与股票基本面同步完成后会立即发布看板版本；08:00—09:30 窗口负责检查版本并派发飞书。未配置 Supabase 密钥时会安全跳过，不会回退成全量抓取或发送旧通知。
+
+### 上线检查清单
+
+一次包含数据库或 Edge 变更的上线，按下面顺序完成：
+
+1. 在仓库根目录执行 `supabase db push`，使事实表、枚举迁移和 `compute_portfolio_allocation()` 配置计算函数进入正式项目；
+2. 部署两个函数：`supabase functions deploy dashboard-api` 与 `supabase functions deploy portfolio-config`；
+3. 将看板代码合入 `main`，由 Pages 部署工作流发布静态页面；
+4. 首次或修复基本面后，手动运行 `sync-fundamentals`（需要补抓时选择 `--force`），随后运行 `publish-dashboard`；
+5. 验证 `fundamental_assessments`、`financial_facts` 与最新 `dashboard_versions.payload` 均有 9 只股票的有效数据，并在浏览器确认 `/overview` 的 `allocation` 与 `/asset/{symbol}` 的基本面字段正常返回。
+
+配置偏离、理论调整额及摘要由数据库 RPC 实时计算；若迁移尚未部署，Edge API 不应以浏览器计算或旧版本快照代替该结果。
 
 ## 迁移期：兼容 JSON 导出
 
@@ -59,7 +72,7 @@ V2 自动任务位于 [.github/workflows/trend_observer_v2.yml](.github/workflow
 python -B -m codex.trend_observer.cli legacy-export
 ```
 
-兼容旧入口：
+兼容旧单体入口（仅人工核对，不得配置为定时任务）：
 
 ```bash
 python codex/trend_observer.py

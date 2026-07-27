@@ -17,7 +17,17 @@ Deno.serve(async (request) => {
   if (!authHeader) return json(request, { error: "unauthorized" }, 401);
   const authorized = await authorizedClients(authHeader, ["viewer", "editor"]);
   if ("error" in authorized) return json(request, { error: authorized.error }, authorized.status);
-  const { admin } = authorized;
+  const { admin, user, role } = authorized;
+  // A named permissions array is the authoritative granular entitlement.  The
+  // role fallback keeps the existing single-user deployment working until an
+  // administrator explicitly adds app_metadata.permissions to a user.
+  const configuredPermissions = user.app_metadata?.permissions;
+  const permissions = new Set(
+    Array.isArray(configuredPermissions)
+      ? configuredPermissions.map(String)
+      : ["view_dashboard", "view_fundamentals", ...(role === "editor" ? ["edit_configuration"] : [])],
+  );
+  const canViewFundamentals = permissions.has("view_fundamentals");
   const { data: version, error } = await admin
     .from("dashboard_versions")
     .select("dashboard_version_id,generated_at,latest_market_date,completeness,payload")
@@ -32,50 +42,11 @@ Deno.serve(async (request) => {
   const payload = version.payload as Record<string, unknown>;
   const assets = Array.isArray(payload.assets) ? payload.assets as Array<Record<string, unknown>> : [];
   if (path === "/overview") {
-    const { data: allocationRows, error: allocationError } = await admin
-      .from("portfolio_allocations")
-      .select("allocation_type,category,data_date,value,version,created_at")
-      .order("version", { ascending: false })
-      .order("data_date", { ascending: false });
+    // The RPC is the sole source for allocation ratios, thresholds, and text.
+    // Do not derive these values from a dashboard-version snapshot in Edge.
+    const { data: allocation, error: allocationError } = await admin.rpc("compute_portfolio_allocation");
     if (allocationError) return json(request, { error: "allocation_query_failed" }, 500);
-    const latest = new Map<string, Record<string, unknown>>();
-    for (const row of allocationRows ?? []) {
-      const key = `${row.allocation_type}:${row.category}`;
-      if (!latest.has(key)) latest.set(key, row);
-    }
-    const categories = ["海外", "红利", "成长", "债券", "大宗商品", "现金"];
-    let allocation = payload.allocation ?? null;
-    if (latest.size === categories.length * 2) {
-      const actualTotal = categories.reduce((sum, category) => sum + Number(latest.get(`actual_amount:${category}`)?.value ?? 0), 0);
-      const rows = categories.map((category) => {
-        const target = Number(latest.get(`target_ratio:${category}`)?.value ?? 0);
-        const amount = Number(latest.get(`actual_amount:${category}`)?.value ?? 0);
-        const actual = actualTotal > 0 ? amount / actualTotal * 100 : 0;
-        const deviation = actual - target;
-        return {
-          category,
-          target_data_date: latest.get(`target_ratio:${category}`)?.data_date,
-          actual_data_date: latest.get(`actual_amount:${category}`)?.data_date,
-          target_ratio: target,
-          actual_amount: amount,
-          actual_ratio: actual,
-          deviation,
-          deviation_state: deviation >= 5 ? "明显超配" : deviation <= -5 ? "明显低配" : "接近目标",
-          theoretical_adjustment_amount: actualTotal * target / 100 - amount,
-        };
-      });
-      allocation = {
-        rows,
-        updated_at: [...latest.values()].map((row) => String(row.created_at ?? "")).sort().at(-1) ?? null,
-        data_date: [...latest.values()].map((row) => String(row.data_date ?? "")).sort().at(-1) ?? null,
-        summary: { total_amount: actualTotal },
-        versions: {
-          target_ratio: latest.get(`target_ratio:${categories[0]}`)?.version,
-          actual_amount: latest.get(`actual_amount:${categories[0]}`)?.version,
-        },
-      };
-    }
-    return json(request, { version: version.dashboard_version_id, generated_at: version.generated_at, latest_market_date: version.latest_market_date, completeness: version.completeness, ...payload, allocation });
+    return json(request, { version: version.dashboard_version_id, generated_at: version.generated_at, latest_market_date: version.latest_market_date, completeness: version.completeness, permissions: [...permissions], ...payload, allocation });
   }
   if (path === "/indexes") return json(request, { version: version.dashboard_version_id, assets: assets.filter((asset) => asset.asset_type === "指数") });
   if (path === "/stocks") return json(request, { version: version.dashboard_version_id, assets: assets.filter((asset) => asset.asset_type === "股票") });
@@ -91,27 +62,21 @@ Deno.serve(async (request) => {
     const range = url.searchParams.get("range") ?? "1y";
     const months = ({ "3m": 3, "6m": 6, "1y": 12, "3y": 36, "5y": 60 } as Record<string, number>)[range] ?? 12;
     const start = new Date(); start.setMonth(start.getMonth() - months);
-    const [historyResult, assessmentResult, factsResult, dividendsResult, industryResult, sourcesResult] = await Promise.all([
-      admin.from("asset_daily_signals")
-        .select("trade_date,close,ma20,ma60,ma120,ma200,short_trend,mid_trend,long_trend,pe,pe_percentile,valuation_status")
-        .eq("security_id", security.security_id).gte("trade_date", start.toISOString().slice(0, 10)).order("trade_date"),
-      admin.from("fundamental_assessments")
-        .select("report_period,dividend_safety_status,operating_quality_status,cash_reinvestment_status,capital_structure_status,fundamental_status,evidence,main_risk,calculation_version,created_at")
-        .eq("security_id", security.security_id).order("report_period", { ascending: false }).order("created_at", { ascending: false }).limit(1).maybeSingle(),
-      admin.from("financial_facts")
-        .select("report_period,metric_code,value,unit,period_type,announcement_date,version")
-        .eq("security_id", security.security_id).eq("is_current", true).order("report_period", { ascending: false }).limit(160),
-      admin.from("dividend_events")
-        .select("fiscal_year,event_stage,announcement_id,cash_dividend_per_share,cash_dividend_total,ex_date,payment_date,announcement_date")
-        .eq("security_id", security.security_id).order("fiscal_year", { ascending: false }).limit(20),
-      admin.from("industry_metric_values")
-        .select("period,metric_code,value,unit,confirmation_status,version")
-        .eq("security_id", security.security_id).eq("confirmation_status", "confirmed").order("period", { ascending: false }).limit(80),
-      admin.from("source_documents")
-        .select("source,source_record_id,title,document_type,report_period,announcement_date,document_url,content_hash,fetched_at")
-        .eq("security_id", security.security_id).order("announcement_date", { ascending: false }).limit(40),
+    const historyResult = await admin.from("asset_daily_signals")
+      .select("trade_date,close,ma20,ma60,ma120,ma200,short_trend,mid_trend,long_trend,pe,pe_percentile,valuation_status")
+      .eq("security_id", security.security_id).gte("trade_date", start.toISOString().slice(0, 10)).order("trade_date");
+    if (historyResult.error) return json(request, { error: "asset_detail_query_failed" }, 500);
+    if (!canViewFundamentals) {
+      return json(request, { version: version.dashboard_version_id, asset, range, history: historyResult.data ?? [], fundamentals_access: false });
+    }
+    const [assessmentResult, factsResult, dividendsResult, industryResult, sourcesResult] = await Promise.all([
+      admin.from("fundamental_assessments").select("report_period,dividend_safety_status,operating_quality_status,cash_reinvestment_status,capital_structure_status,fundamental_status,evidence,main_risk,calculation_version,created_at").eq("security_id", security.security_id).order("report_period", { ascending: false }).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+      admin.from("financial_facts").select("report_period,metric_code,value,unit,period_type,announcement_date,version").eq("security_id", security.security_id).eq("is_current", true).order("report_period", { ascending: false }).limit(160),
+      admin.from("dividend_events").select("fiscal_year,event_stage,announcement_id,cash_dividend_per_share,cash_dividend_total,ex_date,payment_date,announcement_date").eq("security_id", security.security_id).order("fiscal_year", { ascending: false }).limit(20),
+      admin.from("industry_metric_values").select("period,metric_code,value,unit,confirmation_status,version").eq("security_id", security.security_id).eq("confirmation_status", "confirmed").order("period", { ascending: false }).limit(80),
+      admin.from("source_documents").select("source,source_record_id,title,document_type,report_period,announcement_date,document_url,content_hash,fetched_at").eq("security_id", security.security_id).order("announcement_date", { ascending: false }).limit(40),
     ]);
-    if ([historyResult, assessmentResult, factsResult, dividendsResult, industryResult, sourcesResult].some((result) => result.error)) {
+    if ([assessmentResult, factsResult, dividendsResult, industryResult, sourcesResult].some((result) => result.error)) {
       return json(request, { error: "asset_detail_query_failed" }, 500);
     }
     return json(request, {
@@ -119,6 +84,7 @@ Deno.serve(async (request) => {
       asset,
       range,
       history: historyResult.data ?? [],
+      fundamentals_access: true,
       fundamental_assessment: assessmentResult.data,
       financial_facts: factsResult.data ?? [],
       dividend_events: dividendsResult.data ?? [],

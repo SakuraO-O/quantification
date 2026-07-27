@@ -71,9 +71,6 @@ def run_market_sync(store: SupabaseStore, market: str | None, force: bool, trigg
     run_bootstrap(store)
     assets = [asset for asset in active_assets() if not market or asset["market"] == market]
     synchronizer = MarketSynchronizer(store)
-    valuation_results = synchronizer.sync_valuations(assets, force=force, trigger_type=trigger)
-    for item in valuation_results:
-        print(f"估值 {item.asset}｜{item.status}｜接收 {item.rows_received} 行｜变化 {item.rows_changed} 行｜{item.message}")
     results = synchronizer.sync_assets(assets, force=force, trigger_type=trigger)
     for item in results:
         print(f"{item.asset}｜{item.status}｜接收 {item.rows_received} 行｜变化 {item.rows_changed} 行｜{item.message}")

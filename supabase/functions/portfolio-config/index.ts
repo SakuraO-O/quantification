@@ -41,5 +41,7 @@ Deno.serve(async (request) => {
     p_created_by: user.id,
   });
   if (insertError) return json(request, { error: "allocation_save_failed" }, 500);
-  return json(request, { allocation_type: allocationType, data_date: dataDate, version });
+  const { data: allocation, error: allocationError } = await admin.rpc("compute_portfolio_allocation");
+  if (allocationError) return json(request, { error: "allocation_compute_failed" }, 500);
+  return json(request, { allocation_type: allocationType, data_date: dataDate, version, allocation });
 });

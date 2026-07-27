@@ -154,6 +154,11 @@ class SupabaseStore:
             headers={"Prefer": "return=representation"},
         ) or []
 
+    def rpc(self, function: str, params: dict | None = None) -> Any:
+        """Call a database-owned calculation through PostgREST RPC."""
+
+        return self._request("POST", f"/rest/v1/rpc/{function}", data=params or {})
+
     def seed_asset_master(self, securities: list[dict], mappings: list[dict]) -> None:
         self.upsert("securities", securities, "security_id")
         self.upsert("provider_symbol_map", mappings, "security_id,provider")

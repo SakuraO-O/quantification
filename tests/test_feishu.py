@@ -21,7 +21,7 @@ class FeishuTest(unittest.TestCase):
                     "asset_type": "指数",
                     "pe": 14.42,
                     "pe_percentile": 77.82,
-                    "valuation_status": "偏高",
+                    "valuation_status": "高估",
                     "error": "",
                 },
                 {
@@ -58,7 +58,7 @@ class FeishuTest(unittest.TestCase):
                     "date": "2026-06-19",
                     "close": 10.0,
                     "daily_return": -1.25,
-                    "short_trend": "短期转弱",
+                    "short_trend": "短期下跌",
                     "mid_trend": "中期下跌",
                     "long_trend": "长期下跌",
                     "overall_status": "下跌通道",
@@ -72,7 +72,7 @@ class FeishuTest(unittest.TestCase):
         self.assertIn("妙啊 | 趋势观察报告 | 2026-06-20 08:00", message)
         self.assertIn("沪深300（000300）｜2026-06-19｜收盘 4777.32｜昨日涨跌幅 +1.23%", message)
         self.assertIn("综合：✅健康上升", message)
-        self.assertIn("估值：PE 14.42｜百分位 77.82%｜偏高", message)
+        self.assertIn("估值：PE 14.42｜百分位 77.82%｜高估", message)
         self.assertIn("高息股票", message)
         self.assertIn("股息率：5.10%", message)
         self.assertIn("低息股票", message)

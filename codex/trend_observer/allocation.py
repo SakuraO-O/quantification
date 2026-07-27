@@ -1,14 +1,18 @@
-"""Six-category allocation calculations used by the dashboard API."""
+"""Test-only mirror of the database-owned allocation calculation contract.
+
+Production configuration is calculated exclusively by
+``public.compute_portfolio_allocation()`` in Supabase.  This small pure-Python
+mirror exists only to exercise boundary fixtures without requiring a database
+in unit tests; it must not be imported by publishing, Edge, or UI code.
+"""
 
 from __future__ import annotations
-
-from typing import Iterable
 
 from .config import PORTFOLIO_CATEGORIES
 
 
 def calculate_allocation(target_ratios: dict[str, float], actual_amounts: dict[str, float]) -> list[dict]:
-    """Calculate display-only allocation gaps without exposing total assets."""
+    """Mirror the RPC rows for unit-test fixtures, not production rendering."""
 
     unknown = (set(target_ratios) | set(actual_amounts)) - set(PORTFOLIO_CATEGORIES)
     if unknown:
@@ -41,19 +45,9 @@ def calculate_allocation(target_ratios: dict[str, float], actual_amounts: dict[s
                 "target_ratio": round(target_ratio, 1),
                 "actual_amount": round(actual_amount, 2),
                 "actual_ratio": round(actual_ratio, 1),
-                "deviation_percentage_points": round(deviation, 1),
+                "deviation": round(deviation, 1),
                 "deviation_state": state,
                 "theoretical_adjustment_amount": round(total_amount * target_ratio / 100 - actual_amount, 2),
             }
         )
     return rows
-
-
-def allocation_summary(rows: Iterable[dict]) -> str:
-    rows = list(rows)
-    underweight = min(rows, key=lambda row: row["deviation_percentage_points"])
-    overweight = max(rows, key=lambda row: row["deviation_percentage_points"])
-    return (
-        f"{overweight['category']}实际占比{overweight['actual_ratio']:.1f}%，较目标高{overweight['deviation_percentage_points']:.1f}个百分点；"
-        f"{underweight['category']}低配{abs(underweight['deviation_percentage_points']):.1f}个百分点，是当前最需要补足的类别。"
-    )
