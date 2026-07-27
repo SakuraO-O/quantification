@@ -19,7 +19,7 @@ class OutputsTest(unittest.TestCase):
                 {
                     "name": "沪深300",
                     "symbol": "000300",
-                    "signal_tags": "健康上升, 偏高",
+                    "signal_tags": "健康上升, 高估",
                     "date": pd.Timestamp("2026-06-20"),
                     "close": np.float64(1.25),
                 }
@@ -28,9 +28,8 @@ class OutputsTest(unittest.TestCase):
         records = records_from_results(frame)
         self.assertEqual(records[0]["date"], "2026-06-20")
         self.assertEqual(records[0]["close"], 1.25)
-        self.assertEqual(records[0]["signals"], ["健康上升", "偏高"])
+        self.assertEqual(records[0]["signals"], ["健康上升", "高估"])
 
 
 if __name__ == "__main__":
     unittest.main()
-

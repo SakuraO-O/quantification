@@ -1,6 +1,6 @@
 # 趋势观察台架构
 
-本文档描述 V2 数据管道与迁移期兼容输出。Supabase 已配置后，数据库是事实源；JSON、GitHub Pages 和旧工作流只用于迁移核对与回退。
+本文档描述 V2 正式数据管道与历史兼容输出。Supabase 事实表、数据库计算函数与已发布看板版本共同构成正式事实源；JSON 和 V1 工作流仅保留作历史核对，不参与生产看板。
 
 ## V2 目标架构
 
@@ -13,7 +13,9 @@ flowchart LR
   D --> E["Supabase 事实表与水位"]
   E --> F["增量趋势、估值与风格计算"]
   F --> G["dashboard_versions"]
-  G --> H["Edge API"]
+  E --> K["compute_portfolio_allocation() RPC"]
+  K --> H["Edge API"]
+  G --> H
   G --> I["周一至周六飞书晨报"]
   H --> J["趋势看板"]
 ```
@@ -22,14 +24,15 @@ flowchart LR
 
 ```text
 supabase/
-├── migrations/20260718091938_trend_observer_core.sql  # RLS、事实表、派生表与运行状态
-└── functions/dashboard-api/index.ts                 # 需 Auth 的只读 Edge API
+├── migrations/                                      # RLS、事实表、运行状态与数据库计算函数
+├── functions/dashboard-api/index.ts                  # 需 Auth 的只读 Edge API
+└── functions/portfolio-config/index.ts               # editor 配置写入与实时回传
 codex/trend_observer/
 ├── assets.py             # 12 个指数、9 只股票与来源代码映射
 ├── supabase_store.py     # Supabase REST 仓储、水位、版本与通知记录
 ├── ingestion.py          # 两交易日重叠的增量行情/估值同步与退避
-├── allocation.py         # 六类手工配置的比例、偏离与理论调整金额
-├── style_compass.py      # 三组 20/60/120 日收益差与方向
+├── allocation.py         # 单测契约镜像；生产实时配置仅由数据库 RPC 统一计算
+├── style_compass.py      # 三组 20/60/120 日收益差、PE 约束与建议原因
 ├── fundamentals.py       # 高股息四维研究结论（只处理已确认事实）
 ├── corporate.py          # 财报、分红与行业披露的版本化适配器契约
 ├── dashboard_versions.py # 不可变看板数据版本
@@ -41,13 +44,15 @@ codex/trend_observer/
 ```bash
 python -B -m codex.trend_observer.cli bootstrap
 python -B -m codex.trend_observer.cli sync-market --market CN
+python -B -m codex.trend_observer.cli sync-valuation
+python -B -m codex.trend_observer.cli sync-fundamentals --force
 python -B -m codex.trend_observer.cli publish-dashboard
 python -B -m codex.trend_observer.cli dispatch-feishu
 ```
 
-`sync-market` 在没有水位时执行历史初始化；之后只请求从数据库最新日期向前重叠两个交易日的窗口。连续三次失败后水位进入退避状态。`dispatch-feishu` 不调用任何行情来源，只读取完整且尚未发送过的 `dashboard_versions`。
+`sync-market` 在没有水位时执行历史初始化；之后只请求从数据库最新日期向前重叠两个交易日的窗口。连续三次失败后水位进入退避状态。资金风格建议由 Python 在发布时计算并写入 `dashboard_versions`，包括占优侧投资建议与 PE 百分位不高于 50% 的约束及原因。六类配置的比例、偏离四档、理论调整额与摘要由 `compute_portfolio_allocation()` RPC 实时统一计算，Edge API 与前端只转发和渲染。`dispatch-feishu` 不调用任何行情来源，只读取完整且尚未发送过的 `dashboard_versions`。
 
-## 迁移期 V1 兼容架构
+## 附录 A：历史 V1 兼容架构（非生产路径）
 
 ## V1 兼容目录树
 
@@ -55,7 +60,7 @@ python -B -m codex.trend_observer.cli dispatch-feishu
 quantification/
 ├── .github/
 │   └── workflows/
-│       └── daily_trend_observer.yml     # 每日 CI：生成 + 飞书 + 提交 + Pages
+│       └── daily_trend_observer.yml     # 历史兼容工作流；不再作为正式发布路径
 ├── .gitignore
 ├── README.md                            # 运行说明
 ├── ARCHITECTURE.md                      # 本文档
@@ -67,7 +72,8 @@ quantification/
     ├── trend_observer.py                # 兼容旧入口（22 行，转发到 cli）
     ├── requirements.txt
     ├── dividends.json                   # 股票分红手工配置
-    ├── dashboard_example.html           # 看板（单文件 HTML/CSS/JS，~1338 行）
+    ├── dashboard_example.html           # 看板结构与样式壳
+    ├── dashboard_runtime.js              # API / Mock 数据驱动的正式运行时
     ├── dashboard_data.json              # 看板截面数据（CI 提交，本地 gitignore）
     ├── data/
     │   └── trend_snapshot.json          # 统一快照（CI 提交）
@@ -156,7 +162,9 @@ python codex/trend_observer.py --notify
 
 ### GitHub Actions 流程
 
-`.github/workflows/daily_trend_observer.yml` 在 cron `07:10 CST`（UTC `23:10`）或手动触发时：
+`daily_trend_observer.yml` 为历史兼容说明，不再承担正式生产发布。正式调度由 `.github/workflows/trend_observer_v2.yml` 承担：18:45 同步行情、20:30 独立同步估值、07:30 同步基本面并发布看板、08:00–09:30 推送飞书；GitHub Pages 仅由 `main` 的部署工作流发布。
+
+历史工作流曾按下列步骤运行，保留此处仅便于排查旧版本：
 
 1. `pip install -r codex/requirements.txt`
 2. `python -m codex.trend_observer.cli --notify`
@@ -176,7 +184,7 @@ python codex/trend_observer.py --notify
 5. `editor` 通过 `portfolio-config` 原子写入六类目标比例或实际金额，重新加载时 `dashboard-api` 以最新持久化配置覆盖版本快照中的旧配置；
 6. 渲染资产配置、资金风格罗盘、优先关注、指数/股票列表及详情弹窗。
 
-> V2 看板不再读取旧版 `dashboard_data.json` 或 `history/`。旧 JSON 仅保留给迁移期核对与 GitHub Pages 回退流程；正式事实源为 Supabase 中的最新完整 `dashboard_version`。
+> V2 看板不再读取旧版 `dashboard_data.json` 或 `history/`。旧 JSON 仅保留给历史核对；正式事实源为 Supabase 中的最新完整 `dashboard_version`、实时配置 RPC 与资产详情事实表。
 
 ---
 

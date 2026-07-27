@@ -6,10 +6,9 @@ from datetime import datetime
 
 import pandas as pd
 
-from .allocation import allocation_summary, calculate_allocation
-from .config import ASSETS, MARKET_TIMEZONE, PORTFOLIO_CATEGORIES, STYLE_COMPASS_PAIRS
+from .config import ASSETS, MARKET_TIMEZONE, STYLE_COMPASS_PAIRS
 from .ingestion import CALCULATION_VERSION
-from .style_compass import calculate_style_compass, style_recommendation
+from .style_compass import calculate_style_compass, style_recommendation_details
 from .supabase_store import SupabaseStore
 
 
@@ -58,42 +57,39 @@ class DashboardPublisher:
         return rows[0] if rows else None
 
     def _allocation(self) -> dict | None:
-        rows = self.store.select("portfolio_allocations", order="version.desc,data_date.desc")
-        latest: dict[tuple[str, str], dict] = {}
-        for row in rows:
-            latest.setdefault((row["allocation_type"], row["category"]), row)
-        if len(latest) != len(PORTFOLIO_CATEGORIES) * 2:
-            return None
-        targets = {category: float(latest[("target_ratio", category)]["value"]) for category in PORTFOLIO_CATEGORIES}
-        actuals = {category: float(latest[("actual_amount", category)]["value"]) for category in PORTFOLIO_CATEGORIES}
-        values = calculate_allocation(targets, actuals)
-        return {"rows": values, "summary": allocation_summary(values)}
+        """Read the database-owned allocation result; never recalculate it in Python."""
+
+        return self.store.rpc("compute_portfolio_allocation")
 
     def _style_compass(self, assets_by_name: dict[str, dict]) -> list[dict]:
         result: list[dict] = []
         for left_name, right_name in STYLE_COMPASS_PAIRS:
             left_asset, right_asset = assets_by_name.get(left_name), assets_by_name.get(right_name)
-            if not left_asset or not right_asset:
-                continue
-            left_history = pd.DataFrame(self.store.history(left_asset["security_id"]))
-            right_history = pd.DataFrame(self.store.history(right_asset["security_id"]))
-            if left_history.empty or right_history.empty:
-                continue
-            left_history = left_history.rename(columns={"trade_date": "date"})
-            right_history = right_history.rename(columns={"trade_date": "date"})
+            left_signal = self._latest_signal(left_asset["security_id"]) if left_asset else None
+            right_signal = self._latest_signal(right_asset["security_id"]) if right_asset else None
+            left_history = pd.DataFrame(self.store.history(left_asset["security_id"])) if left_asset else pd.DataFrame()
+            right_history = pd.DataFrame(self.store.history(right_asset["security_id"])) if right_asset else pd.DataFrame()
+            left_history = left_history.rename(columns={"trade_date": "date"}).reindex(columns=["date", "close"])
+            right_history = right_history.rename(columns={"trade_date": "date"}).reindex(columns=["date", "close"])
             compass = calculate_style_compass(left_history, right_history)
-            # The compass is only comparable through the latest date both assets can support.
-            compass["as_of_date"] = min(
-                pd.Timestamp(left_history["date"].max()).date().isoformat(),
-                pd.Timestamp(right_history["date"].max()).date().isoformat(),
-            )
-            left_signal, right_signal = self._latest_signal(left_asset["security_id"]), self._latest_signal(right_asset["security_id"])
+            if not left_history.empty and not right_history.empty:
+                # The compass is only comparable through the latest date both assets can support.
+                compass["as_of_date"] = min(
+                    pd.Timestamp(left_history["date"].max()).date().isoformat(),
+                    pd.Timestamp(right_history["date"].max()).date().isoformat(),
+                )
+            else:
+                compass["as_of_date"] = None
             compass |= {
                 "left": {"name": left_name, "pe_percentile": (left_signal or {}).get("pe_percentile"), "investment_advice": (left_signal or {}).get("investment_advice")},
                 "right": {"name": right_name, "pe_percentile": (right_signal or {}).get("pe_percentile"), "investment_advice": (right_signal or {}).get("investment_advice")},
             }
-            compass["recommendation"] = style_recommendation(
-                str(compass["direction"]), str((left_signal or {}).get("investment_advice")), str((right_signal or {}).get("investment_advice"))
+            compass |= style_recommendation_details(
+                str(compass["direction"]),
+                (left_signal or {}).get("investment_advice"),
+                (left_signal or {}).get("pe_percentile"),
+                (right_signal or {}).get("investment_advice"),
+                (right_signal or {}).get("pe_percentile"),
             )
             result.append(compass)
         return result

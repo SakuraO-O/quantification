@@ -2,7 +2,7 @@ name: Trend Observer V2 Data Pipeline
 
 on:
   schedule:
-    # 18:45 and 20:30 Asia/Shanghai: mainland market and valuation overlap check.
+    # 18:45 market and 20:30 valuation, both Asia/Shanghai.
     - cron: "45 10 * * *"
     - cron: "30 12 * * *"
     # 07:30 Asia/Shanghai: Hong Kong and overseas previous-market-day sync.
@@ -82,11 +82,16 @@ jobs:
           elif [ "$SCHEDULE" = "45 10 * * *" ]; then
             python -B -m codex.trend_observer.cli sync-market --market CN
           elif [ "$SCHEDULE" = "30 12 * * *" ]; then
-            python -B -m codex.trend_observer.cli sync-market --market CN --force
+            python -B -m codex.trend_observer.cli sync-valuation --market CN --force
           elif [ "$SCHEDULE" = "30 23 * * *" ]; then
             python -B -m codex.trend_observer.cli sync-market --market HK --force
             python -B -m codex.trend_observer.cli sync-market --market US --force
+            python -B -m codex.trend_observer.cli sync-valuation --market HK --force
+            python -B -m codex.trend_observer.cli sync-valuation --market US --force
             python -B -m codex.trend_observer.cli sync-fundamentals
+            # Publish freshly synchronized assessments so overview/list fields
+            # do not wait for the 08:00 dispatch window.
+            python -B -m codex.trend_observer.cli publish-dashboard
           else
             python -B -m codex.trend_observer.cli publish-dashboard
             python -B -m codex.trend_observer.cli dispatch-feishu

@@ -1,4 +1,4 @@
-name: Legacy Trend Observer Export
+name: Legacy Trend Observer JSON Export (manual compatibility only)
 
 on:
   workflow_dispatch:

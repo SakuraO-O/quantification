@@ -108,7 +108,16 @@ def format_dashboard_version_message(version):
         dividend_yield = row.get("dividend_yield")
         if pd.isna(dividend_yield) or not (float(dividend_yield) < 3 or float(dividend_yield) > 5):
             continue
-        lines.append(f"{row['name']}（{row['symbol']}）｜股息率 {float(dividend_yield):.2f}%｜{format_overall_status(row.get('overall_status'))}")
+        close = "--" if pd.isna(row.get("close")) else f"{float(row['close']):.2f}"
+        daily_return = "--" if pd.isna(row.get("daily_return")) else f"{float(row['daily_return']) * 100:+.2f}%"
+        lines.extend(
+            [
+                f"{row['name']}（{row['symbol']}）｜{row.get('trade_date') or row.get('date') or '--'}｜收盘 {close}｜涨幅 {daily_return}",
+                f"趋势：{row.get('short_trend') or '--'}｜{row.get('mid_trend') or '--'}｜{row.get('long_trend') or '--'}",
+                f"综合：{format_overall_status(row.get('overall_status'))}｜股息率：{float(dividend_yield):.2f}%",
+                "",
+            ]
+        )
     lines.extend(["", DISCLAIMER])
     return "\n".join(lines)
 
