@@ -121,6 +121,7 @@ class V2CoreTest(unittest.TestCase):
         self.assertIn("when pe_percentile >= 70 then '高估'", migration)
         self.assertNotIn("when '高估' then '极高估'", migration)
         self.assertIn("intentionally safe to rerun", migration)
+        self.assertIn("add column if not exists signal_tags text", migration)
         self.assertIn(r"'\1高估'", migration)
         self.assertNotIn(r"'\\1高估'", migration)
 

@@ -477,14 +477,25 @@
     return `<div class="overview-grid">${metric("趋势建议", badge(asset.advice))}${metric("综合状态", badge(asset.status))}${metric("股息率", yieldText)}${metric("分红保障", badge(asset.dividendSafety))}${metric("基本面状态", badge(asset.fund))}${metric("最新报告期", assessment.report_period || "数据不足")}${metric("上一年度每股分红", dividendText)}${metric("主要变化", asset.change || "数据不足")}</div><div class="modal-tabs"><button class="modal-tab active" data-pane="price">价格与趋势</button>${fundamentals}</div>${pricePane}${fundamentalPanes}`;
   };
 
-  const originalIndexDetail = indexDetail;
-  indexDetail = function indexDetailFromApi(asset) {
-    let html = originalIndexDetail(asset);
-    html = html.replace("原型曲线为交互示意，实际版本需展示真实历史数据、数据来源和抓取时间。", "");
-    if (runtimeState.histories.has(asset.code)) {
-      html = html.replace("当前曲线来自 Edge API 返回的真实结构化历史数据。", "");
-    }
-    return html;
+  // Index-detail rendering belongs to the runtime.  The former inline shell
+  // implementation was removed, so wrapping a global `indexDetail` here made
+  // the entire runtime fail before it could load the authenticated overview.
+  window.indexDetail = function indexDetailFromApi(asset) {
+    const ranges = [[3,"近3个月"],[6,"近6个月"],[12,"近1年"],[36,"近3年"],[60,"近5年"]];
+    const movingAverages = [["ma20","MA20"],["ma60","MA60"],["ma120","MA120"],["ma200","MA200"]];
+    const trends = [["short","短期"],["mid","中期"],["long","长期"]];
+    const percentile = numberOr(asset.pep);
+    const peSummary = percentile === null
+      ? "估值数据不足"
+      : `${num(numberOr(asset.pe))} / ${percentile.toFixed(2)}% · ${escapeHtml(asset.value)}`;
+    const dataNote = runtimeState.source === "api"
+      ? `行情日期：${escapeHtml(asset.lastValidDate || asset.date)}；PE 历史窗口为近10年或实际有效历史区间。`
+      : `行情日期：${escapeHtml(asset.date)}；当前为本地 Mock 预览。`;
+    const pricePane = `<div class="chart-box"><div class="chart-title"><h4>价格与趋势</h4><small>趋势带默认仅展示长期</small></div><div class="chart-control-bar"><div class="chart-controls"><span class="control-label">时间范围</span>${ranges.map(([value, label]) => `<button class="chart-chip ${detailRange === value ? "active" : ""}" data-range="${value}">${label}</button>`).join("")}</div><div class="chart-controls"><span class="control-label">均线</span>${movingAverages.map(([value, label]) => `<button class="chart-chip ${selectedMAs.has(value) ? "active" : ""}" data-ma="${value}">${label}</button>`).join("")}<span class="control-label">趋势带</span>${trends.map(([value, label]) => `<button class="chart-chip ${selectedTrendBands.has(value) ? "active" : ""}" data-trend-band="${value}">${label}</button>`).join("")}</div></div><div class="chart-legend-row"><div class="chart-legend"><span><i style="background:#172b3a"></i>收盘</span><span><i style="background:#75a7d8"></i>MA20</span><span><i style="background:#8fc4b5"></i>MA60</span><span><i style="background:#b09bc9"></i>MA120</span><span><i style="background:#d7a68f"></i>MA200</span></div><div class="trend-key"><span><i style="background:#9fcfb7"></i>上升</span><span><i style="background:#aebfe2"></i>修复</span><span><i style="background:#e2c891"></i>转弱</span><span><i style="background:#e4aaa7"></i>下跌</span><span><i style="background:#cfd5da"></i>震荡</span></div></div><canvas id="price-chart"></canvas></div>`;
+    const pePane = percentile === null
+      ? `<div class="chart-box"><div class="chart-title"><h4>PE百分位趋势</h4><small>暂无足够数据</small></div><p class="muted">当前指数暂无可用的 PE 百分位历史数据。</p></div>`
+      : `<div class="chart-box"><div class="chart-title"><h4>PE百分位趋势</h4><small>当前PE ${num(numberOr(asset.pe))} · 当前百分位 ${percentile.toFixed(2)}%</small></div><canvas class="pe-canvas" id="pe-chart"></canvas><div class="chart-legend"><span>0–15% 极低估</span><span>15–35% 低估</span><span>35–70% 合理</span><span>70–90% 高估</span><span>90–100% 极高估</span></div></div>`;
+    return `<div class="overview-grid">${metric("投资建议", badge(asset.advice))}${metric("综合状态", badge(asset.status))}${metric("短期趋势", badge(asset.short))}${metric("中期趋势", badge(asset.mid))}${metric("长期趋势", badge(asset.long))}${metric("PE / PE百分位", peSummary)}${metric("MA120 / MA200", `${num(numberOr(asset.ma120))} / ${num(numberOr(asset.ma200))}`)}${metric("斜率", `MA120 ${pct(numberOr(asset.s120))} · MA200 ${pct(numberOr(asset.s200))}`)}</div><div class="reason"><b>判断依据：</b>${escapeHtml(asset.long || "数据不足")}；${escapeHtml(asset.mid || "数据不足")}；当前投资建议为“${escapeHtml(asset.advice || "数据不足")}”。</div>${pricePane}${pePane}<p class="data-note">${dataNote}</p>`;
   };
 
   async function apiFetch(path) {

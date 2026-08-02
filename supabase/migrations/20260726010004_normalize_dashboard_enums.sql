@@ -6,6 +6,13 @@
 -- reliable discriminator, so normalize from it instead of chaining labels.
 -- Rows without a percentile keep an existing `高估` label: changing it to
 -- `极高估` without a source value would manufacture a valuation conclusion.
+--
+-- Early V2 projects were created before ``signal_tags`` became part of the
+-- normalized signal payload.  The ingestion path writes this field, so add it
+-- idempotently before normalizing legacy tags instead of skipping the update.
+alter table public.asset_daily_signals
+  add column if not exists signal_tags text;
+
 update public.asset_daily_signals
 set
   valuation_status = case
