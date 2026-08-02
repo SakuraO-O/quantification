@@ -161,6 +161,12 @@ class DashboardV2Test(unittest.TestCase):
         self.assertEqual(self.html.count("function stockDetail(a)"), 1)
         self.assertNotIn("季度基本面趋势</h4><small>最近8个季度 · 原型示例", self.runtime)
 
+    def test_runtime_defines_index_detail_without_removed_inline_global(self):
+        # The static shell no longer owns indexDetail.  Loading the runtime must
+        # therefore not reference an undeclared legacy function before boot().
+        self.assertIn("window.indexDetail = function indexDetailFromApi(asset)", self.runtime)
+        self.assertNotIn("const originalIndexDetail = indexDetail", self.runtime)
+
 
 if __name__ == "__main__":
     unittest.main()
