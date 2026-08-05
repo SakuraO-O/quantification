@@ -41,6 +41,20 @@ def normalize_frame(rows):
     return frame[["date", "open", "high", "low", "close", "volume", "pe"]].sort_values("date").drop_duplicates("date").reset_index(drop=True)
 
 
+def trading_weekdays_only(frame):
+    """Remove Saturday/Sunday rows returned by an upstream market endpoint.
+
+    Chinese public index endpoints can occasionally return repeated Friday
+    closes for calendar weekends. They are not market observations and must
+    not enter moving-average, trend, or valuation-percentile calculations.
+    Public-holiday handling remains in the database market calendar layer.
+    """
+
+    if frame.empty:
+        return frame
+    return frame.loc[frame["date"].dt.weekday < 5].reset_index(drop=True)
+
+
 def with_source(frame, provider):
     frame.attrs["source_provider"] = provider
     return frame
@@ -361,7 +375,7 @@ def fetch_csindex(session, symbol, start_date=None):
             if attempt == 2:
                 raise last_error
             time.sleep(0.8 * (attempt + 1))
-    return normalize_frame(
+    return trading_weekdays_only(normalize_frame(
         [
             {
                 "date": row.get("tradeDate"),
@@ -374,7 +388,7 @@ def fetch_csindex(session, symbol, start_date=None):
             }
             for row in rows
         ]
-    )
+    ))
 
 
 def fetch_cnindex(session, symbol, start_date=None):

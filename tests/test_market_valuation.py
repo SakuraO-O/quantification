@@ -14,6 +14,7 @@ from codex.trend_observer.market_valuation import (
     HS300_EQUITY_BOND_SPREAD_URL,
     HS300_PE_URL,
     NASDAQ_PE_URL,
+    SP500_PE_URL,
     collect_market_valuation_snapshot,
     parse_baifenwei,
     parse_chinabond,
@@ -94,6 +95,17 @@ class MarketValuationTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "不足120个月"):
             parse_worldperatio(worldperatio_html(119))
+
+    def test_worldperatio_accepts_sp500_heading(self):
+        sp500_html = worldperatio_html().replace("Nasdaq 100", "S&P 500")
+        result = parse_worldperatio(sp500_html, index_name="标普500", index_pattern=r"S\s*&\s*P\s*500")
+        self.assertEqual(result["pe"], 32.74)
+        self.assertEqual(result["history_count"], 120)
+        self.assertEqual(SP500_PE_URL, "https://worldperatio.com/index/sp-500/")
+
+    def test_worldperatio_rejects_a_page_for_another_index(self):
+        with self.assertRaisesRegex(ValueError, "与预期指数不匹配"):
+            parse_worldperatio(worldperatio_html(), index_name="标普500", index_pattern=r"S\s*&\s*P\s*500")
 
     def test_baifenwei_reads_published_ten_year_column(self):
         result = parse_baifenwei(fixture("baifenwei.html"))

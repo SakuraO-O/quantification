@@ -18,7 +18,10 @@ from .supabase_store import SupabaseStore, payload_hash
 from .valuation_sources import fetch_valuation_batch, valuation_source_name
 
 
-CALCULATION_VERSION = "trend-v2.0.0"
+# v2.1 recalculates signals from exact-date valuation facts only and excludes
+# invalid CSIndex weekend rows.  The version bump forces a complete rebuild
+# after the companion data-repair migration is deployed.
+CALCULATION_VERSION = "trend-v2.1.0"
 
 
 def _as_date(value: str | date | None) -> date | None:
@@ -45,12 +48,13 @@ def _same_number(left, right) -> bool:
 
 
 def _merge_valuation_history(market: pd.DataFrame, valuation_rows: list[dict]) -> pd.DataFrame:
-    """Project source observations onto market dates without fabricating history.
+    """Join valuation facts to the *same* market date only.
 
-    Monthly series (currently Nasdaq-100) are carried forward only until the
-    next observation.  Their percentile is calculated over source observations
-    rather than duplicated daily market rows, so a monthly value cannot be
-    counted twenty times by accident.
+    A missing valuation observation must remain missing. Carrying a PE forward
+    makes a stale figure look like today's valuation and can alter a percentile
+    without any new source fact. Monthly histories still calculate their
+    percentile from source observations, but are exposed only on their actual
+    observation dates.
     """
 
     result = market.sort_values("date").copy()
@@ -74,13 +78,7 @@ def _merge_valuation_history(market: pd.DataFrame, valuation_rows: list[dict]) -
         ]
         valuation.loc[valuation["pe_percentile_override"].notna(), "pe_percentile_period_override"] = "近10年"
         columns.extend(["pe_percentile_override", "pe_percentile_period_override"])
-    return pd.merge_asof(
-        result,
-        valuation[columns],
-        on="date",
-        direction="backward",
-        tolerance=pd.Timedelta(days=45),
-    )
+    return result.merge(valuation[columns], on="date", how="left", validate="one_to_one")
 
 
 @dataclass

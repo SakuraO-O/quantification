@@ -8,19 +8,63 @@ import pandas as pd
 
 from codex.trend_observer.ingestion import _merge_valuation_history
 from codex.trend_observer.ingestion import MarketSynchronizer
-from codex.trend_observer.valuation_sources import ValuationBatch, parse_cnindex_current_pe
+from codex.trend_observer.valuation_sources import (
+    CNI_INDEX_LIST_URL,
+    CNI_QUERY_DAY_URL,
+    ValuationBatch,
+    fetch_cnindex_current_pe,
+    fetch_json,
+    parse_cnindex_index_list,
+)
 
 
 class ValuationSourcesTest(unittest.TestCase):
-    def test_cnindex_parser_uses_rolling_pe_for_matching_symbol(self):
-        html = """
-        <p>全部指数 2026-07-17</p>
-        <table><tr><th>指数代码</th><th>指数简称</th><th>PE(滚动)</th></tr>
-        <tr><td>399006</td><td>创业板指</td><td>45.39</td></tr>
-        <tr><td>980092</td><td>国证自由现金流</td><td>10.62</td></tr></table>
-        """
-        self.assertEqual(parse_cnindex_current_pe(html, "sz399006"), {"trade_date": "2026-07-17", "value": 45.39})
-        self.assertEqual(parse_cnindex_current_pe(html, "980092"), {"trade_date": "2026-07-17", "value": 10.62})
+    def test_cnindex_json_parser_uses_published_date_and_dynamic_pe(self):
+        payload = {
+            "query_day": 1785427200000,
+            "index_list": {"data": {"rows": [
+                {"indexcode": "399006", "peDynamic": 37.5495},
+                {"indexcode": "980092", "peDynamic": 14.0309},
+            ]}},
+        }
+        self.assertEqual(parse_cnindex_index_list(payload, "sz399006"), {"trade_date": "2026-07-30", "value": 37.5495})
+        self.assertEqual(parse_cnindex_index_list(payload, "980092"), {"trade_date": "2026-07-30", "value": 14.0309})
+
+    def test_cnindex_adapter_uses_public_json_endpoints(self):
+        class Response:
+            def __init__(self, payload): self.payload = payload
+            def raise_for_status(self): return None
+            def json(self): return self.payload
+
+        class Session:
+            def __init__(self): self.calls = []
+            def get(self, url, **kwargs):
+                self.calls.append((url, kwargs))
+                if url == CNI_QUERY_DAY_URL:
+                    return Response({"data": 1785427200000})
+                return Response({"data": {"rows": [{"indexcode": "399006", "peDynamic": 37.5495}]}})
+
+        session = Session()
+        batch = fetch_cnindex_current_pe(session, {"symbol": "sz399006"})
+        self.assertEqual(batch.source_url, CNI_INDEX_LIST_URL)
+        self.assertEqual(batch.observations, [{"trade_date": "2026-07-30", "value": 37.5495}])
+        self.assertEqual(session.calls[1][1]["params"]["channelCode"], "100")
+
+    def test_cnindex_json_request_retries_transient_source_failure(self):
+        class Response:
+            def raise_for_status(self): raise RuntimeError("HTTP 503")
+
+        class Session:
+            def __init__(self): self.calls = 0
+            def get(self, *_args, **_kwargs):
+                self.calls += 1
+                return Response()
+
+        session = Session()
+        with patch("codex.trend_observer.valuation_sources.time.sleep"):
+            with self.assertRaisesRegex(ValueError, "国证指数接口请求失败"):
+                fetch_json(session, CNI_QUERY_DAY_URL)
+        self.assertEqual(session.calls, 3)
 
     def test_monthly_source_percentile_uses_observations_not_daily_copies(self):
         market = pd.DataFrame({
@@ -47,6 +91,19 @@ class ValuationSourcesTest(unittest.TestCase):
         }])
         self.assertEqual(merged.iloc[0]["pe"], 10.62)
         self.assertNotIn("pe_percentile_override", merged.columns)
+
+    def test_missing_daily_observation_remains_empty_instead_of_using_stale_pe(self):
+        market = pd.DataFrame({
+            "date": pd.to_datetime(["2026-07-17", "2026-07-20", "2026-07-21"]),
+            "open": [1, 1, 1], "high": [1, 1, 1], "low": [1, 1, 1], "close": [1, 1, 1], "volume": [1, 1, 1],
+        })
+        merged = _merge_valuation_history(market, [
+            {"trade_date": "2026-07-17", "value": 10.0, "source": "csindex", "methodology": "provider_reported"},
+            {"trade_date": "2026-07-21", "value": 11.0, "source": "csindex", "methodology": "provider_reported"},
+        ])
+        self.assertEqual(merged["pe"].tolist()[0], 10.0)
+        self.assertTrue(pd.isna(merged["pe"].tolist()[1]))
+        self.assertEqual(merged["pe"].tolist()[2], 11.0)
 
     def test_valuation_failure_is_isolated_when_quality_issue_write_fails(self):
         class Store:

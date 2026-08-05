@@ -58,11 +58,12 @@ V2 自动任务位于 [.github/workflows/trend_observer_v2.yml](.github/workflow
 
 一次包含数据库或 Edge 变更的上线，按下面顺序完成：
 
-1. 在仓库根目录执行 `supabase db push`，使事实表、枚举迁移和 `compute_portfolio_allocation()` 配置计算函数进入正式项目；
-2. 部署两个函数：`supabase functions deploy dashboard-api` 与 `supabase functions deploy portfolio-config`；
-3. 将看板代码合入 `main`，由 Pages 部署工作流发布静态页面；
-4. 首次或修复基本面后，手动运行 `sync-fundamentals`（需要补抓时选择 `--force`），随后运行 `publish-dashboard`；
-5. 验证 `fundamental_assessments`、`financial_facts` 与最新 `dashboard_versions.payload` 均有 9 只股票的有效数据，并在浏览器确认 `/overview` 的 `allocation` 与 `/asset/{symbol}` 的基本面字段正常返回。
+1. 将包含新计算版本的代码合入 `main`；派生信号版本不一致时，发布器会把对应资产标为“信号版本待重算”，不会继续发布旧结论；
+2. 在仓库根目录执行 `supabase db push`，使事实表、数据修复、枚举迁移和 `compute_portfolio_allocation()` 配置计算函数进入正式项目；
+3. 部署发生变更的函数（通常为 `supabase functions deploy dashboard-api` 与 `supabase functions deploy portfolio-config`），并等待 Pages 部署静态资源；
+4. 对修改过行情、估值或计算规则的版本，依次强制运行受影响市场的 `sync-valuation`、`sync-market`，确认所有资产的 `calculation_version` 已更新后才运行 `publish-dashboard`；
+5. 首次或修复基本面后，手动运行 `sync-fundamentals`（需要补抓时选择 `--force`），随后运行 `publish-dashboard`；
+6. 验证 `fundamental_assessments`、`financial_facts` 与最新 `dashboard_versions.payload` 均有 9 只股票的有效数据，并在浏览器确认 `/overview` 的 `allocation` 与 `/asset/{symbol}` 的基本面字段正常返回。
 
 配置偏离、理论调整额及摘要由数据库 RPC 实时计算；若迁移尚未部署，Edge API 不应以浏览器计算或旧版本快照代替该结果。
 

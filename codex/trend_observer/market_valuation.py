@@ -19,6 +19,7 @@ HS300_PE_URL = "https://www.lixinger.com/equity/index/detail/sh/000300/300/funda
 HS300_DIVIDEND_URL = "https://www.lixinger.com/equity/index/detail/sh/000300/300/fundamental/valuation/dyr"
 CHINEXT_PE_URL = "https://www.lixinger.com/equity/index/detail/sz/399006/399006/fundamental/valuation/pe-ttm"
 NASDAQ_PE_URL = "https://worldperatio.com/index/nasdaq-100/"
+SP500_PE_URL = "https://worldperatio.com/index/sp-500/"
 DIVIDEND_LOW_VOLATILITY_URL = "https://www.lixinger.com/equity/index/detail/csi/H30269/1730269/fundamental/valuation/dyr"
 HS300_EQUITY_BOND_SPREAD_URL = "https://baifenwei.com/indicator/equity-bond-spread/hs300/"
 
@@ -171,10 +172,15 @@ def subtract_years(value, years):
     return date(target_year, value.month, target_day)
 
 
-def parse_worldperatio(html):
+def parse_worldperatio(html, *, index_name="Nasdaq 100", index_pattern=r"Nasdaq\s*100"):
     text = normalized_text(html)
+    # The generic narrative fallback below is intentionally accepted only
+    # after the page itself has been identified.  A redirect or cache mix-up
+    # must not turn another index's PE into the requested index observation.
+    if not re.search(index_pattern, text, re.IGNORECASE):
+        raise ValueError(f"WorldPERatio页面与预期指数不匹配: {index_name}")
     match = re.search(
-        r"Nasdaq\s*100\s*Index\s*P/E\s*Ratio\s*([\d,.]+)\s*(\d{2}\s+[A-Za-z]+\s+20\d{2})",
+        rf"{index_pattern}\s*Index\s*P/E\s*Ratio\s*([\d,.]+)\s*(\d{{2}}\s+[A-Za-z]+\s+20\d{{2}})",
         text,
         re.IGNORECASE,
     ) or re.search(
@@ -183,7 +189,7 @@ def parse_worldperatio(html):
         re.IGNORECASE,
     )
     if not match:
-        raise ValueError("WorldPERatio页面缺少Nasdaq-100当前PE或日期")
+        raise ValueError(f"WorldPERatio页面缺少{index_name}当前PE或日期")
     current_pe = parse_number(match.group(1))
     current_date = datetime.strptime(match.group(2), "%d %B %Y").date()
     series_match = re.search(r"detailPE_data\s*=\s*\[(.*?)\]\s*;", html, re.DOTALL)
