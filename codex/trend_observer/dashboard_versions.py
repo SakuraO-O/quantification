@@ -32,6 +32,12 @@ class DashboardPublisher:
         rows = self.store.select("asset_daily_signals", filters={"security_id": f"eq.{sid}"}, order="trade_date.desc", limit=1)
         return rows[0] if rows else None
 
+    @staticmethod
+    def _is_current_calculation(signal: dict | None) -> bool:
+        """Only publish conclusions produced by the active calculation rules."""
+
+        return bool(signal and signal.get("calculation_version") == CALCULATION_VERSION)
+
     def _latest_dividend(self, sid: str) -> dict | None:
         rows = self.store.select(
             "dividend_events",
@@ -67,6 +73,10 @@ class DashboardPublisher:
             left_asset, right_asset = assets_by_name.get(left_name), assets_by_name.get(right_name)
             left_signal = self._latest_signal(left_asset["security_id"]) if left_asset else None
             right_signal = self._latest_signal(right_asset["security_id"]) if right_asset else None
+            # A calculation-version migration may run before signal rebuild.
+            # Do not let stale PE/advice values influence a new compass payload.
+            left_signal = left_signal if self._is_current_calculation(left_signal) else None
+            right_signal = right_signal if self._is_current_calculation(right_signal) else None
             left_history = pd.DataFrame(self.store.history(left_asset["security_id"])) if left_asset else pd.DataFrame()
             right_history = pd.DataFrame(self.store.history(right_asset["security_id"])) if right_asset else pd.DataFrame()
             left_history = left_history.rename(columns={"trade_date": "date"}).reindex(columns=["date", "close"])
@@ -128,6 +138,14 @@ class DashboardPublisher:
                 issue = {"symbol": asset["symbol"], "reason": "缺少派生信号", "expected": expected_date.isoformat()}
                 asset_issues.append(issue)
                 signal = self._unavailable_current_signal(expected_date, issue["reason"])
+            elif not self._is_current_calculation(signal):
+                actual_date = pd.Timestamp(signal["trade_date"]).date()
+                issue = {
+                    "symbol": asset["symbol"], "reason": "信号版本待重算", "expected": expected_date.isoformat(),
+                    "actual": actual_date.isoformat(), "calculation_version": signal.get("calculation_version"),
+                }
+                asset_issues.append(issue)
+                signal = self._unavailable_current_signal(expected_date, issue["reason"], actual_date.isoformat())
             else:
                 actual_date = pd.Timestamp(signal["trade_date"]).date()
                 if actual_date < expected_date:
@@ -176,7 +194,11 @@ class DashboardPublisher:
         }
         # A temporary source failure never blocks the other assets or their history.
         # Only an invalid asset catalogue is a release blocker.
-        is_complete = catalog_valid
+        # Do not replace the API's last complete version while a rule-version
+        # upgrade is waiting for its signal rebuild.  Other per-asset source
+        # delays remain publishable by design.
+        has_stale_calculation = any(issue.get("reason") == "信号版本待重算" for issue in asset_issues)
+        is_complete = catalog_valid and not has_stale_calculation
         return self.store.publish_dashboard_version(
             payload, is_complete=is_complete, completeness=completeness, calculation_version=CALCULATION_VERSION, source_run_id=source_run_id
         )

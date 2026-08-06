@@ -9,17 +9,16 @@ and continue publishing price/trend data.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
-import re
-
-from bs4 import BeautifulSoup
+from datetime import datetime, timezone
+import time
 
 from .data_sources import make_session
-from .market_valuation import NASDAQ_PE_URL, fetch_text, parse_number, parse_worldperatio
+from .market_valuation import NASDAQ_PE_URL, SP500_PE_URL, fetch_text, parse_number, parse_worldperatio
 
 
-CNI_SHENZHEN_INDEX_URL = "https://www.cnindex.com.cn/zh_indices/sese/index.html?act_menu=1&index_type=-1"
-CNI_STRATEGY_INDEX_URL = "https://www.cnindex.com.cn/zh_indices/cni/strategy/index.html?act_menu=null&index_type=204"
+CNI_QUERY_DAY_URL = "https://www.cnindex.com.cn/index/queryDay"
+CNI_INDEX_LIST_URL = "https://www.cnindex.com.cn/index/indexList"
+CNI_CHANNEL_CODES = {"sz399006": "100", "980092": "204"}
 
 
 @dataclass(frozen=True)
@@ -39,54 +38,59 @@ def valuation_source_name(asset: dict) -> str | None:
         return "cnindex"
     if asset.get("symbol") == "NDX100":
         return "worldperatio"
+    if asset.get("symbol") == "SPX":
+        return "worldperatio"
     return None
 
 
-def _date_from_text(text: str) -> str:
-    match = re.search(r"(20\d{2})[-/]?(\d{2})[-/]?(\d{2})", text)
-    if not match:
-        raise ValueError("来源页面缺少估值日期")
-    return "-".join(match.groups())
+def parse_cnindex_index_list(payload: dict, symbol: str) -> dict:
+    """Read the published date and rolling PE from CNI's public JSON API."""
+
+    timestamp = payload.get("query_day")
+    if not isinstance(timestamp, (int, float)):
+        raise ValueError("国证指数接口缺少公布日期")
+    rows = (payload.get("index_list") or {}).get("data", {}).get("rows") or []
+    canonical_symbol = symbol.removeprefix("sz")
+    row = next((item for item in rows if str(item.get("indexcode") or "") == canonical_symbol), None)
+    if row is None:
+        raise ValueError(f"国证指数接口未找到 {symbol}")
+    value = parse_number(row.get("peDynamic"))
+    if value is None or value <= 0:
+        raise ValueError(f"国证指数接口未公布 {symbol} 的有效PE(滚动)")
+    trade_date = datetime.fromtimestamp(float(timestamp) / 1000, tz=timezone.utc).date().isoformat()
+    return {"trade_date": trade_date, "value": value}
 
 
-def parse_cnindex_current_pe(html: str, symbol: str) -> dict:
-    """Extract one officially published rolling P/E from a CNI index table."""
+def fetch_json(session, url: str, *, params: dict | None = None) -> dict:
+    """Read a small public JSON payload with bounded retry for transient CDN errors."""
 
-    soup = BeautifulSoup(html, "html.parser")
-    source_date = _date_from_text(" ".join(soup.stripped_strings))
-    canonical_symbol = symbol.removeprefix("sz").lstrip("0") or "0"
-    for table in soup.find_all("table"):
-        rows = [
-            [" ".join(cell.stripped_strings) for cell in row.find_all(["th", "td"])]
-            for row in table.find_all("tr")
-        ]
-        if not rows:
-            continue
-        header_index = next((index for index, row in enumerate(rows) if "指数代码" in row and any("PE(滚动)" in cell for cell in row)), None)
-        if header_index is None:
-            continue
-        header = rows[header_index]
-        code_index = header.index("指数代码")
-        pe_index = next(index for index, cell in enumerate(header) if "PE(滚动)" in cell)
-        for row in rows[header_index + 1 :]:
-            if max(code_index, pe_index) >= len(row):
-                continue
-            row_symbol = re.sub(r"\D", "", row[code_index]).lstrip("0") or "0"
-            if row_symbol != canonical_symbol:
-                continue
-            value = parse_number(row[pe_index])
-            if value is None or value <= 0:
-                raise ValueError(f"国证指数网未公布 {symbol} 的有效PE(滚动)")
-            return {"trade_date": source_date, "value": value}
-    raise ValueError(f"国证指数网页面未找到 {symbol} 的PE(滚动)")
+    last_error = None
+    for attempt in range(3):
+        try:
+            response = session.get(url, params=params, timeout=(5, 20))
+            response.raise_for_status()
+            payload = response.json()
+            if not isinstance(payload, dict):
+                raise ValueError("估值来源返回的 JSON 不是对象")
+            return payload
+        except Exception as exc:
+            last_error = exc
+            if attempt < 2:
+                time.sleep(0.8 * (attempt + 1))
+    raise ValueError(f"国证指数接口请求失败: {last_error}")
 
 
 def fetch_cnindex_current_pe(session, asset: dict) -> ValuationBatch:
-    url = CNI_SHENZHEN_INDEX_URL if asset["symbol"] == "sz399006" else CNI_STRATEGY_INDEX_URL
-    observation = parse_cnindex_current_pe(fetch_text(session, url), asset["symbol"])
+    channel_code = CNI_CHANNEL_CODES[asset["symbol"]]
+    query_day = fetch_json(session, CNI_QUERY_DAY_URL)
+    index_list = fetch_json(session, CNI_INDEX_LIST_URL, params={"channelCode": channel_code, "rows": 100, "pageNum": 1})
+    observation = parse_cnindex_index_list(
+        {"query_day": query_day.get("data"), "index_list": index_list},
+        asset["symbol"],
+    )
     return ValuationBatch(
         source="cnindex",
-        source_url=url,
+        source_url=CNI_INDEX_LIST_URL,
         methodology="official_rolling_pe_current",
         observations=[observation],
     )
@@ -102,10 +106,22 @@ def fetch_nasdaq_100_pe(session, _asset: dict) -> ValuationBatch:
     )
 
 
+def fetch_sp500_pe(session, _asset: dict) -> ValuationBatch:
+    parsed = parse_worldperatio(
+        fetch_text(session, SP500_PE_URL), index_name="标普500", index_pattern=r"S\s*&\s*P\s*500",
+    )
+    return ValuationBatch(
+        source="worldperatio",
+        source_url=SP500_PE_URL,
+        methodology="estimated_pe_monthly_10y",
+        observations=[{"trade_date": point["date"], "value": point["value"]} for point in parsed["history"]],
+    )
+
+
 def fetch_valuation_batch(asset: dict, *, session=None) -> ValuationBatch | None:
     """Return a supported source batch, or ``None`` when no safe free source exists.
 
-    We intentionally leave SPX and HSI empty for now: a current value without
+    We intentionally leave HSI empty for now: a current value without
     compatible history must not be turned into a made-up percentile.
     """
 
@@ -118,7 +134,7 @@ def fetch_valuation_batch(asset: dict, *, session=None) -> ValuationBatch | None
         if source == "cnindex":
             return fetch_cnindex_current_pe(session, asset)
         if source == "worldperatio":
-            return fetch_nasdaq_100_pe(session, asset)
+            return fetch_nasdaq_100_pe(session, asset) if asset["symbol"] == "NDX100" else fetch_sp500_pe(session, asset)
         return None
     finally:
         if owned_session:

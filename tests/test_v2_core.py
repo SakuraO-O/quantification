@@ -153,6 +153,7 @@ class V2CoreTest(unittest.TestCase):
                     return [{
                         "trade_date": trade_date, "close": 100, "daily_return": 0.01,
                         "overall_status": "健康上升", "investment_advice": "仅持有",
+                        "calculation_version": "trend-v2.1.0",
                     }]
                 if table == "portfolio_allocations":
                     rows = []
@@ -188,6 +189,34 @@ class V2CoreTest(unittest.TestCase):
         self.assertEqual(len(version["payload"]["style_compass"]), 3)
         self.assertTrue(all(row["direction"] == "数据不足" for row in version["payload"]["style_compass"]))
         self.assertIn("SPX", format_dashboard_version_message(version))
+
+    def test_dashboard_hides_stale_calculation_signals_until_rebuilt(self):
+        class Store:
+            def __init__(self):
+                self.assets = [asset | {"security_id": f"{asset['market']}:{asset['symbol']}", "is_active": True} for asset in ASSETS]
+                self.published = None
+
+            def select(self, table, filters=None, **_kwargs):
+                if table == "securities":
+                    return self.assets
+                if table == "asset_daily_signals":
+                    return [{"trade_date": "2026-07-17", "calculation_version": "trend-v2.0.0", "investment_advice": "优先新增", "pe_percentile": 10}]
+                return []
+
+            def previous_trading_date(self, _market, _value): return datetime(2026, 7, 17).date()
+            def history(self, _security_id): return []
+            def rpc(self, _function): return None
+            def publish_dashboard_version(self, payload, **kwargs):
+                self.published = {"payload": payload} | kwargs
+                return self.published
+
+        version = DashboardPublisher(Store()).publish()
+        self.assertFalse(version["is_complete"])
+        first_asset = version["payload"]["assets"][0]
+        self.assertEqual(first_asset["data_status"], "delayed")
+        self.assertEqual(first_asset["data_issue"], "信号版本待重算")
+        self.assertIsNone(first_asset["investment_advice"])
+        self.assertTrue(all(item["recommendation"] == "数据不足" for item in version["payload"]["style_compass"]))
 
     def test_v2_stock_message_includes_dashboard_fields(self):
         message = format_dashboard_version_message(

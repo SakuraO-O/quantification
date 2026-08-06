@@ -4,7 +4,15 @@ import numpy as np
 import pandas as pd
 
 from codex.trend_observer.config import ASSETS
-from codex.trend_observer.data_sources import fetch_eastmoney_global_index, fetch_fred_close_series, fetch_global_index, fetch_nasdaq_index, fetch_yahoo_index
+from codex.trend_observer.data_sources import (
+    fetch_eastmoney_global_index,
+    fetch_csindex,
+    fetch_fred_close_series,
+    fetch_global_index,
+    fetch_nasdaq_index,
+    fetch_yahoo_index,
+    trading_weekdays_only,
+)
 
 
 class FakeResponse:
@@ -29,6 +37,24 @@ class FakeSession:
 
 
 class DataSourcesTest(unittest.TestCase):
+    def test_trading_weekdays_only_removes_repeated_weekend_rows(self):
+        frame = pd.DataFrame({
+            "date": pd.to_datetime(["2026-07-17", "2026-07-18", "2026-07-19", "2026-07-20"]),
+            "open": [1, 1, 1, 2], "high": [1, 1, 1, 2], "low": [1, 1, 1, 2],
+            "close": [1, 1, 1, 2], "volume": [1, 1, 1, 2], "pe": [np.nan] * 4,
+        })
+        filtered = trading_weekdays_only(frame)
+        self.assertEqual(filtered["date"].dt.strftime("%Y-%m-%d").tolist(), ["2026-07-17", "2026-07-20"])
+
+    def test_csindex_adapter_drops_weekend_rows(self):
+        payload = {"code": 200, "data": [
+            {"tradeDate": "2026-07-17", "open": 1, "high": 2, "low": 1, "close": 2, "tradingVol": 10},
+            {"tradeDate": "2026-07-18", "open": 2, "high": 2, "low": 2, "close": 2, "tradingVol": 0},
+            {"tradeDate": "2026-07-20", "open": 3, "high": 4, "low": 3, "close": 4, "tradingVol": 12},
+        ]}
+        history = fetch_csindex(FakeSession(payload), "000300")
+        self.assertEqual(history["date"].dt.strftime("%Y-%m-%d").tolist(), ["2026-07-17", "2026-07-20"])
+
     def test_us_indices_are_configured(self):
         assets_by_symbol = {asset["symbol"]: asset for asset in ASSETS}
         self.assertEqual(assets_by_symbol["NDX100"]["name"], "纳斯达克100")
