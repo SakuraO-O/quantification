@@ -162,7 +162,9 @@ python codex/trend_observer.py --notify
 
 ### GitHub Actions 流程
 
-`daily_trend_observer.yml` 为历史兼容说明，不再承担正式生产发布。正式调度由 `.github/workflows/trend_observer_v2.yml` 承担：18:45 同步行情、20:30 独立同步估值、07:30 同步基本面并发布看板、08:00–09:30 推送飞书；GitHub Pages 仅由 `main` 的部署工作流发布。
+`daily_trend_observer.yml` 为历史兼容说明，不再承担正式生产发布。正式调度由 `.github/workflows/trend_observer_v2.yml` 承担：18:45 同步国内行情；20:30 定向补抓滞后国内行情并独立同步估值；07:30 补抓国内行情、同步港美行情及估值、同步基本面并发布看板；08:00–09:30 发布并推送飞书。各同步命令隔离失败，最终汇总为失败状态；派发窗口发布失败则不发送旧版。GitHub Pages 仅由 `main` 的部署工作流发布。
+
+行情新鲜度由 `freshness.expected_market_date` 负责，交易日历优先、市场本地时区及常规收盘边界统一判断；日期不够新的非空结果仍触发备用源，未收盘日期不写入日线。日历缺失使用工作日兜底，提前收盘保守等待常规收盘时刻。中证官方日频PE通过 `valuation_sources.fetch_csindex_pe` 独立补齐，不由行情写入。当前PE空值必须使百分位及百分位期间为空。规则版本升级重建历史信号；估值来源未变化也允许重试先前失败的计算。事实、计算、发布、部署均需分别验收，本地测试通过不代表生产已补数。
 
 历史工作流曾按下列步骤运行，保留此处仅便于排查旧版本：
 

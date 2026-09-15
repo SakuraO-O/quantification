@@ -2,7 +2,7 @@ name: Trend Observer V2 Data Pipeline
 
 on:
   schedule:
-    # 18:45 market and 20:30 valuation, both Asia/Shanghai.
+    # 18:45 market; 20:30 targeted market retry and valuation, Asia/Shanghai.
     - cron: "45 10 * * *"
     - cron: "30 12 * * *"
     # 07:30 Asia/Shanghai: Hong Kong and overseas previous-market-day sync.
@@ -74,25 +74,42 @@ jobs:
           MANUAL_MARKET: ${{ inputs.market }}
           MANUAL_FORCE: ${{ inputs.force }}
         run: |
+          failed=0
+          run_task() {
+            if python -u -B -m codex.trend_observer.cli "$@"; then
+              echo "Completed: $*"
+            else
+              echo "::error::Task failed: $*"
+              failed=1
+            fi
+          }
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             args=("$MANUAL_COMMAND")
             if [ -n "$MANUAL_MARKET" ]; then args+=(--market "$MANUAL_MARKET"); fi
             if [ "$MANUAL_FORCE" = "true" ]; then args+=(--force); fi
-            python -B -m codex.trend_observer.cli "${args[@]}"
+            run_task "${args[@]}"
           elif [ "$SCHEDULE" = "45 10 * * *" ]; then
-            python -B -m codex.trend_observer.cli sync-market --market CN
+            run_task sync-market --market CN
           elif [ "$SCHEDULE" = "30 12 * * *" ]; then
-            python -B -m codex.trend_observer.cli sync-valuation --market CN --force
+            run_task sync-market --market CN --trigger retry
+            run_task sync-valuation --market CN --force
           elif [ "$SCHEDULE" = "30 23 * * *" ]; then
-            python -B -m codex.trend_observer.cli sync-market --market HK --force
-            python -B -m codex.trend_observer.cli sync-market --market US --force
-            python -B -m codex.trend_observer.cli sync-valuation --market HK --force
-            python -B -m codex.trend_observer.cli sync-valuation --market US --force
-            python -B -m codex.trend_observer.cli sync-fundamentals
+            run_task sync-market --market CN --trigger retry
+            run_task sync-market --market HK
+            run_task sync-market --market US
+            run_task sync-valuation --market HK --force
+            run_task sync-valuation --market US --force
+            run_task sync-fundamentals
             # Publish freshly synchronized assessments so overview/list fields
             # do not wait for the 08:00 dispatch window.
-            python -B -m codex.trend_observer.cli publish-dashboard
+            run_task publish-dashboard
           else
-            python -B -m codex.trend_observer.cli publish-dashboard
-            python -B -m codex.trend_observer.cli dispatch-feishu
+            # Dispatch must not silently send a prior version if publish fails.
+            if python -u -B -m codex.trend_observer.cli publish-dashboard; then
+              run_task dispatch-feishu
+            else
+              echo "::error::Dashboard publication failed; notification skipped"
+              failed=1
+            fi
           fi
+          exit "$failed"

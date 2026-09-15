@@ -14,6 +14,7 @@ from codex.trend_observer.dashboard_versions import DashboardPublisher
 from codex.trend_observer.feishu import format_dashboard_version_message
 from codex.trend_observer.fundamentals import assess_high_dividend_fundamentals
 from codex.trend_observer.dispatch import dispatch_morning_report
+from codex.trend_observer.ingestion import CALCULATION_VERSION
 from codex.trend_observer.style_compass import calculate_style_compass, style_recommendation, style_recommendation_details
 from codex.trend_observer.supabase_store import payload_hash
 
@@ -153,7 +154,7 @@ class V2CoreTest(unittest.TestCase):
                     return [{
                         "trade_date": trade_date, "close": 100, "daily_return": 0.01,
                         "overall_status": "健康上升", "investment_advice": "仅持有",
-                        "calculation_version": "trend-v2.1.0",
+                        "calculation_version": CALCULATION_VERSION,
                     }]
                 if table == "portfolio_allocations":
                     rows = []

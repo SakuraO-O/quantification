@@ -3,11 +3,25 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from codex.trend_observer.analysis import determine_overall_status, determine_short_trend, valuation_status
+from codex.trend_observer.analysis import add_indicators, percentile_last, determine_overall_status, determine_short_trend, valuation_status
+from codex.trend_observer.config import PE_MIN_PERIODS
 from codex.trend_observer.dividends import calculate_dividend_yield
 
 
 class AnalysisTest(unittest.TestCase):
+    def test_missing_current_pe_never_reuses_historical_percentile(self):
+        values = np.arange(1, PE_MIN_PERIODS + 1, dtype=float)
+        self.assertEqual(percentile_last(values), 100.0)
+        self.assertTrue(np.isnan(percentile_last(np.append(values, np.nan))))
+        frame = pd.DataFrame({
+            "date": pd.date_range("2024-01-01", periods=len(values) + 1),
+            "close": 10.0,
+            "pe": np.append(values, np.nan),
+        })
+        self.assertTrue(np.isnan(add_indicators(frame).iloc[-1].pe_percentile))
+        frame["pe_percentile_override"] = 75.0
+        self.assertTrue(np.isnan(add_indicators(frame).iloc[-1].pe_percentile))
+
     def test_overall_statuses(self):
         cases = [
             ({"short_trend": "短期强势", "mid_trend": "中期上升", "long_trend": "长期上升"}, "强趋势"),

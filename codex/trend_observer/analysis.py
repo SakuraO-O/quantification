@@ -8,6 +8,9 @@ from .dividends import calculate_dividend_yield
 
 
 def percentile_last(values):
+    # Never substitute the last historical PE for a missing current observation.
+    if not len(values) or not np.isfinite(values[-1]):
+        return np.nan
     clean = values[~np.isnan(values)]
     if len(clean) < PE_MIN_PERIODS:
         return np.nan
@@ -35,6 +38,7 @@ def add_indicators(frame):
         data["pe_percentile"] = data["pe"].rolling(PE_WINDOW_ROWS, min_periods=PE_MIN_PERIODS).apply(percentile_last, raw=True)
     else:
         data["pe_percentile"] = np.nan
+    data.loc[~np.isfinite(data["pe"]), "pe_percentile"] = np.nan
     return data
 
 
@@ -191,6 +195,7 @@ def enrich_history(frame, asset):
     data["pe_percentile_period"] = pe_percentile_period(data) if asset["asset_type"] == "指数" else ""
     if asset["asset_type"] == "指数" and "pe_percentile_period_override" in data:
         data["pe_percentile_period"] = data["pe_percentile_period_override"].fillna(data["pe_percentile_period"])
+    data.loc[data["pe_percentile"].isna(), "pe_percentile_period"] = ""
     ready = ~data[required].isna().any(axis=1)
     for idx in data[ready].index:
         row = data.loc[idx]

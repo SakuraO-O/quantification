@@ -13,15 +13,15 @@ from .analysis import enrich_history
 from .assets import security_id
 from .config import MARKET_TIMEZONE
 from .data_sources import fetch_history, make_session
+from .freshness import completed_history, expected_market_date, history_is_current
 from .dividends import apply_dividend_config
 from .supabase_store import SupabaseStore, payload_hash
 from .valuation_sources import fetch_valuation_batch, valuation_source_name
 
 
-# v2.1 recalculates signals from exact-date valuation facts only and excludes
-# invalid CSIndex weekend rows.  The version bump forces a complete rebuild
-# after the companion data-repair migration is deployed.
-CALCULATION_VERSION = "trend-v2.1.0"
+# v2.2 also clears percentiles when the current PE is missing. Rebuild all
+# historical signals on version changes, even when new market rows arrive.
+CALCULATION_VERSION = "trend-v2.2.0"
 
 
 def _as_date(value: str | date | None) -> date | None:
@@ -204,18 +204,31 @@ class MarketSynchronizer:
         for asset in assets:
             if asset.get("asset_type") != "指数":
                 continue
-            result = self.sync_valuation_asset(asset, now=now, force=force, run_id=run_id)
+            # Persist one final asset result after calculation, not an early
+            # success that could contradict a later calculation failure.
+            result = self.sync_valuation_asset(asset, now=now, force=force)
             results.append(result)
-            if result.status == "succeeded" and result.rows_changed:
+            # Unchanged source facts may still need repair after a previous
+            # calculation failure. Replaying calculations is idempotent.
+            if result.status in {"succeeded", "skipped"} and result.rows_received:
                 try:
                     self.recalculate_valuation_signals(asset, result.first_affected_date)
                 except Exception as exc:
+                    result.status = "failed"
+                    result.message = f"估值事实已接收，但信号重算失败: {exc}"
                     try:
                         self.store.record_quality_issue(result.dataset_key, "warning", "valuation_recalculation_failed", {
                             "asset": asset["symbol"], "message": str(exc),
                         })
                     except Exception:
                         pass
+            try:
+                self.store.add_run_item(run_id, dataset_key=result.dataset_key, status=result.status,
+                                        rows_received=result.rows_received, rows_changed=result.rows_changed,
+                                        first_affected_date=result.first_affected_date, message=result.message)
+            except Exception as exc:
+                result.status = "failed"
+                result.message += f"；估值日志写入失败: {exc}"
         failed = [result for result in results if result.status == "failed"]
         self.store.finish_run(run_id, "partial" if failed else "succeeded", {"assets": len(results), "changed_rows": sum(result.rows_changed for result in results), "failed": len(failed)})
         return results
@@ -236,7 +249,9 @@ class MarketSynchronizer:
             stored[column] = pd.to_numeric(stored[column], errors="coerce")
         history = _merge_valuation_history(stored[["date", "open", "high", "low", "close", "volume"]], self.store.valuation_history(sid))
         enriched = enrich_history(history, apply_dividend_config([asset], allow_subset=True)[0])
-        start = pd.Timestamp(first_affected_date) if first_affected_date else enriched.iloc[0]["date"]
+        state = self.store.latest_signal_state(sid)
+        current_version = state and state.get("calculation_version") == CALCULATION_VERSION
+        start = pd.Timestamp(first_affected_date) if first_affected_date and current_version else enriched.iloc[0]["date"]
         rows = []
         for row in enriched[enriched["date"] >= start].itertuples(index=False):
             rows.append({
@@ -266,10 +281,11 @@ class MarketSynchronizer:
         now = now or datetime.now(MARKET_TIMEZONE)
         asset = apply_dividend_config([asset], allow_subset=True)[0]
         key = self.dataset_key(asset)
-        calendar_value = self.store.calendar_is_trading_day(asset["market"], now.date())
-        is_trading_day = self.is_trading_day(asset["market"], now.date()) if calendar_value is None else calendar_value
-        if not is_trading_day and not force:
-            return SyncResult(asset["symbol"], key, "skipped", message="非交易日")
+        def calendar(market, day):
+            value = self.store.calendar_is_trading_day(market, day)
+            return self.is_trading_day(market, day) if value is None else value
+
+        expected_date = expected_market_date(asset["market"], now, calendar)
         watermark = self.store.get_watermark(key)
         sid = security_id(asset["symbol"], asset["market"])
         signal_state = self.store.latest_signal_state(sid)
@@ -288,7 +304,7 @@ class MarketSynchronizer:
         if (
             not force
             and watermark
-            and watermark.get("database_latest_date") == now.date().isoformat()
+            and watermark.get("database_latest_date") == expected_date.isoformat()
             and watermark.get("status") == "normal"
             and signals_current(watermark.get("database_latest_date"))
         ):
@@ -297,10 +313,14 @@ class MarketSynchronizer:
         start_date = self._start_date(watermark)
         try:
             with make_session() as session:
-                incoming = fetch_history(session, asset, start_date=start_date)
+                incoming = fetch_history(session, asset, start_date=start_date, expected_date=expected_date)
+            incoming = completed_history(incoming, expected_date)
             if incoming.empty:
                 raise ValueError("来源未返回有效行情")
+            if not history_is_current(incoming, expected_date):
+                raise ValueError(f"行情日期滞后: 应有 {expected_date}，来源最新 {incoming['date'].max().date()}")
             actual_source = incoming.attrs.get("source_provider", asset["provider"])
+            diagnostics = incoming.attrs.get("source_diagnostics", [])
             incoming = incoming.sort_values("date").drop_duplicates("date", keep="last").reset_index(drop=True)
             source_latest_date = incoming.iloc[-1]["date"].date().isoformat()
             incoming_hash = payload_hash(incoming.to_dict("records"))
@@ -356,10 +376,10 @@ class MarketSynchronizer:
             history = _merge_valuation_history(history, self.store.valuation_history(sid))
             enriched = enrich_history(history, asset)
             changed_dates = [row["trade_date"] for row in market_rows]
-            if changed_dates:
-                affected_start = pd.Timestamp(min(changed_dates))
-            elif not signal_state or signal_state.get("calculation_version") != CALCULATION_VERSION:
+            if not signal_state or signal_state.get("calculation_version") != CALCULATION_VERSION:
                 affected_start = pd.Timestamp(enriched.iloc[0]["date"])
+            elif changed_dates:
+                affected_start = pd.Timestamp(min(changed_dates))
             else:
                 affected_start = pd.Timestamp(signal_state["trade_date"]) + pd.Timedelta(days=1)
             signal_rows = []
@@ -389,9 +409,8 @@ class MarketSynchronizer:
                     "next_retry_at": None, "last_error": None,
                 }
             )
-            result = SyncResult(asset["symbol"], key, "succeeded", len(incoming), len(market_rows), affected_start.date().isoformat())
-            if run_id:
-                self.store.add_run_item(run_id, dataset_key=key, status=result.status, rows_received=result.rows_received, rows_changed=result.rows_changed, first_affected_date=result.first_affected_date)
+            result = SyncResult(asset["symbol"], key, "succeeded", len(incoming), len(market_rows), affected_start.date().isoformat(),
+                                message=f"应有 {expected_date}；实际 {source_latest_date}；来源 {actual_source}；备用源诊断 {diagnostics}")
             return result
         except Exception as exc:
             failures = int((watermark or {}).get("consecutive_failures") or 0) + 1
@@ -405,16 +424,32 @@ class MarketSynchronizer:
                 }
             )
             result = SyncResult(asset["symbol"], key, "failed", message=str(exc))
-            if run_id:
-                self.store.add_run_item(run_id, dataset_key=key, status="failed", message=str(exc))
             return result
 
     def sync_assets(self, assets: list[dict], *, trigger_type: str = "schedule", now: datetime | None = None, force: bool = False) -> list[SyncResult]:
         run_id = self.store.start_run("market_sync", trigger_type)
-        results = [self.sync_asset(asset, now=now, force=force, run_id=run_id) for asset in assets]
+        results = []
+        for asset in assets:
+            try:
+                result = self.sync_asset(asset, now=now, force=force, run_id=run_id)
+            except Exception as exc:
+                # Calendar/store failures before the source request must not
+                # prevent unrelated assets from being processed.
+                result = SyncResult(asset["symbol"], self.dataset_key(asset), "failed", message=str(exc))
+            results.append(result)
+            try:
+                self.store.add_run_item(run_id, dataset_key=result.dataset_key, status=result.status,
+                                        rows_received=result.rows_received, rows_changed=result.rows_changed,
+                                        first_affected_date=result.first_affected_date, message=result.message)
+            except Exception as exc:
+                result.status = "failed"
+                result.message += f"；同步日志写入失败: {exc}"
         failed = [item for item in results if item.status == "failed"]
         for item in failed:
-            self.store.record_quality_issue(item.dataset_key, "error", "ingestion_failed", {"asset": item.asset, "message": item.message})
+            try:
+                self.store.record_quality_issue(item.dataset_key, "error", "ingestion_failed", {"asset": item.asset, "message": item.message})
+            except Exception as exc:
+                item.message += f"；质量告警写入失败: {exc}"
         changed = sum(item.rows_changed for item in results)
         self.store.finish_run(run_id, "partial" if failed else "succeeded", {"assets": len(results), "changed_rows": changed, "failed": len(failed)})
         return results
