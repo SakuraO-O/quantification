@@ -11,8 +11,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timezone
 import time
+import math
 
-from .data_sources import make_session
+from .data_sources import make_session, fetch_csindex
 from .market_valuation import NASDAQ_PE_URL, SP500_PE_URL, fetch_text, parse_number, parse_worldperatio
 
 
@@ -34,6 +35,8 @@ def valuation_source_name(asset: dict) -> str | None:
 
     if asset.get("asset_type") != "指数":
         return None
+    if asset.get("provider") == "csindex":
+        return "csindex"
     if asset.get("symbol") in {"sz399006", "980092"}:
         return "cnindex"
     if asset.get("symbol") == "NDX100":
@@ -41,6 +44,25 @@ def valuation_source_name(asset: dict) -> str | None:
     if asset.get("symbol") == "SPX":
         return "worldperatio"
     return None
+
+
+def fetch_csindex_pe(session, asset: dict) -> ValuationBatch:
+    """Official daily rolling PE, independently requested by valuation sync.
+
+    Reuse transport/normalization, not the market persistence path. Request the
+    full supported history so a previously absent valuation adapter backfills
+    its gap. Invalid/missing observations are never filled forward.
+    """
+    frame = fetch_csindex(session, asset["symbol"])
+    observations = [
+        {"trade_date": row.date.date().isoformat(), "value": float(row.pe)}
+        for row in frame.itertuples(index=False)
+        if math.isfinite(float(row.pe)) and float(row.pe) > 0
+    ]
+    if not observations:
+        raise ValueError(f"中证未返回有效滚动PE: {asset['symbol']}")
+    return ValuationBatch("csindex", "https://www.csindex.com.cn/csindex-home/perf/index-perf",
+                          "official_rolling_pe_daily", observations)
 
 
 def parse_cnindex_index_list(payload: dict, symbol: str) -> dict:
@@ -131,6 +153,8 @@ def fetch_valuation_batch(asset: dict, *, session=None) -> ValuationBatch | None
     owned_session = session is None
     session = session or make_session()
     try:
+        if source == "csindex":
+            return fetch_csindex_pe(session, asset)
         if source == "cnindex":
             return fetch_cnindex_current_pe(session, asset)
         if source == "worldperatio":

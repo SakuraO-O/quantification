@@ -81,10 +81,11 @@ class DashboardV2Test(unittest.TestCase):
         self.assertIn("sync-valuation --market CN --force", pipeline)
         self.assertNotIn("sync-market --market CN --force", pipeline)
         fundamentals_start = pipeline.index('elif [ "$SCHEDULE" = "30 23 * * *" ]; then')
-        dispatch_window_start = pipeline.index("          else\n            python -B -m codex.trend_observer.cli publish-dashboard")
+        dispatch_window_start = pipeline.index("          else\n            # Dispatch")
         fundamentals_block = pipeline[fundamentals_start:dispatch_window_start]
-        self.assertIn("python -B -m codex.trend_observer.cli sync-fundamentals", fundamentals_block)
-        self.assertIn("python -B -m codex.trend_observer.cli publish-dashboard", fundamentals_block)
+        self.assertIn("run_task sync-fundamentals", fundamentals_block)
+        self.assertIn("run_task publish-dashboard", fundamentals_block)
+        self.assertIn("run_task sync-market --market CN --trigger retry", fundamentals_block)
 
     def test_dashboard_publisher_uses_store_select_contract(self):
         publisher = (self.root / "codex/trend_observer/dashboard_versions.py").read_text(encoding="utf-8")

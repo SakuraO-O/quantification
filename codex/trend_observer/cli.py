@@ -92,8 +92,11 @@ def main(argv=None):
             elif args.command == "sync-valuation":
                 run_bootstrap(store)
                 assets = [asset for asset in active_assets() if not args.market or asset["market"] == args.market]
-                for item in MarketSynchronizer(store).sync_valuations(assets, force=args.force, trigger_type=args.trigger):
+                results = MarketSynchronizer(store).sync_valuations(assets, force=args.force, trigger_type=args.trigger)
+                for item in results:
                     print(f"估值 {item.asset}｜{item.status}｜接收 {item.rows_received} 行｜变化 {item.rows_changed} 行｜{item.message}")
+                if any(item.status == "failed" for item in results):
+                    raise RuntimeError("部分估值同步失败，请检查 ingestion_run_items 与 ingestion_watermarks。")
             elif args.command == "sync-fundamentals":
                 run_bootstrap(store)
                 results = FundamentalSynchronizer(store).sync_assets(active_assets(), force=args.force, trigger_type=args.trigger)

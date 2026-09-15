@@ -10,6 +10,7 @@ import pandas as pd
 import requests
 
 from .config import HTTP_TIMEOUT, MARKET_TIMEZONE, MIN_HISTORY_ROWS, TENCENT_LOOKBACK_DAYS, TENCENT_LOOKBACK_ROWS
+from .freshness import completed_history, history_is_current
 
 
 def make_session():
@@ -332,7 +333,7 @@ def fetch_nasdaq_index(session, symbol, start_date=None):
     )
 
 
-def fetch_global_index(session, asset, start_date=None):
+def fetch_global_index(session, asset, start_date=None, expected_date=None):
     errors = []
     candidates = [
         ("东方财富全球指数", "eastmoney", fetch_eastmoney_global_index, asset.get("eastmoney_symbol")),
@@ -344,10 +345,13 @@ def fetch_global_index(session, asset, start_date=None):
         if not symbol:
             continue
         try:
-            history = fetcher(session, symbol, start_date=start_date)
-            if not history.empty and (start_date is not None or len(history) >= MIN_HISTORY_ROWS):
-                return with_source(history, provider)
-            errors.append(f"{label} 仅返回 {len(history)} 个交易日")
+            history = completed_history(fetcher(session, symbol, start_date=start_date), expected_date)
+            if history_is_current(history, expected_date) and (start_date is not None or len(history) >= MIN_HISTORY_ROWS):
+                result = with_source(history, provider)
+                result.attrs["source_diagnostics"] = errors.copy()
+                return result
+            latest = None if history.empty else history['date'].max().date()
+            errors.append(f"{label} 返回 {len(history)} 个交易日，最新 {latest}，应有 {expected_date}")
         except Exception as exc:
             errors.append(f"{label}: {exc}")
     raise ValueError(f"全球指数行情获取失败: {'; '.join(errors)}")
@@ -422,16 +426,22 @@ def fetch_cnindex(session, symbol, start_date=None):
     return frame
 
 
-def fetch_history(session, asset, start_date=None):
+def fetch_history(session, asset, start_date=None, expected_date=None):
     provider = asset["provider"]
     if provider == "tencent" and asset["asset_type"] == "股票":
-        try:
-            history = fetch_eastmoney_stock(session, asset["symbol"], start_date=start_date)
-            if not history.empty and (start_date is not None or len(history) >= MIN_HISTORY_ROWS):
-                return with_source(history, "eastmoney")
-        except Exception:
-            pass
-        return with_source(fetch_tencent(session, asset["symbol"], start_date=start_date), "tencent")
+        errors = []
+        for source, fetcher in [("eastmoney", fetch_eastmoney_stock), ("tencent", fetch_tencent)]:
+            try:
+                history = completed_history(fetcher(session, asset["symbol"], start_date=start_date), expected_date)
+                if history_is_current(history, expected_date) and (start_date is not None or len(history) >= MIN_HISTORY_ROWS):
+                    result = with_source(history, source)
+                    result.attrs["source_diagnostics"] = errors
+                    return result
+                latest = None if history.empty else history['date'].max().date()
+                errors.append(f"{source}: 最新 {latest}，应有 {expected_date}，行数 {len(history)}")
+            except Exception as exc:
+                errors.append(f"{source}: {exc}")
+        raise ValueError("股票行情未达到完整性要求: " + "; ".join(errors))
     if provider == "tencent":
         return with_source(fetch_tencent(session, asset["symbol"], start_date=start_date), "tencent")
     if provider == "csindex":
@@ -439,5 +449,5 @@ def fetch_history(session, asset, start_date=None):
     if provider == "cnindex":
         return with_source(fetch_cnindex(session, asset["symbol"], start_date=start_date), "cnindex")
     if provider == "global_index":
-        return fetch_global_index(session, asset, start_date=start_date)
+        return fetch_global_index(session, asset, start_date=start_date, expected_date=expected_date)
     raise ValueError(f"不支持的数据源: {provider}")

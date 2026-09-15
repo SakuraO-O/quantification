@@ -14,11 +14,23 @@ from codex.trend_observer.valuation_sources import (
     ValuationBatch,
     fetch_cnindex_current_pe,
     fetch_json,
+    fetch_valuation_batch,
     parse_cnindex_index_list,
 )
 
 
 class ValuationSourcesTest(unittest.TestCase):
+    def test_csindex_valuation_route_filters_invalid_observations(self):
+        frame = pd.DataFrame({"date": pd.date_range("2026-09-07", periods=5),
+                              "pe": [13.62, float("nan"), 0, float("inf"), 13.52]})
+        asset = {"symbol": "000300", "provider": "csindex", "asset_type": "指数"}
+        with patch("codex.trend_observer.valuation_sources.fetch_csindex", return_value=frame):
+            batch = fetch_valuation_batch(asset, session=object())
+        self.assertEqual(batch.source, "csindex")
+        self.assertEqual(batch.methodology, "official_rolling_pe_daily")
+        self.assertEqual(batch.observations, [{"trade_date": "2026-09-07", "value": 13.62},
+                                              {"trade_date": "2026-09-11", "value": 13.52}])
+
     def test_cnindex_json_parser_uses_published_date_and_dynamic_pe(self):
         payload = {
             "query_day": 1785427200000,
