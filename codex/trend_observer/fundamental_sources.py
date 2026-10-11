@@ -232,29 +232,36 @@ class FundamentalSynchronizer:
             announcement_date = _date(raw.get("公告日期"))
             ex_date = _date(raw.get("除权除息日"))
             cash_per_ten = _number(raw.get("派息"))
+            bonus_per_ten = _number(raw.get("送股"))
+            transfer_per_ten = _number(raw.get("转增"))
             stage_name = str(raw.get("进度") or "")
             stage = "implemented" if "实施" in stage_name else "proposal"
-            if announcement_date is None or cash_per_ten is None:
+            if announcement_date is None or all(value is None for value in (cash_per_ten, bonus_per_ten, transfer_per_ten)):
                 continue
             # In Chinese A-share disclosures, a dividend implemented in year N
             # normally belongs to fiscal year N-1.  The event date is used only
             # for aggregation; each original event remains separately traceable.
             fiscal_year = (ex_date or announcement_date).year - 1 if ex_date else announcement_date.year - 1
-            cash_per_share = cash_per_ten / 10.0
+            cash_per_share = (cash_per_ten or 0) / 10.0
             code = _stock_code(asset)
             record_id = f"{code}:{announcement_date.isoformat()}:{ex_date or 'unannounced'}:{stage}:{cash_per_ten}"
             content_hash = payload_hash({"code": code, "announcement_date": announcement_date, "ex_date": ex_date,
-                "stage": stage, "cash_per_ten": cash_per_ten})
+                "stage": stage, "cash_per_ten": cash_per_ten, "bonus_per_ten": bonus_per_ten,
+                "transfer_per_ten": transfer_per_ten})
             documents.append({"security_id": sid, "source": "sina", "source_record_id": record_id,
                 "title": f"新浪分红派息：{asset['name']} {announcement_date}", "document_type": "structured_dividend_event",
                 "report_period": date(fiscal_year, 12, 31), "announcement_date": announcement_date,
                 "document_url": DIVIDEND_URL.format(symbol=code), "content_hash": content_hash})
             candidates.append({"security_id": sid, "fiscal_year": fiscal_year, "event_stage": stage, "announcement_id": record_id,
                 "cash_dividend_per_share": cash_per_share, "ex_date": ex_date, "announcement_date": announcement_date,
+                "bonus_shares_per_share": None if bonus_per_ten is None else bonus_per_ten / 10.0,
+                "transfer_shares_per_share": None if transfer_per_ten is None else transfer_per_ten / 10.0,
                 "document_key": (record_id, content_hash)})
         saved_documents = self.store.upsert("source_documents", documents, "source,source_record_id,content_hash")
         document_ids = {(row["source_record_id"], row["content_hash"]): row["source_document_id"] for row in saved_documents}
-        existing = {row["announcement_id"] for row in self.store.select("dividend_events", select="announcement_id", filters={"security_id": f"eq.{sid}"})}
+        existing = {row["announcement_id"]: row for row in self.store.select(
+            "dividend_events", select="announcement_id,bonus_shares_per_share,transfer_shares_per_share,cash_dividend_per_share,source_document_id",
+            filters={"security_id": f"eq.{sid}"})}
         # Remove the in-memory join key before serializing the event.  Sending
         # it to PostgREST would make it look for a non-existent
         # ``dividend_events.document_key`` column and reject the whole batch.
@@ -265,11 +272,22 @@ class FundamentalSynchronizer:
             payload["source_document_id"] = document_ids[document_key]
             rows.append(payload)
         new_rows = [row for row in rows if row["announcement_id"] not in existing]
+        updated = 0
+        for row in rows:
+            prior = existing.get(row["announcement_id"])
+            if prior is None:
+                continue
+            changed = {field: row[field] for field in (
+                "bonus_shares_per_share", "transfer_shares_per_share", "cash_dividend_per_share", "source_document_id"
+            ) if prior.get(field) != row[field]}
+            if changed:
+                self.store.patch("dividend_events", {"security_id": f"eq.{sid}", "announcement_id": f"eq.{row['announcement_id']}"}, changed)
+                updated += 1
         # Events are immutable.  Avoid PostgREST's composite-conflict path
         # (which currently returns 400 in this project) after idempotently
         # excluding existing announcement IDs above.
         self.store.insert("dividend_events", new_rows)
-        return len(rows), len(new_rows)
+        return len(rows), len(new_rows) + updated
 
     @staticmethod
     def _latest_by_metric(rows: list[dict]) -> tuple[date | None, dict[str, float]]:

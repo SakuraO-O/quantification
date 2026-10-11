@@ -64,6 +64,20 @@ V2 自动任务位于 [.github/workflows/trend_observer_v2.yml](.github/workflow
 - 国证仍只有当前滚动PE来源，恒生尚无已核验接入；本次不承诺补齐它们的历史百分位，不将缺失伪装为正常。
 - 本次本地代码修改不等于已上线。后续需提交合并部署工作流，在受影响市场执行估值同步、行情重算后重新发布；不要修改历史晨报快照。生产补数需另外执行并验证。
 
+### 股票近三年含息总回报（待部署）
+
+股票观察列表在“近3年”后新增“近3年含息总回报”。前者为不含现金分红、计入送转股的价格回报；后者为税前现金分红在除权除息日再投入的累计回报，均采用三年前同日或之前最近交易日为起点。计算只在 Python 发布链路执行，前端不叠加股息率；方法、缺数状态与测试要求见 [TOTAL_RETURN_REQUIREMENTS.md](TOTAL_RETURN_REQUIREMENTS.md)。历史不足、原始价格缺失、分红未核验或检测到未解释公司行为时显示“数据不足”。
+
+首次上线时，须先部署 `20261011100059_stock_total_return_facts.sql`，然后依次运行：
+
+```bash
+python -B -m codex.trend_observer.cli sync-fundamentals --force
+python -B -m codex.trend_observer.cli sync-market --market CN --force
+python -B -m codex.trend_observer.cli publish-dashboard
+```
+
+`sync-market --market CN --force` 对股票抓取完整历史以回填未复权价格；正常定时仍为增量抓取。旧版行情库中 8 只股票截至 2026-10-09 只有不足三年的历史，迁移本身不会凭空补齐数据。上线后需检查 9 只股票的 `market_daily.raw_close`、`dividend_events` 送转股比例和最新发布版本的两项三年回报；本地代码修改不等于已执行生产回填。
+
 ### 上线检查清单
 
 一次包含数据库或 Edge 变更的上线，按下面顺序完成：

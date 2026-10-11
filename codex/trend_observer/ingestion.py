@@ -12,7 +12,7 @@ import pandas as pd
 from .analysis import enrich_history
 from .assets import security_id
 from .config import MARKET_TIMEZONE
-from .data_sources import fetch_history, make_session
+from .data_sources import fetch_history, fetch_unadjusted_stock_history, make_session
 from .freshness import completed_history, expected_market_date, history_is_current
 from .dividends import apply_dividend_config
 from .supabase_store import SupabaseStore, payload_hash
@@ -310,19 +310,72 @@ class MarketSynchronizer:
         ):
             return SyncResult(asset["symbol"], key, "skipped", message="当日数据已入库")
 
-        start_date = self._start_date(watermark)
+        # A manual force run is the one-time, full-history repair path for the
+        # stock three-year window.  Normal scheduled runs remain incremental.
+        start_date = None if force and asset["asset_type"] == "股票" else self._start_date(watermark)
         try:
+            existing_records = None
+            existing_by_date = {}
             with make_session() as session:
                 incoming = fetch_history(session, asset, start_date=start_date, expected_date=expected_date)
+                if asset["asset_type"] == "股票" and start_date is not None and history_is_current(incoming, expected_date):
+                    existing_records = self.store.history(sid)
+                    existing_by_date = {row["trade_date"]: row for row in existing_records}
+                    # A new ex-date revises *all* older qfq closes.  An
+                    # overlap revision is the signal to refresh the entire
+                    # adjusted history, not just the last few days.
+                    revised_overlap = any(
+                        row.date.date().isoformat() in existing_by_date
+                        and not _same_number(row.close, existing_by_date[row.date.date().isoformat()].get("close"))
+                        for row in incoming.itertuples(index=False)
+                    )
+                    if revised_overlap:
+                        try:
+                            full = fetch_history(session, asset, start_date=None, expected_date=expected_date)
+                            if not history_is_current(completed_history(full, expected_date), expected_date):
+                                raise ValueError("完整复权历史未覆盖最新已完成交易日")
+                            incoming = full
+                            start_date = None
+                        except Exception as exc:
+                            # Persisting only the overlap would mix old and
+                            # newly rebased qfq closes in the signal history.
+                            raise ValueError(f"完整复权历史补抓失败: {type(exc).__name__}: {exc}") from exc
+                raw_prices = None
+                raw_error = None
+                if asset["asset_type"] == "股票":
+                    try:
+                        raw_prices = completed_history(
+                            fetch_unadjusted_stock_history(session, asset["symbol"], start_date), expected_date
+                        )
+                    except Exception as exc:
+                        # Market/trend synchronization must not fail solely
+                        # because the optional total-return fact is missing.
+                        raw_error = f"未复权行情不可用: {type(exc).__name__}: {exc}"
             incoming = completed_history(incoming, expected_date)
             if incoming.empty:
                 raise ValueError("来源未返回有效行情")
             if not history_is_current(incoming, expected_date):
                 raise ValueError(f"行情日期滞后: 应有 {expected_date}，来源最新 {incoming['date'].max().date()}")
             actual_source = incoming.attrs.get("source_provider", asset["provider"])
-            diagnostics = incoming.attrs.get("source_diagnostics", [])
+            adjustment_method = incoming.attrs.get("adjustment_method", "source")
+            diagnostics = list(incoming.attrs.get("source_diagnostics", []))
+            if raw_error:
+                diagnostics.append(raw_error)
             incoming = incoming.sort_values("date").drop_duplicates("date", keep="last").reset_index(drop=True)
+            if existing_records is None:
+                existing_records = self.store.history(sid)
+                existing_by_date = {row["trade_date"]: row for row in existing_records}
+            if asset["asset_type"] == "股票":
+                raw_by_date = {} if raw_prices is None else dict(zip(raw_prices["date"], raw_prices["close"]))
+                incoming["raw_close"] = incoming["date"].map(raw_by_date)
             source_latest_date = incoming.iloc[-1]["date"].date().isoformat()
+            if asset["asset_type"] == "股票":
+                # A temporary raw-provider failure must not erase previously
+                # verified unadjusted closes in the overlap window.
+                incoming["raw_close"] = [
+                    value if pd.notna(value) else (existing_by_date.get(day, {}).get("raw_close") or float("nan"))
+                    for day, value in zip(incoming["date"].dt.strftime("%Y-%m-%d"), incoming["raw_close"])
+                ]
             incoming_hash = payload_hash(incoming.to_dict("records"))
             if (
                 watermark
@@ -335,21 +388,24 @@ class MarketSynchronizer:
                 )
                 return SyncResult(asset["symbol"], key, "skipped", len(incoming), message="来源未更新")
 
-            existing_records = self.store.history(sid)
-            existing_by_date = {row["trade_date"]: row for row in existing_records}
             all_market_rows = [
                 {
                     "security_id": sid,
                     "trade_date": row.date.date().isoformat(),
                     "open": _finite(row.open), "high": _finite(row.high), "low": _finite(row.low), "close": _finite(row.close),
-                    "volume": _finite(row.volume), "source": actual_source, "adjustment_method": "source",
+                    "volume": _finite(row.volume), "source": actual_source, "adjustment_method": adjustment_method,
+                    **({"raw_close": _finite(row.raw_close), "raw_close_source": "eastmoney" if pd.notna(row.raw_close) else None}
+                       if asset["asset_type"] == "股票" else {}),
                 }
                 for row in incoming.itertuples(index=False)
             ]
             market_rows = [
                 row for row in all_market_rows
                 if row["trade_date"] not in existing_by_date
-                or any(not _same_number(row.get(field), existing_by_date[row["trade_date"]].get(field)) for field in ("open", "high", "low", "close", "volume"))
+                or any(not _same_number(row.get(field), existing_by_date[row["trade_date"]].get(field))
+                       for field in ("open", "high", "low", "close", "volume", "raw_close"))
+                or row["adjustment_method"] != existing_by_date[row["trade_date"]].get("adjustment_method")
+                or (asset["asset_type"] == "股票" and row["raw_close_source"] != existing_by_date[row["trade_date"]].get("raw_close_source"))
             ]
             # Price adapters may expose a loosely defined PE field.  Do not
             # persist it here: valuation facts must enter through the dedicated

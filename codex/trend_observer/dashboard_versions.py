@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 
@@ -10,6 +10,7 @@ from .config import ASSETS, MARKET_TIMEZONE, STYLE_COMPASS_PAIRS
 from .ingestion import CALCULATION_VERSION
 from .style_compass import calculate_style_compass, style_recommendation_details
 from .supabase_store import SupabaseStore
+from .total_return import stock_three_year_returns
 
 
 CURRENT_SIGNAL_FIELDS = (
@@ -47,6 +48,24 @@ class DashboardPublisher:
             limit=1,
         )
         return rows[0] if rows else None
+
+    def _stock_three_year_returns(self, asset: dict, trade_date: str) -> dict:
+        sid = asset["security_id"]
+        watermark = getattr(self.store, "get_watermark", lambda _key: None)(
+            f"fundamentals:CN:{asset['symbol']}:eastmoney-sina"
+        )
+        last_success = (watermark or {}).get("last_success_at")
+        verified = bool(
+            watermark and watermark.get("status") == "normal" and last_success
+            and pd.Timestamp(last_success).date() >= pd.Timestamp(trade_date).date() - timedelta(days=14)
+        )
+        events = self.store.select(
+            "dividend_events",
+            select="event_stage,announcement_date,ex_date,cash_dividend_per_share,bonus_shares_per_share,transfer_shares_per_share",
+            filters={"security_id": f"eq.{sid}"},
+        )
+        return stock_three_year_returns(self.store.history(sid), events, trade_date,
+                                        dividend_history_current=verified)
 
     def _latest_fundamental_assessment(self, sid: str) -> dict | None:
         rows = self.store.select(
@@ -174,6 +193,15 @@ class DashboardPublisher:
                     "latest_announcement_date": (dividend or {}).get("announcement_date"),
                     "fundamental_assessment": assessment,
                 }
+                if signal.get("data_status") == "current":
+                    record |= self._stock_three_year_returns(asset, signal["trade_date"])
+                else:
+                    record |= {
+                        "price_return_3y": None, "total_return_3y": None,
+                        "total_return_3y_status": "数据延迟", "total_return_3y_issue": signal.get("data_issue"),
+                        "total_return_3y_start_date": None, "total_return_3y_end_date": signal.get("trade_date"),
+                        "total_return_3y_method": "tax_before_dividend_reinvested_on_ex_date",
+                    }
             records.append(record)
         assets_by_name = {asset["name"]: asset for asset in assets}
         allocation = self._allocation()
