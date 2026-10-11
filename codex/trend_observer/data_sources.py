@@ -88,7 +88,8 @@ def fetch_tencent(session, symbol, start_date=None):
     response.raise_for_status()
     payload = response.json()
     symbol_data = payload.get("data", {}).get(symbol, {})
-    raw_rows = symbol_data.get("qfqday") or symbol_data.get("day") or []
+    adjusted_rows = symbol_data.get("qfqday") or []
+    raw_rows = adjusted_rows or symbol_data.get("day") or []
     rows = [
         {
             "date": row[0],
@@ -101,7 +102,9 @@ def fetch_tencent(session, symbol, start_date=None):
         }
         for row in raw_rows
     ]
-    return normalize_frame(rows)
+    frame = normalize_frame(rows)
+    frame.attrs["adjustment_method"] = "qfq" if adjusted_rows else "raw"
+    return frame
 
 
 def eastmoney_secid(symbol):
@@ -113,14 +116,14 @@ def eastmoney_secid(symbol):
     raise ValueError(f"东方财富暂不支持该代码: {symbol}")
 
 
-def fetch_eastmoney_stock(session, symbol, start_date=None):
+def fetch_eastmoney_stock(session, symbol, start_date=None, *, adjustment="1"):
     url = "https://push2his.eastmoney.com/api/qt/stock/kline/get"
     today = datetime.now(MARKET_TIMEZONE).date()
     start = _start_date(start_date, TENCENT_LOOKBACK_DAYS)
     params = {
         "secid": eastmoney_secid(symbol),
         "klt": "101",
-        "fqt": "1",
+        "fqt": adjustment,
         "beg": start.strftime("%Y%m%d"),
         "end": today.strftime("%Y%m%d"),
         "lmt": TENCENT_LOOKBACK_ROWS,
@@ -147,7 +150,15 @@ def fetch_eastmoney_stock(session, symbol, start_date=None):
                 "pe": np.nan,
             }
         )
-    return normalize_frame(rows)
+    frame = normalize_frame(rows)
+    frame.attrs["adjustment_method"] = "qfq" if adjustment == "1" else "raw"
+    return frame
+
+
+def fetch_unadjusted_stock_history(session, symbol, start_date=None):
+    """Independent raw-price series; never derive dividends from qfq closes."""
+
+    return fetch_eastmoney_stock(session, symbol, start_date, adjustment="0")
 
 
 def fetch_eastmoney_global_index(session, symbol, start_date=None):

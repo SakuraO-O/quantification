@@ -44,7 +44,8 @@ class RepairStore:
     def history(self, sid):
         return [{"security_id": sid, "trade_date": row.date.date().isoformat(), "open": row.open,
                  "high": row.high, "low": row.low, "close": row.close, "volume": row.volume,
-                 "source": "eastmoney"} for row in self.incoming.itertuples(index=False)]
+                 "source": "eastmoney", "adjustment_method": "source", "raw_close": None}
+                for row in self.incoming.itertuples(index=False)]
     def valuation_history(self, sid): return []
     def save_market_rows(self, rows): self.saved_market.extend(rows); return rows
     def save_valuation_rows(self, rows): self.saved_valuations.extend(rows); return rows
@@ -54,6 +55,96 @@ class RepairStore:
 
 
 class V2RegressionTest(unittest.TestCase):
+    def test_force_stock_market_sync_backfills_raw_closes(self):
+        asset = next(item for item in active_assets() if item["asset_type"] == "股票")
+        dates = pd.bdate_range(end="2026-09-11", periods=280)
+        frame = pd.DataFrame({"date": dates, "open": 10., "high": 10., "low": 10.,
+                              "close": 10., "volume": 100., "pe": float("nan")})
+        frame.attrs["source_provider"] = "eastmoney"
+        frame.attrs["adjustment_method"] = "qfq"
+        raw = frame.copy()
+        store = RepairStore(asset, frame)
+        with patch("codex.trend_observer.ingestion.make_session", return_value=nullcontext(object())), \
+             patch("codex.trend_observer.ingestion.fetch_history", return_value=frame) as adjusted_fetch, \
+             patch("codex.trend_observer.ingestion.fetch_unadjusted_stock_history", return_value=raw) as raw_fetch:
+            result = MarketSynchronizer(store).sync_asset(
+                asset, now=datetime(2026, 9, 11, 18, 0, tzinfo=ZoneInfo("Asia/Shanghai")), force=True
+            )
+        self.assertEqual(result.status, "succeeded")
+        self.assertIsNone(adjusted_fetch.call_args.kwargs["start_date"])
+        self.assertIsNone(raw_fetch.call_args.args[2])
+        self.assertEqual(store.saved_market[-1]["raw_close"], 10.)
+        self.assertEqual(store.saved_market[-1]["raw_close_source"], "eastmoney")
+
+    def test_failed_full_qfq_refresh_does_not_persist_mixed_history(self):
+        asset = next(item for item in active_assets() if item["asset_type"] == "股票")
+        dates = pd.bdate_range(end="2026-09-11", periods=280)
+        frame = pd.DataFrame({"date": dates, "open": 10., "high": 10., "low": 10.,
+                              "close": 10., "volume": 100., "pe": float("nan")})
+        frame.attrs["adjustment_method"] = "qfq"
+        store = RepairStore(asset, frame)
+        original_history = store.history
+        def changed_history(sid):
+            rows = original_history(sid)
+            rows[-2]["close"] = 11.
+            return rows
+        store.history = changed_history
+        with patch("codex.trend_observer.ingestion.make_session", return_value=nullcontext(object())), \
+             patch("codex.trend_observer.ingestion.fetch_history", side_effect=[frame, ValueError("timeout")]) as fetch:
+            result = MarketSynchronizer(store).sync_asset(
+                asset, now=datetime(2026, 9, 11, 18, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
+            )
+        self.assertEqual(result.status, "failed")
+        self.assertEqual(fetch.call_count, 2)
+        self.assertIn("完整复权历史补抓失败", result.message)
+        self.assertEqual(store.saved_market, [])
+
+    def test_incomplete_full_qfq_refresh_does_not_persist_mixed_history(self):
+        asset = next(item for item in active_assets() if item["asset_type"] == "股票")
+        dates = pd.bdate_range(end="2026-09-11", periods=280)
+        frame = pd.DataFrame({"date": dates, "open": 10., "high": 10., "low": 10.,
+                              "close": 10., "volume": 100., "pe": float("nan")})
+        store = RepairStore(asset, frame)
+        original_history = store.history
+        def changed_history(sid):
+            rows = original_history(sid)
+            rows[-2]["close"] = 11.
+            return rows
+        store.history = changed_history
+        with patch("codex.trend_observer.ingestion.make_session", return_value=nullcontext(object())), \
+             patch("codex.trend_observer.ingestion.fetch_history", side_effect=[frame, frame.iloc[:-1]]):
+            result = MarketSynchronizer(store).sync_asset(
+                asset, now=datetime(2026, 9, 11, 18, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
+            )
+        self.assertEqual(result.status, "failed")
+        self.assertIn("未覆盖最新已完成交易日", result.message)
+        self.assertEqual(store.saved_market, [])
+
+    def test_raw_price_source_is_repaired_even_when_price_is_unchanged(self):
+        asset = next(item for item in active_assets() if item["asset_type"] == "股票")
+        dates = pd.bdate_range(end="2026-09-11", periods=280)
+        frame = pd.DataFrame({"date": dates, "open": 10., "high": 10., "low": 10.,
+                              "close": 10., "volume": 100., "pe": float("nan")})
+        frame.attrs["adjustment_method"] = "qfq"
+        store = RepairStore(asset, frame)
+        original_history = store.history
+        def untagged_history(sid):
+            rows = original_history(sid)
+            for row in rows:
+                row["raw_close"] = 10.
+                row["adjustment_method"] = "qfq"
+                row["raw_close_source"] = None
+            return rows
+        store.history = untagged_history
+        with patch("codex.trend_observer.ingestion.make_session", return_value=nullcontext(object())), \
+             patch("codex.trend_observer.ingestion.fetch_history", return_value=frame), \
+             patch("codex.trend_observer.ingestion.fetch_unadjusted_stock_history", return_value=frame):
+            result = MarketSynchronizer(store).sync_asset(
+                asset, now=datetime(2026, 9, 11, 18, 0, tzinfo=ZoneInfo("Asia/Shanghai"))
+            )
+        self.assertEqual(result.status, "succeeded")
+        self.assertEqual(store.saved_market[-1]["raw_close_source"], "eastmoney")
+
     def test_morning_retry_skips_fresh_previous_session_without_fetch(self):
         from unittest.mock import Mock
         asset = next(item for item in active_assets() if item["asset_type"] == "股票")

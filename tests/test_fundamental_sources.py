@@ -84,7 +84,8 @@ def finance_frame(*, bank=False):
 
 
 def dividend_frame():
-    return pd.DataFrame([{"公告日期": "2026-06-01", "派息": 10, "进度": "实施", "除权除息日": "2026-06-10"}])
+    return pd.DataFrame([{"公告日期": "2026-06-01", "派息": 10, "送股": 0, "转增": 0,
+                          "进度": "实施", "除权除息日": "2026-06-10"}])
 
 
 class FundamentalSourceTest(unittest.TestCase):
@@ -99,10 +100,28 @@ class FundamentalSourceTest(unittest.TestCase):
         event = store.tables["dividend_events"][0]
         self.assertEqual(event["fiscal_year"], 2025)
         self.assertEqual(event["cash_dividend_per_share"], 1)
+        self.assertEqual(event["bonus_shares_per_share"], 0)
+        self.assertEqual(event["transfer_shares_per_share"], 0)
         self.assertNotIn("document_key", event)
         assessment = store.tables["fundamental_assessments"][0]
         self.assertEqual(assessment["report_period"], date(2025, 12, 31))
         self.assertEqual(assessment["dividend_safety_status"], "稳健")
+
+    def test_existing_dividend_is_backfilled_with_share_distribution_ratios(self):
+        asset = next(item for item in active_assets() if item["symbol"] == "sh600900")
+        store = MemoryStore()
+        initial = dividend_frame()
+        sync = FundamentalSynchronizer(store, FundamentalSource(lambda _: finance_frame(), lambda _: initial))
+        self.assertEqual(sync.sync_asset(asset, today=date(2026, 7, 19), force=True).status, "succeeded")
+        revised = dividend_frame()
+        revised.loc[0, "送股"] = 2
+        revised.loc[0, "转增"] = 1
+        sync = FundamentalSynchronizer(store, FundamentalSource(lambda _: finance_frame(), lambda _: revised))
+        self.assertEqual(sync.sync_asset(asset, today=date(2026, 7, 19), force=True).status, "succeeded")
+        self.assertEqual(len(store.tables["dividend_events"]), 1)
+        event = store.tables["dividend_events"][0]
+        self.assertAlmostEqual(event["bonus_shares_per_share"], .2)
+        self.assertAlmostEqual(event["transfer_shares_per_share"], .1)
 
     def test_bank_uses_capital_metric_and_not_free_cashflow_requirement(self):
         asset = next(item for item in active_assets() if item["symbol"] == "sh600036")

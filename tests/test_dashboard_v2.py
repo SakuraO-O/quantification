@@ -92,6 +92,16 @@ class DashboardV2Test(unittest.TestCase):
         self.assertNotIn("\n            columns=", publisher)
         self.assertIn('select="fiscal_year,cash_dividend_per_share', publisher)
 
+    def test_stock_three_year_total_return_is_a_server_field_after_price_return(self):
+        publisher = (self.root / "codex/trend_observer/dashboard_versions.py").read_text(encoding="utf-8")
+        self.assertIn("stock_three_year_returns(self.store.history(sid), events", publisher)
+        self.assertIn('asset.price_return_3y', self.runtime)
+        self.assertIn('asset.total_return_3y', self.runtime)
+        self.assertIn('data-stock-sort="y3Total"', self.html)
+        stock_header = self.html.split('<div class="watch-view" id="stock-view">', 1)[1].split('<tbody id="stock-body">', 1)[0]
+        self.assertLess(stock_header.index('data-stock-sort="y3"'), stock_header.index('data-stock-sort="y3Total"'))
+        self.assertNotIn('Math.abs(asset.total_return_3y)', self.runtime)
+
     def test_modal_chart_tooltips_render_in_the_dialog_top_layer(self):
         # Index and stock price views share drawApiPriceChart; stock research
         # charts use bindResearchTooltips. Both must use the dialog-aware host.

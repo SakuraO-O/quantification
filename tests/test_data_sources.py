@@ -10,6 +10,7 @@ from codex.trend_observer.data_sources import (
     fetch_fred_close_series,
     fetch_global_index,
     fetch_nasdaq_index,
+    fetch_unadjusted_stock_history,
     fetch_yahoo_index,
     trading_weekdays_only,
 )
@@ -37,6 +38,14 @@ class FakeSession:
 
 
 class DataSourcesTest(unittest.TestCase):
+    def test_unadjusted_stock_source_requests_raw_prices(self):
+        payload = {"data": {"klines": ["2026-10-09,10,9.5,10,9,12345"]}}
+        session = FakeSession(payload)
+        frame = fetch_unadjusted_stock_history(session, "sh600900")
+        self.assertEqual(session.requests[0][1]["params"]["fqt"], "0")
+        self.assertEqual(frame.iloc[0]["close"], 9.5)
+        self.assertEqual(frame.attrs["adjustment_method"], "raw")
+
     def test_trading_weekdays_only_removes_repeated_weekend_rows(self):
         frame = pd.DataFrame({
             "date": pd.to_datetime(["2026-07-17", "2026-07-18", "2026-07-19", "2026-07-20"]),
