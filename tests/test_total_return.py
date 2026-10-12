@@ -55,6 +55,21 @@ class StockTotalReturnTest(unittest.TestCase):
         self.assertAlmostEqual(result["price_return_3y"], -.05)
         self.assertAlmostEqual(result["total_return_3y"], 0)
 
+    def test_additive_qfq_cash_gap_stays_valid_as_raw_price_changes(self):
+        prices = bars(lambda day: (100 + day.toordinal() % 10, 95 + day.toordinal() % 10)
+                      if day < FIRST_EX else (95 + day.toordinal() % 10, 95 + day.toordinal() % 10))
+        self.assertEqual(compute(prices, [event(FIRST_EX, 5)])["total_return_3y_status"], "可用")
+
+    def test_small_ex_date_reference_adjustment_variance_does_not_replace_declared_cash(self):
+        prices = bars(lambda day: (100, 95.1) if day < FIRST_EX else (95, 95))
+        result = compute(prices, [event(FIRST_EX, 5)])
+        self.assertEqual(result["total_return_3y_status"], "可用")
+        self.assertAlmostEqual(result["total_return_3y"], 0)
+
+    def test_large_ex_date_adjustment_mismatch_still_fails_closed(self):
+        prices = bars(lambda day: (100, 96) if day < FIRST_EX else (95, 95))
+        self.assertEqual(compute(prices, [event(FIRST_EX, 5)])["total_return_3y_status"], "数据不足")
+
     def test_multiple_cash_dividends_compound(self):
         prices = bars(lambda day: (100, 90) if day < FIRST_EX else
                       (95, 90) if day < SECOND_EX else (90, 90))

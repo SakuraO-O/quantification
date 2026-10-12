@@ -12,7 +12,10 @@ import math
 
 MAX_START_LAG_DAYS = 15
 MAX_OBSERVATION_GAP_DAYS = 20
-MAX_UNEXPLAINED_ADJUSTMENT_CHANGE = 0.0075
+# Public qfq series here use an additive cash adjustment: qfq/raw is *not*
+# constant between dividends. Compare the affine adjustment intercept instead.
+MAX_ADJUSTMENT_ROUNDING = 0.02
+MAX_EVENT_CASH_VARIANCE = 0.03
 
 
 def _day(value) -> date | None:
@@ -113,23 +116,40 @@ def stock_three_year_returns(market_rows: list[dict], dividend_rows: list[dict],
         output["total_return_3y_issue"] = "除权除息日缺少对应收盘价"
         return output
 
+    # The qfq price on a date is A * raw_close + B. A includes share changes
+    # after that date; B includes future cash adjustments. Both are constant
+    # between corporate actions. On an ex-date B should rise by A * cash / S.
+    # This detects missing actions without assuming that qfq/raw is constant.
+    share_multiplier = 1.0
+    adjusted_scale: dict[date, float] = {}
+    for day, _ in reversed(path):
+        adjusted_scale[day] = 1 / share_multiplier
+        event = events.get(day)
+        if event:
+            share_multiplier *= 1 + float(event["bonus_shares_per_share"]) + float(event["transfer_shares_per_share"])
+    _, last = path[-1]
+    if abs(float(last["close"]) - float(last["raw_close"])) > max(MAX_ADJUSTMENT_ROUNDING, float(last["raw_close"]) * .001):
+        output["total_return_3y_issue"] = "前复权与未复权终点价格不一致"
+        return output
+
     price_factor = total_factor = 1.0
-    _, previous = path[0]
+    first_day, previous = path[0]
+    previous_intercept = float(previous["close"]) - adjusted_scale[first_day] * float(previous["raw_close"])
     for day, row in path[1:]:
         event = events.get(day, {})
         share_factor = 1 + float(event.get("bonus_shares_per_share") or 0) + float(event.get("transfer_shares_per_share") or 0)
         cash = float(event.get("cash_dividend_per_share") or 0)
         raw_previous, raw_current = float(previous["raw_close"]), float(row["raw_close"])
-        adjusted_ratio_previous = float(previous["close"]) / raw_previous
-        adjusted_ratio_current = float(row["close"]) / raw_current
-        expected_ratio_change = raw_previous * share_factor / (raw_previous - cash) if raw_previous > cash else None
-        observed_ratio_change = adjusted_ratio_current / adjusted_ratio_previous
-        if expected_ratio_change is None or abs(observed_ratio_change / expected_ratio_change - 1) > MAX_UNEXPLAINED_ADJUSTMENT_CHANGE:
+        intercept = float(row["close"]) - adjusted_scale[day] * raw_current
+        expected_intercept_change = adjusted_scale[day] * cash / share_factor
+        tolerance = max(MAX_ADJUSTMENT_ROUNDING, expected_intercept_change * MAX_EVENT_CASH_VARIANCE)
+        if raw_previous <= cash or abs(intercept - previous_intercept - expected_intercept_change) > tolerance:
             output["total_return_3y_issue"] = "检测到未解释的复权变化，可能存在配股或缺失权益事件"
             return output
         price_factor *= raw_current * share_factor / raw_previous
         total_factor *= (raw_current * share_factor + cash) / raw_previous
         previous = row
+        previous_intercept = intercept
     if not math.isfinite(price_factor) or not math.isfinite(total_factor):
         return output
     output.update({
