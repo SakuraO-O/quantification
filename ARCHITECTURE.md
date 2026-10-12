@@ -344,7 +344,7 @@ flowchart TB
 
 | 数据源 | API | 用途 |
 |--------|-----|------|
-| 腾讯 | `web.ifzq.gtimg.cn` | 指数/股票 K 线（前复权） |
+| 腾讯 | `web.ifzq.gtimg.cn` | 指数/股票前复权 K 线（历史分段并校验重叠）；股票未复权日线备用源 |
 | 东方财富 | `push2his.eastmoney.com` | 股票 K 线（优先） |
 | 中证指数 | `csindex.com.cn` | 指数 K 线 + PE |
 | 国证指数 | `hq.cnindex.com.cn` | 国证自由现金流指数 |

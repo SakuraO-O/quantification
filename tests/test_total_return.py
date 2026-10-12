@@ -43,6 +43,12 @@ class StockTotalReturnTest(unittest.TestCase):
         self.assertAlmostEqual(result["total_return_3y"], .10)
         self.assertEqual(result["total_return_3y_start_date"], "2023-10-09")
 
+    def test_independent_tencent_raw_prices_are_accepted(self):
+        prices = bars(lambda day: (100, 100))
+        for row in prices:
+            row["raw_close_source"] = "tencent"
+        self.assertEqual(compute(prices)["total_return_3y_status"], "可用")
+
     def test_cash_dividend_is_reinvested_once_not_added_to_qfq(self):
         prices = bars(lambda day: (100, 95) if day < FIRST_EX else (95, 95))
         result = compute(prices, [event(FIRST_EX, 5)])

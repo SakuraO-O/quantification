@@ -368,6 +368,12 @@ class MarketSynchronizer:
             if asset["asset_type"] == "股票":
                 raw_by_date = {} if raw_prices is None else dict(zip(raw_prices["date"], raw_prices["close"]))
                 incoming["raw_close"] = incoming["date"].map(raw_by_date)
+                raw_provider = raw_prices.attrs.get("source_provider", "eastmoney") if raw_prices is not None else None
+                incoming["raw_close_source"] = [
+                    raw_provider if pd.notna(raw_by_date.get(day))
+                    else existing_by_date.get(day.strftime("%Y-%m-%d"), {}).get("raw_close_source")
+                    for day in incoming["date"]
+                ]
             source_latest_date = incoming.iloc[-1]["date"].date().isoformat()
             if asset["asset_type"] == "股票":
                 # A temporary raw-provider failure must not erase previously
@@ -394,7 +400,7 @@ class MarketSynchronizer:
                     "trade_date": row.date.date().isoformat(),
                     "open": _finite(row.open), "high": _finite(row.high), "low": _finite(row.low), "close": _finite(row.close),
                     "volume": _finite(row.volume), "source": actual_source, "adjustment_method": adjustment_method,
-                    **({"raw_close": _finite(row.raw_close), "raw_close_source": "eastmoney" if pd.notna(row.raw_close) else None}
+                    **({"raw_close": _finite(row.raw_close), "raw_close_source": row.raw_close_source if pd.notna(row.raw_close) else None}
                        if asset["asset_type"] == "股票" else {}),
                 }
                 for row in incoming.itertuples(index=False)

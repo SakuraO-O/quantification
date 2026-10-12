@@ -76,6 +76,24 @@ class V2RegressionTest(unittest.TestCase):
         self.assertEqual(store.saved_market[-1]["raw_close"], 10.)
         self.assertEqual(store.saved_market[-1]["raw_close_source"], "eastmoney")
 
+    def test_force_sync_records_tencent_raw_price_provenance(self):
+        asset = next(item for item in active_assets() if item["asset_type"] == "股票")
+        dates = pd.bdate_range(end="2026-09-11", periods=280)
+        frame = pd.DataFrame({"date": dates, "open": 10., "high": 10., "low": 10.,
+                              "close": 10., "volume": 100., "pe": float("nan")})
+        frame.attrs.update({"source_provider": "tencent", "adjustment_method": "qfq"})
+        raw = frame.copy()
+        raw.attrs["source_provider"] = "tencent"
+        store = RepairStore(asset, frame)
+        with patch("codex.trend_observer.ingestion.make_session", return_value=nullcontext(object())), \
+             patch("codex.trend_observer.ingestion.fetch_history", return_value=frame), \
+             patch("codex.trend_observer.ingestion.fetch_unadjusted_stock_history", return_value=raw):
+            result = MarketSynchronizer(store).sync_asset(
+                asset, now=datetime(2026, 9, 11, 18, 0, tzinfo=ZoneInfo("Asia/Shanghai")), force=True
+            )
+        self.assertEqual(result.status, "succeeded")
+        self.assertEqual(store.saved_market[-1]["raw_close_source"], "tencent")
+
     def test_failed_full_qfq_refresh_does_not_persist_mixed_history(self):
         asset = next(item for item in active_assets() if item["asset_type"] == "股票")
         dates = pd.bdate_range(end="2026-09-11", periods=280)

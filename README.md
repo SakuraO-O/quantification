@@ -76,7 +76,7 @@ python -B -m codex.trend_observer.cli sync-market --market CN --force
 python -B -m codex.trend_observer.cli publish-dashboard
 ```
 
-`sync-market --market CN --force` 对股票抓取完整历史以回填未复权价格；正常定时仍为增量抓取。旧版行情库中 8 只股票截至 2026-10-09 只有不足三年的历史，迁移本身不会凭空补齐数据。上线后需检查 9 只股票的 `market_daily.raw_close`、`dividend_events` 送转股比例和最新发布版本的两项三年回报；本地代码修改不等于已执行生产回填。
+`sync-market --market CN --force` 对股票抓取完整历史以回填未复权价格；正常定时仍为增量抓取。未复权价格优先取东方财富，失败时从腾讯独立原始日线降级；腾讯前复权历史分段抓取并验证重叠价格。旧版行情库中 8 只股票截至 2026-10-09 只有不足三年的历史，迁移本身不会凭空补齐数据。上线后需检查 9 只股票的 `market_daily.raw_close`、`dividend_events` 送转股比例和最新发布版本的两项三年回报；本地代码修改不等于已执行生产回填。
 
 ### 上线检查清单
 

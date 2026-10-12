@@ -1,9 +1,10 @@
 import unittest
+from datetime import datetime
 
 import numpy as np
 import pandas as pd
 
-from codex.trend_observer.config import ASSETS
+from codex.trend_observer.config import ASSETS, MARKET_TIMEZONE
 from codex.trend_observer.data_sources import (
     fetch_eastmoney_global_index,
     fetch_csindex,
@@ -11,6 +12,7 @@ from codex.trend_observer.data_sources import (
     fetch_global_index,
     fetch_nasdaq_index,
     fetch_unadjusted_stock_history,
+    fetch_tencent,
     fetch_yahoo_index,
     trading_weekdays_only,
 )
@@ -45,6 +47,61 @@ class DataSourcesTest(unittest.TestCase):
         self.assertEqual(session.requests[0][1]["params"]["fqt"], "0")
         self.assertEqual(frame.iloc[0]["close"], 9.5)
         self.assertEqual(frame.attrs["adjustment_method"], "raw")
+
+    def test_unadjusted_stock_falls_back_to_independent_tencent_raw_series(self):
+        class RawFallbackSession(FakeSession):
+            def get(self, url, **kwargs):
+                self.requests.append((url, kwargs))
+                if "eastmoney" in url:
+                    return FakeResponse({"data": {"klines": []}})
+                return FakeResponse({"code": 0, "data": {"sh600036": {
+                    "day": [["2026-10-09", "10", "9.5", "10", "9", "12345"]]
+                }}})
+
+        session = RawFallbackSession({})
+        frame = fetch_unadjusted_stock_history(session, "sh600036")
+        self.assertEqual(frame.iloc[0]["close"], 9.5)
+        self.assertEqual(frame.attrs["source_provider"], "tencent")
+        self.assertIn("kline/kline", session.requests[-1][0])
+        self.assertNotIn(",qfq", session.requests[-1][1]["params"]["param"])
+
+    def test_tencent_qfq_pages_backwards_with_verified_overlap(self):
+        class PagingSession:
+            def __init__(self):
+                self.requests = []
+                today = datetime.now(MARKET_TIMEZONE).date()
+                self.days = pd.bdate_range(end=today, periods=1250)
+
+            def get(self, url, **kwargs):
+                self.requests.append((url, kwargs))
+                _, _, start, end, *_ = kwargs["params"]["param"].split(",")
+                selected = [day for day in self.days if start <= day.strftime("%Y-%m-%d") <= end][-640:]
+                rows = [[day.strftime("%Y-%m-%d"), "10", str(10 + idx / 100), "11", "9", "100"]
+                        for day in selected for idx in [self.days.get_loc(day)]]
+                return FakeResponse({"code": 0, "data": {"sh600036": {"qfqday": rows}}})
+
+        session = PagingSession()
+        frame = fetch_tencent(session, "sh600036")
+        self.assertGreater(len(session.requests), 1)
+        self.assertEqual(len(frame), 1250)
+        self.assertEqual(frame.attrs["adjustment_method"], "qfq")
+        self.assertEqual(frame.iloc[0]["close"], 10)
+
+    def test_tencent_qfq_rejects_inconsistent_page_overlap(self):
+        class InconsistentSession:
+            def __init__(self):
+                self.calls = 0
+
+            def get(self, url, **kwargs):
+                self.calls += 1
+                dates = ["2024-02-19", "2024-02-20"] if self.calls == 1 else ["2024-02-19", "2024-02-20"]
+                close = "10" if self.calls == 1 else "11"
+                return FakeResponse({"code": 0, "data": {"sh600036": {
+                    "qfqday": [[day, "10", close, "11", "9", "100"] for day in dates]
+                }}})
+
+        with self.assertRaisesRegex(ValueError, "口径不一致"):
+            fetch_tencent(InconsistentSession(), "sh600036")
 
     def test_trading_weekdays_only_removes_repeated_weekend_rows(self):
         frame = pd.DataFrame({

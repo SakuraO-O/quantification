@@ -83,13 +83,40 @@ def fetch_tencent(session, symbol, start_date=None):
     url = "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
     today = datetime.now(MARKET_TIMEZONE).date()
     start = _start_date(start_date, TENCENT_LOOKBACK_DAYS)
-    params = {"param": f"{symbol},day,{start:%Y-%m-%d},{today:%Y-%m-%d},{TENCENT_LOOKBACK_ROWS},qfq"}
-    response = session.get(url, params=params, timeout=HTTP_TIMEOUT)
-    response.raise_for_status()
-    payload = response.json()
-    symbol_data = payload.get("data", {}).get(symbol, {})
+    def page(end):
+        params = {"param": f"{symbol},day,{start:%Y-%m-%d},{end:%Y-%m-%d},{TENCENT_LOOKBACK_ROWS},qfq"}
+        response = session.get(url, params=params, timeout=HTTP_TIMEOUT)
+        response.raise_for_status()
+        payload = response.json()
+        if payload.get("code") not in (None, 0):
+            raise ValueError(f"腾讯前复权行情返回错误: {payload.get('code')}")
+        return payload.get("data", {}).get(symbol, {})
+
+    symbol_data = page(today)
     adjusted_rows = symbol_data.get("qfqday") or []
     raw_rows = adjusted_rows or symbol_data.get("day") or []
+    if adjusted_rows and start_date is None:
+        # The fqkline endpoint caps a response at roughly 640 sessions even
+        # when its requested row limit is larger. Page backwards with overlap
+        # and reject differently rebased qfq windows rather than mixing them.
+        by_date = {row[0]: row for row in adjusted_rows}
+        for _ in range(6):
+            first = pd.Timestamp(min(by_date)).date()
+            if first <= start:
+                break
+            older = page(first + timedelta(days=35)).get("qfqday") or []
+            overlap = [row for row in older if row[0] in by_date]
+            if not overlap:
+                raise ValueError("腾讯前复权历史分页缺少重叠交易日")
+            for row in overlap:
+                current = by_date[row[0]]
+                if abs(float(row[2]) - float(current[2])) > max(.005, abs(float(current[2])) * .0001):
+                    raise ValueError("腾讯前复权历史分页口径不一致")
+            new_rows = [row for row in older if row[0] < first.isoformat()]
+            if not new_rows:
+                break  # Already at the first trading day of this security.
+            by_date.update((row[0], row) for row in new_rows)
+        raw_rows = [by_date[day] for day in sorted(by_date)]
     rows = [
         {
             "date": row[0],
@@ -104,6 +131,30 @@ def fetch_tencent(session, symbol, start_date=None):
     ]
     frame = normalize_frame(rows)
     frame.attrs["adjustment_method"] = "qfq" if adjusted_rows else "raw"
+    return frame
+
+
+def fetch_tencent_unadjusted_stock(session, symbol, start_date=None):
+    """Independent unadjusted daily closes from Tencent's raw kline path."""
+
+    today = datetime.now(MARKET_TIMEZONE).date()
+    start = _start_date(start_date, TENCENT_LOOKBACK_DAYS)
+    response = session.get(
+        "https://web.ifzq.gtimg.cn/appstock/app/kline/kline",
+        params={"param": f"{symbol},day,{start:%Y-%m-%d},{today:%Y-%m-%d},{TENCENT_LOOKBACK_ROWS}"},
+        timeout=HTTP_TIMEOUT,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if payload.get("code") not in (None, 0):
+        raise ValueError(f"腾讯未复权行情返回错误: {payload.get('code')}")
+    raw_rows = payload.get("data", {}).get(symbol, {}).get("day") or []
+    frame = normalize_frame([
+        {"date": row[0], "open": row[1], "close": row[2], "high": row[3], "low": row[4],
+         "volume": row[5] if len(row) > 5 else np.nan, "pe": np.nan}
+        for row in raw_rows
+    ])
+    frame.attrs.update({"adjustment_method": "raw", "source_provider": "tencent"})
     return frame
 
 
@@ -157,8 +208,20 @@ def fetch_eastmoney_stock(session, symbol, start_date=None, *, adjustment="1"):
 
 def fetch_unadjusted_stock_history(session, symbol, start_date=None):
     """Independent raw-price series; never derive dividends from qfq closes."""
-
-    return fetch_eastmoney_stock(session, symbol, start_date, adjustment="0")
+    eastmoney_error = "来源未返回行情"
+    try:
+        result = fetch_eastmoney_stock(session, symbol, start_date, adjustment="0")
+        if not result.empty:
+            return with_source(result, "eastmoney")
+    except Exception as exc:
+        eastmoney_error = f"{type(exc).__name__}: {exc}"
+    try:
+        result = fetch_tencent_unadjusted_stock(session, symbol, start_date)
+    except Exception as exc:
+        raise ValueError(f"未复权行情双源失败：东方财富 {eastmoney_error}；腾讯 {type(exc).__name__}: {exc}") from exc
+    if result.empty:
+        raise ValueError(f"未复权行情双源失败：东方财富 {eastmoney_error}；腾讯来源未返回行情")
+    return result
 
 
 def fetch_eastmoney_global_index(session, symbol, start_date=None):

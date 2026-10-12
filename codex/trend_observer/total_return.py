@@ -82,7 +82,7 @@ def stock_three_year_returns(market_rows: list[dict], dividend_rows: list[dict],
         output["total_return_3y_issue"] = "近三年行情存在缺口"
         return output
     if any(_positive(row.get("raw_close")) is None or _positive(row.get("close")) is None
-           or row.get("raw_close_source") != "eastmoney" or row.get("adjustment_method") != "qfq"
+           or row.get("raw_close_source") not in {"eastmoney", "tencent"} or row.get("adjustment_method") != "qfq"
            for _, row in path):
         output["total_return_3y_issue"] = "未复权与复权价格尚未完整回填"
         return output
