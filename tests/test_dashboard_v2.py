@@ -28,6 +28,39 @@ class DashboardV2Test(unittest.TestCase):
         self.assertIn("payload.completeness?.asset_catalog_valid === false", self.runtime)
         self.assertNotIn("apiStocks.length !== 9", self.runtime)
 
+    def test_runtime_does_not_interpret_server_messages_as_html(self):
+        status = self.runtime.split("  function setSourceStatus(", 1)[1].split("  function mapAsset(", 1)[0]
+        compass = self.runtime.split("  window.renderCompass = function", 1)[1].split("  document.addEventListener", 1)[0]
+        self.assertIn("badge.textContent = message", status)
+        self.assertIn("meta.replaceChildren(...parts)", status)
+        self.assertNotIn("innerHTML", status)
+        for field in ("pair.left", "pair.right", "pair.date ||", "direction", "advice", "recommendation", "why"):
+            self.assertIn(f"escapeHtml({field}", compass)
+        self.assertIn("escapeHtml(row.state)", self.runtime)
+        self.assertIn("escapeHtml(row.name)", self.runtime)
+        self.assertIn('["http:", "https:"].includes(url.protocol)', self.runtime)
+        self.assertNotIn('href="${escapeHtml(row.document_url)}"', self.runtime)
+        self.assertIn('safeBadge(asset.advice)', self.runtime)
+        self.assertIn('safeBadge(asset.dividendSafety)', self.runtime)
+        self.assertIn('escapeHtml(assessment.report_period || "数据不足")', self.runtime)
+        self.assertIn('escapeHtml(asset.change || "数据不足")', self.runtime)
+        self.assertIn('safeStatusCard("分红保障", profile.pillars[0])', self.runtime)
+
+    def test_style_and_allocation_render_only_in_runtime(self):
+        self.assertNotIn("function renderAllocation()", self.html)
+        self.assertNotIn("function renderCompass()", self.html)
+        self.assertNotIn("function scoreFor(", self.html)
+        self.assertIn("window.renderAllocation = function", self.runtime)
+        self.assertIn("window.renderCompass = function", self.runtime)
+
+    def test_inline_list_renderers_escape_api_text(self):
+        self.assertIn("${escapeHtml(a.name)}", self.html)
+        self.assertIn("${escapeHtml(a.code)}", self.html)
+        self.assertIn("${escapeHtml(a.date)}", self.html)
+        self.assertIn("${escapeHtml(a.period)}", self.html)
+        self.assertIn("${escapeHtml(v)}", self.html)
+        self.assertIn("`${a.name}${a.code}`.toLowerCase().includes(q)", self.html)
+
     def test_auth_uses_publishable_key_and_session_only_tokens(self):
         self.assertIn("calebaqhmihatnssjgon", self.config)
         self.assertIn("sb_publishable_", self.auth)
@@ -60,7 +93,8 @@ class DashboardV2Test(unittest.TestCase):
         self.assertIn('["editor"]', self.portfolio_api)
         self.assertIn('.rpc("save_portfolio_allocation"', self.portfolio_api)
         self.assertIn("saveAllocation", self.runtime)
-        self.assertIn("__trendDashboardRuntime.saveAllocation", self.html)
+        self.assertIn("runtimeState.saveAllocation = saveAllocation", self.runtime)
+        self.assertNotIn("async function saveEdit()", self.html)
 
     def test_dashboard_supports_granular_fundamentals_permission(self):
         self.assertIn('user.app_metadata?.permissions', self.api)
@@ -144,6 +178,25 @@ class DashboardV2Test(unittest.TestCase):
         self.assertNotIn("winnerPe", self.runtime)
         self.assertNotIn("Math.abs(deviation) <=", self.runtime)
 
+    def test_api_missing_conclusions_never_inherit_mock_values(self):
+        self.assertIn('source === "mock" ? "2026-07-10" : "—"', self.runtime)
+        self.assertIn('date: asset.trade_date || "—"', self.runtime)
+        self.assertIn('change: assessment.main_risk || "数据不足"', self.runtime)
+        self.assertIn('const allocation = hasCompleteAllocation(payload.allocation) ? payload.allocation : null', self.runtime)
+        self.assertIn('pairs.splice(0, pairs.length, ...publishedPairs, ...unavailablePairs)', self.runtime)
+        self.assertIn('const score = numberOr(pair.score)', self.runtime)
+        self.assertIn('score === null ? "—" : score', self.runtime)
+        self.assertNotIn('numberOr(pair.score, 0)', self.runtime)
+
+    def test_incomplete_allocation_is_not_shown_or_saved_as_mock(self):
+        self.assertIn('const hasCompleteAllocation = allocation =>', self.runtime)
+        self.assertIn('document.querySelector(selector).replaceChildren()', self.runtime)
+        self.assertIn('const useFixture = runtimeState.source !== "api" || hasCompleteAllocation(runtimeState.allocation)', self.runtime)
+        self.assertIn('inputs.some(input => input.value.trim() === "")', self.runtime)
+        self.assertIn('Object.hasOwn(result, "allocation")', self.runtime)
+        self.assertIn('if (result.allocation === null)', self.runtime)
+        self.assertIn('配置已保存，另一类配置尚未补齐', self.runtime)
+
     def test_login_wait_keeps_mock_status_explicit(self):
         self.assertIn('setSourceStatus("mock", "本地 Mock · 登录后读取生产数据")', self.runtime)
         self.assertLess(
@@ -169,8 +222,12 @@ class DashboardV2Test(unittest.TestCase):
         self.assertIn("function selectedFilters(selector)", self.html)
         self.assertIn("adv.includes(a.advice)", self.html)
 
-    def test_only_one_local_stock_detail_fallback_remains(self):
-        self.assertEqual(self.html.count("function stockDetail(a)"), 1)
+    def test_stock_detail_has_one_runtime_renderer(self):
+        self.assertNotIn("function stockDetail(a)", self.html)
+        self.assertNotIn("所有图表悬停可查看期间、数值", self.html)
+        self.assertIn("window.stockDetail = function stockDetailFromApi(asset)", self.runtime)
+        self.assertIn("document.querySelector('#detail-title').replaceChildren(name, quote, change)", self.html)
+        self.assertNotIn("document.querySelector('#detail-title').innerHTML", self.html)
         self.assertNotIn("季度基本面趋势</h4><small>最近8个季度 · 原型示例", self.runtime)
 
     def test_runtime_defines_index_detail_without_removed_inline_global(self):

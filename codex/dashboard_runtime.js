@@ -67,6 +67,16 @@
   const escapeHtml = value => String(value ?? "—").replace(/[&<>"']/g, char => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   })[char]);
+  const safeExternalHref = value => {
+    try {
+      const url = new URL(String(value));
+      return ["http:", "https:"].includes(url.protocol) ? escapeHtml(url.href) : null;
+    } catch {
+      return null;
+    }
+  };
+  const safeBadge = value => `<span class="badge ${tone(value)}">${escapeHtml(value)}</span>`;
+  const safeStatusCard = (label, value) => `<div class="pillar-card"><small>${escapeHtml(label)}</small>${safeBadge(value)}</div>`;
   const templateAlias = template => ({
     utility_concession: "utility",
     resource_cycle: "resource",
@@ -83,17 +93,30 @@
 
   function setSourceStatus(source, message, generatedAt) {
     runtimeState.source = source;
-    const node = document.querySelector("#dashboard-source");
-    if (node) {
-      node.className = "source-pill " + (source === "api" ? "api" : source === "error" ? "error" : "mock");
-      node.textContent = message;
-      node.title = source === "api"
-        ? "数据来自已鉴权的 Supabase Edge API"
-        : "未配置 API 或认证信息时使用内嵌 Mock，便于本地预览";
-    }
     const meta = document.querySelector(".topmeta");
-    const date = generatedAt ? new Date(generatedAt).toLocaleString("zh-CN", {hour12:false}) : "2026-07-10";
-    if (meta) meta.innerHTML = `<b>数据更新 ${date}</b><br><span id="dashboard-source" class="${node ? node.className : "source-pill mock"}">${message}</span>${source === "api" ? '<button class="source-pill source-pill-button" id="dashboard-logout" type="button">退出</button>' : ""}`;
+    if (!meta) return;
+    const parsedDate = generatedAt ? new Date(generatedAt) : null;
+    const date = parsedDate && !Number.isNaN(parsedDate.getTime())
+      ? parsedDate.toLocaleString("zh-CN", {hour12:false}) : source === "mock" ? "2026-07-10" : "—";
+    const label = document.createElement("b");
+    label.textContent = `数据更新 ${date}`;
+    const badge = document.createElement("span");
+    badge.id = "dashboard-source";
+    badge.className = "source-pill " + (source === "api" ? "api" : source === "error" ? "error" : "mock");
+    badge.textContent = message;
+    badge.title = source === "api"
+      ? "数据来自已鉴权的 Supabase Edge API"
+      : "未配置 API 或认证信息时使用内嵌 Mock，便于本地预览";
+    const parts = [label, document.createElement("br"), badge];
+    if (source === "api") {
+      const logout = document.createElement("button");
+      logout.className = "source-pill source-pill-button";
+      logout.id = "dashboard-logout";
+      logout.type = "button";
+      logout.textContent = "退出";
+      parts.push(logout);
+    }
+    meta.replaceChildren(...parts);
   }
 
   function mapAsset(asset, type) {
@@ -108,7 +131,7 @@
       ...fallback,
       name: asset.name || fallback.name || asset.symbol,
       code: asset.symbol || fallback.code,
-      date: asset.trade_date || fallback.date || "—",
+      date: asset.trade_date || "—",
       dataStatus: asset.data_status || "current",
       dataIssue: asset.data_issue || null,
       lastValidDate: asset.last_valid_trade_date || null,
@@ -142,7 +165,7 @@
       template: templateAlias(asset.industry_template) || fallback.template,
       sourceTemplate: asset.industry_template,
       anchor: fallback.anchor || templateAnchor(asset.industry_template),
-      change: assessment.main_risk || fallback.change || "尚无稳定的结构化基本面结论。",
+      change: assessment.main_risk || "数据不足",
       assessment
     };
   }
@@ -163,19 +186,19 @@
     indices.splice(0, indices.length, ...apiIndices);
     stocks.splice(0, stocks.length, ...apiStocks);
 
-    const allocation = payload.allocation && Array.isArray(payload.allocation.rows) ? payload.allocation : null;
+    const allocation = hasCompleteAllocation(payload.allocation) ? payload.allocation : null;
     const rows = allocation ? allocation.rows : [];
-    if (rows.length === categories.length) {
+    if (allocation) {
       const colors = new Map(categories.map(item => [item.name, item.color]));
       categories.splice(0, categories.length, ...rows.map(row => ({
         name: row.category,
         color: colors.get(row.category),
-        target: numberOr(row.target_ratio, 0),
-        actual: numberOr(row.actual_amount, 0),
-        actualRatio: numberOr(row.actual_ratio, 0),
-        deviation: numberOr(row.deviation, 0),
-        deviationState: row.deviation_state || "数据不足",
-        adjustment: numberOr(row.theoretical_adjustment_amount, 0)
+        target: numberOr(row.target_ratio),
+        actual: numberOr(row.actual_amount),
+        actualRatio: numberOr(row.actual_ratio),
+        deviation: numberOr(row.deviation),
+        deviationState: row.deviation_state,
+        adjustment: numberOr(row.theoretical_adjustment_amount)
       })));
     }
 
@@ -189,14 +212,13 @@
     }
 
     const compass = Array.isArray(payload.style_compass) ? payload.style_compass : [];
-    if (compass.length) {
-      pairs.splice(0, pairs.length, ...compass.map(item => ({
+    const publishedPairs = compass.map(item => ({
         left: item.left && item.left.name,
         right: item.right && item.right.name,
         date: item.as_of_date || "—",
         leftReturns: [20, 60, 120].map(window => returnPercent(item[`return_${window}d_left`])),
         rightReturns: [20, 60, 120].map(window => returnPercent(item[`return_${window}d_right`])),
-        d: [20, 60, 120].map(window => returnPercent(item[`return_${window}d_diff`]) ?? 0),
+        d: [20, 60, 120].map(window => returnPercent(item[`return_${window}d_diff`])),
         score: numberOr(item.score),
         direction: item.direction || "数据不足",
         recommendation: item.recommendation || "数据不足",
@@ -205,15 +227,23 @@
         rp: numberOr(item.right && item.right.pe_percentile),
         la: item.left && item.left.investment_advice || "数据不足",
         ra: item.right && item.right.investment_advice || "数据不足"
-      })));
-    }
+      }));
+    const publishedKeys = new Set(publishedPairs.map(pair => `${pair.left}|${pair.right}`));
+    const unavailablePairs = MOCK_COMPASS.filter(pair => !publishedKeys.has(`${pair.left}|${pair.right}`))
+      .map(pair => ({
+        left: pair.left, right: pair.right, date: "—", score: null,
+        direction: "数据不足", recommendation: "数据不足", recommendationReason: "服务端未提供该比较组数据。",
+        leftReturns: [null, null, null], rightReturns: [null, null, null], d: [null, null, null],
+        lp: null, rp: null, la: "数据不足", ra: "数据不足"
+      }));
+    pairs.splice(0, pairs.length, ...publishedPairs, ...unavailablePairs);
     runtimeState.version = payload.version || null;
     runtimeState.completeness = payload.completeness || {};
   }
 
   function renderAll() {
-    renderAllocation();
-    renderCompass();
+    window.renderAllocation();
+    window.renderCompass();
     renderFocus();
     renderIndex();
     renderStock();
@@ -221,34 +251,45 @@
 
   const CATEGORY_ORDER = ["海外", "红利", "成长", "债券", "大宗商品", "现金"];
   const categoryRank = new Map(CATEGORY_ORDER.map((name, index) => [name, index]));
+  const hasCompleteAllocation = allocation => {
+    const rows = allocation?.rows;
+    if (!Array.isArray(rows) || rows.length !== CATEGORY_ORDER.length || !allocation.summary?.text) return false;
+    if (new Set(rows.map(row => row.category)).size !== CATEGORY_ORDER.length) return false;
+    return rows.every(row => CATEGORY_ORDER.includes(row.category)
+      && ["target_ratio", "actual_amount", "actual_ratio", "deviation", "theoretical_adjustment_amount"]
+        .every(field => numberOr(row[field]) !== null)
+      && typeof row.deviation_state === "string" && row.deviation_state.length > 0);
+  };
   let allocationSort = { key: "category", direction: "asc" };
 
-  renderAllocation = function renderAllocationWithConfiguredOrder() {
-    const sourceRows = runtimeState.allocation && Array.isArray(runtimeState.allocation.rows)
-      ? runtimeState.allocation.rows : [];
-    const colors = new Map(categories.map(category => [category.name, category.color]));
-    const rows = sourceRows.map(row => ({
-      name: row.category,
-      color: colors.get(row.category),
-      target: numberOr(row.target_ratio, 0),
-      actual: numberOr(row.actual_ratio, 0),
-      deviation: numberOr(row.deviation, 0),
-      state: row.deviation_state || "数据不足",
-      adjust: numberOr(row.theoretical_adjustment_amount, 0)
-    }));
-    if (rows.length !== CATEGORY_ORDER.length) {
+  window.renderAllocation = function renderAllocationWithConfiguredOrder() {
+    const sourceRows = hasCompleteAllocation(runtimeState.allocation) ? runtimeState.allocation.rows : [];
+    if (!sourceRows.length) {
+      for (const selector of ["#target-stack", "#actual-stack", "#alloc-legend", "#allocation-body"]) {
+        document.querySelector(selector).replaceChildren();
+      }
       document.querySelector("#alloc-summary").textContent = "配置数据不足，暂不展示偏离结论。";
       return;
     }
+    const colors = new Map(categories.map(category => [category.name, category.color]));
+    const rows = sourceRows.map(row => ({
+      name: row.category,
+      color: colors.get(row.category) || "#d2d7dd",
+      target: numberOr(row.target_ratio),
+      actual: numberOr(row.actual_ratio),
+      deviation: numberOr(row.deviation),
+      state: row.deviation_state,
+      adjust: numberOr(row.theoretical_adjustment_amount)
+    }));
     const stack = (selector, values) => {
       document.querySelector(selector).innerHTML = rows.map((category, index) =>
-        `<div class="stack-seg" data-cat="${category.name}" data-allocation-tooltip="${category.name} ${values[index].toFixed(1)}%" style="width:${values[index]}%"><span>${values[index].toFixed(1)}%</span></div>`
+        `<div class="stack-seg" data-cat="${escapeHtml(category.name)}" data-allocation-tooltip="${escapeHtml(category.name)} ${values[index].toFixed(1)}%" style="width:${values[index]}%"><span>${values[index].toFixed(1)}%</span></div>`
       ).join("");
     };
     stack("#target-stack", rows.map(category => category.target));
     stack("#actual-stack", rows.map(row => row.actual));
     bindAllocationTooltips();
-    document.querySelector("#alloc-legend").innerHTML = rows.map(category => `<span><i style="background:${category.color}"></i>${category.name}</span>`).join("");
+    document.querySelector("#alloc-legend").innerHTML = rows.map(category => `<span><i style="background:${category.color}"></i>${escapeHtml(category.name)}</span>`).join("");
     const sorted = [...rows].sort((left, right) => {
       if (allocationSort.key === "deviation") {
         return (Math.abs(right.deviation) - Math.abs(left.deviation)) * (allocationSort.direction === "asc" ? -1 : 1);
@@ -262,7 +303,7 @@
     });
     document.querySelector("#allocation-body").innerHTML = sorted.map(row => {
       const stateClass = /^明显/.test(row.state) ? "risk" : row.state === "关注" ? "warn" : "info";
-      return `<tr><td><i class="category-dot" style="background:${row.color}"></i>${row.name}</td><td class="num">${row.target.toFixed(1)}%</td><td class="num">${row.actual.toFixed(1)}%</td><td class="num ${row.deviation > 0 ? "pos" : row.deviation < 0 ? "neg" : ""}">${row.deviation > 0 ? "+" : ""}${row.deviation.toFixed(1)}pp</td><td><span class="badge ${stateClass}">${row.state}</span></td><td class="num ${row.adjust > 0 ? "pos" : row.adjust < 0 ? "neg" : ""}">${row.adjust > 0 ? "+" : ""}${money(row.adjust)}</td></tr>`;
+      return `<tr><td><i class="category-dot" style="background:${row.color}"></i>${escapeHtml(row.name)}</td><td class="num">${row.target.toFixed(1)}%</td><td class="num">${row.actual.toFixed(1)}%</td><td class="num ${row.deviation > 0 ? "pos" : row.deviation < 0 ? "neg" : ""}">${row.deviation > 0 ? "+" : ""}${row.deviation.toFixed(1)}pp</td><td><span class="badge ${stateClass}">${escapeHtml(row.state)}</span></td><td class="num ${row.adjust > 0 ? "pos" : row.adjust < 0 ? "neg" : ""}">${row.adjust > 0 ? "+" : ""}${money(row.adjust)}</td></tr>`;
     }).join("");
     const summary = document.querySelector("#alloc-summary");
     if (summary) summary.textContent = runtimeState.allocation?.summary?.text || "配置数据不足，暂不展示偏离结论。";
@@ -302,13 +343,14 @@
     return valid;
   }
 
-  openEdit = function openAllocationEditor(mode) {
+  window.openEdit = function openAllocationEditor(mode) {
     editMode = mode;
     document.querySelector("#edit-title").textContent = mode === "target" ? "编辑目标比例" : "编辑实际金额";
     const today = new Date().toLocaleDateString("en-CA", {timeZone:"Asia/Shanghai"});
     const hint = mode === "target" ? '<div class="target-total" id="target-total"></div>' : "";
+    const useFixture = runtimeState.source !== "api" || hasCompleteAllocation(runtimeState.allocation);
     document.querySelector("#edit-grid").innerHTML = categories.map((category, index) =>
-      `<div class="edit-row"><label><i class="category-dot" style="background:${category.color}"></i>${category.name}</label><input type="number" min="0" ${mode === "target" ? 'max="100" step="0.1"' : 'step="0.01"'} data-edit-index="${index}" value="${mode === "target" ? category.target : category.actual}"></div>`
+      `<div class="edit-row"><label><i class="category-dot" style="background:${category.color}"></i>${category.name}</label><input type="number" min="0" ${mode === "target" ? 'max="100" step="0.1"' : 'step="0.01"'} data-edit-index="${index}" value="${useFixture ? (mode === "target" ? category.target : category.actual) : ""}"></div>`
     ).join("") + hint + `<div class="edit-row"><label>数据日期</label><input type="date" id="edit-date" value="${today}"></div>`;
     if (mode === "target") {
       document.querySelectorAll("[data-edit-index]").forEach(input => input.addEventListener("input", updateTargetTotalHint));
@@ -326,20 +368,44 @@
     const button = document.querySelector("#save-edit");
     const precision = editMode === "target" ? 1 : 2;
     const scale = 10 ** precision;
-    if (!date) return void (errorNode.textContent = "请选择数据日期。");
-    if (rawValues.some(value => !Number.isFinite(value) || value < 0)) return void (errorNode.textContent = "请填写有效的非负数值。");
-    if (editMode === "target" && rawValues.some(value => value > 100 || Math.abs(value * scale - Math.round(value * scale)) > 1e-8)) return void (errorNode.textContent = "目标配置比例须为0至100之间的数值，最多1位小数。");
-    if (editMode === "actual" && rawValues.some(value => Math.abs(value * scale - Math.round(value * scale)) > 1e-8)) return void (errorNode.textContent = "实际配置金额须为非负数，最多2位小数。");
+    if (!date) {
+      errorNode.textContent = "请选择数据日期。";
+      return;
+    }
+    if (inputs.some(input => input.value.trim() === "")) {
+      errorNode.textContent = "请填写各类别数值。";
+      return;
+    }
+    if (rawValues.some(value => !Number.isFinite(value) || value < 0)) {
+      errorNode.textContent = "请填写有效的非负数值。";
+      return;
+    }
+    if (editMode === "target" && rawValues.some(value => value > 100 || Math.abs(value * scale - Math.round(value * scale)) > 1e-8)) {
+      errorNode.textContent = "目标配置比例须为0至100之间的数值，最多1位小数。";
+      return;
+    }
+    if (editMode === "actual" && rawValues.some(value => Math.abs(value * scale - Math.round(value * scale)) > 1e-8)) {
+      errorNode.textContent = "实际配置金额须为非负数，最多2位小数。";
+      return;
+    }
     const values = rawValues.map(value => Number(value.toFixed(precision)));
     const total = values.reduce((sum, value) => sum + value, 0);
-    if (editMode === "target" && Math.abs(total - 100) > 1e-8) return void (errorNode.textContent = `目标配置比例合计须等于100%，当前为${total.toFixed(1)}%。`);
-    if (editMode === "actual" && total <= 0) return void (errorNode.textContent = "至少一个类别的实际金额须大于0。");
+    if (editMode === "target" && Math.abs(total - 100) > 1e-8) {
+      errorNode.textContent = `目标配置比例合计须等于100%，当前为${total.toFixed(1)}%。`;
+      return;
+    }
+    if (editMode === "actual" && total <= 0) {
+      errorNode.textContent = "至少一个类别的实际金额须大于0。";
+      return;
+    }
     try {
       button.disabled = true; button.textContent = "保存中…"; errorNode.textContent = "";
       const result = await saveAllocation(editMode === "target" ? "target_ratio" : "actual_amount", date, categories.map((category, index) => ({category:category.name, value:values[index]})));
-      if (!result.allocation || !Array.isArray(result.allocation.rows)) throw new Error("allocation_compute_failed");
+      if (!Object.hasOwn(result, "allocation") || (result.allocation !== null && !hasCompleteAllocation(result.allocation))) {
+        throw new Error("配置保存响应不完整，请刷新页面核对后再操作。");
+      }
       runtimeState.allocation = result.allocation;
-      const savedRows = new Map(result.allocation.rows.map(row => [row.category, row]));
+      const savedRows = new Map((result.allocation?.rows || []).map(row => [row.category, row]));
       categories.forEach(category => {
         const row = savedRows.get(category.name);
         if (!row) return;
@@ -350,7 +416,11 @@
         category.deviationState = row.deviation_state || category.deviationState;
         category.adjustment = numberOr(row.theoretical_adjustment_amount, category.adjustment);
       });
-      renderAllocation(); document.querySelector("#edit-modal").close();
+      window.renderAllocation();
+      if (result.allocation === null) {
+        document.querySelector("#alloc-summary").textContent = "配置已保存，另一类配置尚未补齐，暂不展示偏离结论。";
+      }
+      document.querySelector("#edit-modal").close();
     } catch (error) {
       errorNode.textContent = /Failed to fetch/i.test(error.message || "")
         ? "本地文件预览无法连接 Supabase；请在正式 HTTPS 页面保存配置。"
@@ -366,13 +436,36 @@
     saveAllocationEditor();
   }, true);
 
-  renderCompass = function renderCompassWithActualDates() {
+  window.renderCompass = function renderCompassWithActualDates() {
     document.querySelector("#compass-grid").innerHTML = pairs.map(pair => {
-      const score = numberOr(pair.score, 0), direction = pair.direction || "数据不足";
+      const score = numberOr(pair.score), direction = pair.direction || "数据不足";
+      const scoreDot = score === null ? "" : `<div class="score-dot" style="left:${Math.max(0, Math.min(100, (score + 100) / 2))}%"></div>`;
       const recommendation = pair.recommendation || "数据不足";
       const why = pair.recommendationReason || "服务端未提供风格建议说明。";
       const lefts = pair.leftReturns || [null, null, null], rights = pair.rightReturns || [null, null, null];
-      return `<article class="panel compass"><div class="pair-head"><div class="pair-title">${pair.left} <span class="muted">vs</span> ${pair.right}</div><div class="pair-date">${pair.date || "—"}</div></div><div class="score-line"><div class="score-track"></div><div class="score-dot" style="left:${(score + 100) / 2}%"></div><div class="score-labels"><span>${pair.left}</span><span>均衡</span><span>${pair.right}</span></div></div><div class="score-box"><div><div class="score-value">${score}</div><small class="muted">综合分数</small></div><div class="direction"><b>${direction}</b><span>原始风格方向</span></div></div><div class="periods"><div class="period-row header"><span>周期</span><span>左侧</span><span>右侧</span><span>收益差</span></div>${[20, 60, 120].map((window, index) => `<div class="period-row"><span>${window}日</span><span>${pct(lefts[index])}</span><span>${pct(rights[index])}</span><span class="${pair.d[index] > 0 ? "pos" : pair.d[index] < 0 ? "neg" : ""}">${pct(pair.d[index])}</span></div>`).join("")}</div><div class="pair-facts"><div class="pair-side"><b>${pair.left}</b><div class="fact"><span>PE百分位</span><strong>${pair.lp == null ? "—" : pair.lp.toFixed(2) + "%"}</strong></div><div class="fact"><span>投资建议</span><strong>${pair.la}</strong></div></div><div class="pair-side"><b>${pair.right}</b><div class="fact"><span>PE百分位</span><strong>${pair.rp == null ? "—" : pair.rp.toFixed(2) + "%"}</strong></div><div class="fact"><span>投资建议</span><strong>${pair.ra}</strong></div></div></div><div class="recommend"><b>${recommendation}</b><small>${why}</small></div></article>`;
+      const left = escapeHtml(pair.left), right = escapeHtml(pair.right);
+      const differences = Array.isArray(pair.d) ? pair.d : [];
+      const periods = [20, 60, 120].map((window, index) => {
+        const difference = differences[index];
+        const tone = difference > 0 ? "pos" : difference < 0 ? "neg" : "";
+        return `<div class="period-row"><span>${window}日</span><span>${pct(lefts[index])}</span><span>${pct(rights[index])}</span><span class="${tone}">${pct(difference)}</span></div>`;
+      }).join("");
+      const side = (name, percentile, advice) => `
+        <div class="pair-side"><b>${name}</b>
+          <div class="fact"><span>PE百分位</span><strong>${percentile == null ? "—" : percentile.toFixed(2) + "%"}</strong></div>
+          <div class="fact"><span>投资建议</span><strong>${escapeHtml(advice)}</strong></div>
+        </div>`;
+      return `
+        <article class="panel compass">
+          <div class="pair-head"><div class="pair-title">${left} <span class="muted">vs</span> ${right}</div><div class="pair-date">${escapeHtml(pair.date || "—")}</div></div>
+          <div class="score-line"><div class="score-track"></div>${scoreDot}
+            <div class="score-labels"><span>${left}</span><span>均衡</span><span>${right}</span></div>
+          </div>
+          <div class="score-box"><div><div class="score-value">${score === null ? "—" : score}</div><small class="muted">综合分数</small></div><div class="direction"><b>${escapeHtml(direction)}</b><span>原始风格方向</span></div></div>
+          <div class="periods"><div class="period-row header"><span>周期</span><span>左侧</span><span>右侧</span><span>收益差</span></div>${periods}</div>
+          <div class="pair-facts">${side(left, pair.lp, pair.la)}${side(right, pair.rp, pair.ra)}</div>
+          <div class="recommend"><b>${escapeHtml(recommendation)}</b><small>${escapeHtml(why)}</small></div>
+        </article>`;
     }).join("");
   };
 
@@ -382,7 +475,7 @@
     allocationSort = allocationSort.key === "deviation"
       ? {key: "deviation", direction: allocationSort.direction === "desc" ? "asc" : "desc"}
       : {key: "deviation", direction: "desc"};
-    renderAllocation();
+    window.renderAllocation();
   });
 
   const originalRenderFocus = renderFocus;
@@ -420,16 +513,17 @@
 
   const originalProfileFor = profileFor;
   profileFor = function profileFromAssessment(asset) {
-    const profile = originalProfileFor(asset);
+    const template = originalProfileFor(asset);
     const assessment = asset.assessment || {};
-    if (!assessment.report_period) return profile;
-    profile.pillars = [
+    if (!assessment.report_period) return template;
+    // Industry templates are shared Mock fixtures. Never mutate one while
+    // adapting an API assessment for an individual stock.
+    const profile = { ...template, pillars: [
       assessment.dividend_safety_status || asset.dividendSafety,
       assessment.operating_quality_status || asset.fund,
       assessment.cash_reinvestment_status || "数据不足",
       assessment.capital_structure_status || "数据不足"
-    ];
-    profile.summary = assessment.fundamental_status || "数据不足";
+    ], summary: assessment.fundamental_status || "数据不足" };
     const evidence = Array.isArray(assessment.evidence) ? assessment.evidence : [];
     profile.evidence = evidence.length
       ? evidence.map(item => typeof item === "string" ? item : item.summary || item.metric_code || JSON.stringify(item)).slice(0, 5)
@@ -453,15 +547,18 @@
       const factRows = facts.slice(0, 60).map(row => `<tr><td>${escapeHtml(row.report_period)}</td><td>${escapeHtml(row.metric_code)}</td><td class="num">${escapeHtml(row.value)}</td><td>${escapeHtml(row.unit)}</td><td>${escapeHtml(row.period_type)}</td><td>${escapeHtml(row.announcement_date)}</td></tr>`).join("");
       const dividendRows = dividends.slice(0, 12).map(row => `<tr><td>${escapeHtml(row.fiscal_year)}</td><td>${escapeHtml(row.event_stage)}</td><td class="num">${escapeHtml(row.cash_dividend_per_share)}</td><td>${escapeHtml(row.announcement_date)}</td><td>${escapeHtml(row.announcement_id)}</td></tr>`).join("");
       const industryRows = industry.slice(0, 24).map(row => `<div class="anchor-item"><small>${escapeHtml(row.metric_code)} · ${escapeHtml(row.period)}</small><b>${escapeHtml(row.value)} ${escapeHtml(row.unit)}</b></div>`).join("");
-      const sourceRows = sources.slice(0, 12).map(row => `<li>${row.document_url ? `<a href="${escapeHtml(row.document_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(row.title || row.source_record_id)}</a>` : escapeHtml(row.title || row.source_record_id)} · ${escapeHtml(row.source)} · ${escapeHtml(row.announcement_date)} · hash ${escapeHtml(String(row.content_hash || "").slice(0, 12))}</li>`).join("");
-      return `<div class="research-header"><div><h4>高股息研究摘要</h4><p>${escapeHtml(asset.anchor)} · 不将研究摘要直接转化为交易建议</p></div><div class="research-meta"><span>最新报告期 ${escapeHtml(assessment.report_period)}</span><span>计算版本 ${escapeHtml(assessment.calculation_version)}</span><span>数据完整度：结构化事实</span></div></div><div class="pillar-grid">${statusCard("分红保障", profile.pillars[0])}${statusCard("经营质量", profile.pillars[1])}${statusCard("现金与再投资", profile.pillars[2])}${statusCard("资本结构", profile.pillars[3])}</div><div class="research-conclusion"><b>研究摘要 · ${escapeHtml(profile.summary)}</b><ul class="research-evidence">${profile.evidence.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div><section class="research-section"><h4>年度与 TTM 结构化指标</h4><div class="historical-wrap"><table><thead><tr><th>报告期</th><th>指标</th><th class="num">数值</th><th>单位</th><th>口径</th><th>公告日期</th></tr></thead><tbody>${factRows || '<tr><td colspan="6">数据不足：财务事实适配器尚未产出稳定数据。</td></tr>'}</tbody></table></div></section><section class="research-section"><h4>分红事件</h4><div class="historical-wrap"><table><thead><tr><th>年度</th><th>阶段</th><th class="num">每股分红</th><th>公告日期</th><th>公告编号</th></tr></thead><tbody>${dividendRows || '<tr><td colspan="5">数据不足</td></tr>'}</tbody></table></div></section><section class="research-section"><h4>行业经营锚点 · ${escapeHtml(asset.anchor)}</h4><div class="industry-anchor">${industryRows || '<div class="data-missing">暂无已确认的行业指标；待适配器接入后展示。</div>'}</div></section><section class="research-section"><h4>来源与追溯</h4><div class="chart-box"><ul class="research-evidence">${sourceRows || "<li>暂无来源元数据。</li>"}</ul><p class="research-source">仅展示来源链接、公告编号、内容哈希、抓取时间及结构化字段；不保存原始公告、财报文件或接口响应全文。</p></div></section>`;
+      const sourceRows = sources.slice(0, 12).map(row => {
+        const href = safeExternalHref(row.document_url);
+        const title = escapeHtml(row.title || row.source_record_id);
+        return `<li>${href ? `<a href="${href}" target="_blank" rel="noopener noreferrer">${title}</a>` : title} · ${escapeHtml(row.source)} · ${escapeHtml(row.announcement_date)} · hash ${escapeHtml(String(row.content_hash || "").slice(0, 12))}</li>`;
+      }).join("");
+      return `<div class="research-header"><div><h4>高股息研究摘要</h4><p>${escapeHtml(asset.anchor)} · 不将研究摘要直接转化为交易建议</p></div><div class="research-meta"><span>最新报告期 ${escapeHtml(assessment.report_period)}</span><span>计算版本 ${escapeHtml(assessment.calculation_version)}</span><span>数据完整度：结构化事实</span></div></div><div class="pillar-grid">${safeStatusCard("分红保障", profile.pillars[0])}${safeStatusCard("经营质量", profile.pillars[1])}${safeStatusCard("现金与再投资", profile.pillars[2])}${safeStatusCard("资本结构", profile.pillars[3])}</div><div class="research-conclusion"><b>研究摘要 · ${escapeHtml(profile.summary)}</b><ul class="research-evidence">${profile.evidence.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div><section class="research-section"><h4>年度与 TTM 结构化指标</h4><div class="historical-wrap"><table><thead><tr><th>报告期</th><th>指标</th><th class="num">数值</th><th>单位</th><th>口径</th><th>公告日期</th></tr></thead><tbody>${factRows || '<tr><td colspan="6">数据不足：财务事实适配器尚未产出稳定数据。</td></tr>'}</tbody></table></div></section><section class="research-section"><h4>分红事件</h4><div class="historical-wrap"><table><thead><tr><th>年度</th><th>阶段</th><th class="num">每股分红</th><th>公告日期</th><th>公告编号</th></tr></thead><tbody>${dividendRows || '<tr><td colspan="5">数据不足</td></tr>'}</tbody></table></div></section><section class="research-section"><h4>行业经营锚点 · ${escapeHtml(asset.anchor)}</h4><div class="industry-anchor">${industryRows || '<div class="data-missing">暂无已确认的行业指标；待适配器接入后展示。</div>'}</div></section><section class="research-section"><h4>来源与追溯</h4><div class="chart-box"><ul class="research-evidence">${sourceRows || "<li>暂无来源元数据。</li>"}</ul><p class="research-source">仅展示来源链接、公告编号、内容哈希、抓取时间及结构化字段；不保存原始公告、财报文件或接口响应全文。</p></div></section>`;
     }
     let html = originalAnnualResearch(asset);
     return html.replace("数据完整度：原型示例", "数据完整度：Mock 示例");
   };
 
-  const originalStockDetail = stockDetail;
-  stockDetail = function stockDetailFromApi(asset) {
+  window.stockDetail = function stockDetailFromApi(asset) {
     const ranges = [[3,"近3个月"],[6,"近6个月"],[12,"近1年"],[36,"近3年"],[60,"近5年"]];
     const movingAverages = [["ma20","MA20"],["ma60","MA60"],["ma120","MA120"],["ma200","MA200"]];
     const trends = [["short","短期"],["mid","中期"],["long","长期"]];
@@ -471,7 +568,11 @@
     const assessment = asset.assessment || {};
     const sourceRows = Array.isArray(asset.sources) ? asset.sources : [];
     const sourceList = sourceRows.length
-      ? `<ul class="research-evidence">${sourceRows.slice(0, 12).map(row => `<li>${row.document_url ? `<a href="${escapeHtml(row.document_url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(row.title || row.source_record_id)}</a>` : escapeHtml(row.title || row.source_record_id)} · ${escapeHtml(row.announcement_date)}</li>`).join("")}</ul>`
+      ? `<ul class="research-evidence">${sourceRows.slice(0, 12).map(row => {
+          const href = safeExternalHref(row.document_url);
+          const title = escapeHtml(row.title || row.source_record_id);
+          return `<li>${href ? `<a href="${href}" target="_blank" rel="noopener noreferrer">${title}</a>` : title} · ${escapeHtml(row.announcement_date)}</li>`;
+        }).join("")}</ul>`
       : '<div class="data-missing">暂无已保存的结构化来源元数据。</div>';
     const canViewFundamentals = runtimeState.permissions.has("view_fundamentals");
     const fundamentals = canViewFundamentals
@@ -480,7 +581,17 @@
     const fundamentalPanes = canViewFundamentals
       ? `<div class="modal-pane" id="pane-annual">${annualResearch(asset)}</div><div class="modal-pane" id="pane-quarter"><div class="data-missing">季度基本面口径尚未统一，暂不展示未经确认的原型数字。</div></div><div class="modal-pane" id="pane-source"><div class="chart-box"><p>行情数据截至：${escapeHtml(asset.lastValidDate || asset.date)}</p><p>最新报告期：${escapeHtml(assessment.report_period || "数据不足")}</p><p>数据来源与追溯：</p>${sourceList}<p class="research-source">仅展示来源链接、公告编号、哈希及结构化字段；不保存原始公告、财报文件或接口响应全文。</p></div></div>`
       : "";
-    return `<div class="overview-grid">${metric("趋势建议", badge(asset.advice))}${metric("综合状态", badge(asset.status))}${metric("股息率", yieldText)}${metric("分红保障", badge(asset.dividendSafety))}${metric("基本面状态", badge(asset.fund))}${metric("最新报告期", assessment.report_period || "数据不足")}${metric("上一年度每股分红", dividendText)}${metric("主要变化", asset.change || "数据不足")}</div><div class="modal-tabs"><button class="modal-tab active" data-pane="price">价格与趋势</button>${fundamentals}</div>${pricePane}${fundamentalPanes}`;
+    const overview = [
+      metric("趋势建议", safeBadge(asset.advice)),
+      metric("综合状态", safeBadge(asset.status)),
+      metric("股息率", yieldText),
+      metric("分红保障", safeBadge(asset.dividendSafety)),
+      metric("基本面状态", safeBadge(asset.fund)),
+      metric("最新报告期", escapeHtml(assessment.report_period || "数据不足")),
+      metric("上一年度每股分红", dividendText),
+      metric("主要变化", escapeHtml(asset.change || "数据不足"))
+    ].join("");
+    return `<div class="overview-grid">${overview}</div><div class="modal-tabs"><button class="modal-tab active" data-pane="price">价格与趋势</button>${fundamentals}</div>${pricePane}${fundamentalPanes}`;
   };
 
   // Index-detail rendering belongs to the runtime.  The former inline shell
@@ -501,7 +612,7 @@
     const pePane = percentile === null
       ? `<div class="chart-box"><div class="chart-title"><h4>PE百分位趋势</h4><small>暂无足够数据</small></div><p class="muted">当前指数暂无可用的 PE 百分位历史数据。</p></div>`
       : `<div class="chart-box"><div class="chart-title"><h4>PE百分位趋势</h4><small>当前PE ${num(numberOr(asset.pe))} · 当前百分位 ${percentile.toFixed(2)}%</small></div><canvas class="pe-canvas" id="pe-chart"></canvas><div class="chart-legend"><span>0–15% 极低估</span><span>15–35% 低估</span><span>35–70% 合理</span><span>70–90% 高估</span><span>90–100% 极高估</span></div></div>`;
-    return `<div class="overview-grid">${metric("投资建议", badge(asset.advice))}${metric("综合状态", badge(asset.status))}${metric("短期趋势", badge(asset.short))}${metric("中期趋势", badge(asset.mid))}${metric("长期趋势", badge(asset.long))}${metric("PE / PE百分位", peSummary)}${metric("MA120 / MA200", `${num(numberOr(asset.ma120))} / ${num(numberOr(asset.ma200))}`)}${metric("斜率", `MA120 ${pct(numberOr(asset.s120))} · MA200 ${pct(numberOr(asset.s200))}`)}</div><div class="reason"><b>判断依据：</b>${escapeHtml(asset.long || "数据不足")}；${escapeHtml(asset.mid || "数据不足")}；当前投资建议为“${escapeHtml(asset.advice || "数据不足")}”。</div>${pricePane}${pePane}<p class="data-note">${dataNote}</p>`;
+    return `<div class="overview-grid">${metric("投资建议", safeBadge(asset.advice))}${metric("综合状态", safeBadge(asset.status))}${metric("短期趋势", safeBadge(asset.short))}${metric("中期趋势", safeBadge(asset.mid))}${metric("长期趋势", safeBadge(asset.long))}${metric("PE / PE百分位", peSummary)}${metric("MA120 / MA200", `${num(numberOr(asset.ma120))} / ${num(numberOr(asset.ma200))}`)}${metric("斜率", `MA120 ${pct(numberOr(asset.s120))} · MA200 ${pct(numberOr(asset.s200))}`)}</div><div class="reason"><b>判断依据：</b>${escapeHtml(asset.long || "数据不足")}；${escapeHtml(asset.mid || "数据不足")}；当前投资建议为“${escapeHtml(asset.advice || "数据不足")}”。</div>${pricePane}${pePane}<p class="data-note">${dataNote}</p>`;
   };
 
   async function apiFetch(path) {
