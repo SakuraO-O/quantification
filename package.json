@@ -1,0 +1,11 @@
+{
+  "name": "trend-dashboard-browser-acceptance",
+  "private": true,
+  "scripts": {
+    "test:browser": "playwright test",
+    "browser:setup": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.0"
+  }
+}

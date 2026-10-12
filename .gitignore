@@ -13,3 +13,6 @@ codex/site/
 !.env.example
 supabase/.temp/
 supabase/functions/.env
+node_modules/
+playwright-report/
+test-results/

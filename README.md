@@ -145,23 +145,21 @@ python -m codex.trend_observer.market_valuation
 
 ## 本地查看看板
 
-未配置 Supabase 时可直接打开，本地会使用内嵌的 12 个指数与 9 只股票固定 Mock 样例；Mock 不代表当前生产跟踪清单：
-
-```text
-codex/dashboard_example.html
-```
-
-也可以启动本地静态服务：
+请从仓库根目录启动仅监听本机的预览服务。它会复制与 GitHub Pages 部署相同的 4 个静态文件，并以 `index.html` 为入口；修改文件后需重启服务：
 
 ```bash
-python -m http.server 8766
+python3 scripts/serve_dashboard.py
 ```
 
 然后访问：
 
 ```text
-http://127.0.0.1:8766/codex/dashboard_example.html
+http://127.0.0.1:8766/
 ```
+
+脚本不会生成数据，也不会写入数据库。当前 V2 看板不读取旧版 `codex/dashboard_data.json`：登录后通过 Edge API 加载已发布版本；缺少认证或 API 不可用时，页面会明确标记并回退内嵌 Mock，Mock 不代表生产跟踪清单。Edge API 仅接受 `DASHBOARD_ALLOWED_ORIGINS` 白名单中的来源；若未允许 `http://127.0.0.1:8766`，本地页只能验收静态页面与 Mock，不能据此断定生产数据链路正常。不要为验收而绕过白名单；真实 API 验收应在获准来源或隔离测试项目进行。预览页面沿用仓库中的 Supabase 配置，登录和“编辑配置”可能访问**生产环境**；测试写入功能前须确认使用了隔离的测试项目。不要在共享网络上提供该页面。
+
+浏览器验收时，先核对页面及 3 个 JS 文件均成功加载、控制台没有页面自身的异常，再验证登录、资产列表、详情弹窗、图表、筛选和缺数据状态；生产结果还须在 GitHub Pages 页面复核。若自动化浏览器本身拒绝本地地址，应遵守该限制，改用获准的浏览器环境或手工验收，不能以换 URL 绕过拒绝。
 
 本地页面和 GitHub Pages 使用同一套登录界面。项目 Ref、API 地址和公开的
 `Publishable key`（`sb_publishable_...`）已经写入 `codex/dashboard_config.js`，
@@ -176,6 +174,23 @@ http://127.0.0.1:8766/codex/dashboard_example.html
 ```bash
 python -m unittest discover -s tests
 ```
+
+### 本地浏览器验收（固定 Mock）
+
+本机已安装 Google Chrome 时，从仓库根目录执行：
+
+```bash
+npm ci
+npm run test:browser
+```
+
+测试默认使用本机 Chrome，无需另下浏览器。如果本机没有 Chrome，可改用 Playwright 自带的 Chromium：先运行 `npm run browser:setup`，再运行 `PLAYWRIGHT_USE_BUNDLED_CHROMIUM=1 npm run test:browser`。
+
+`test:browser` 会自动在 `127.0.0.1:8767` 启动 `scripts/serve_dashboard.py`，运行完成后关闭服务。测试使用独立浏览器会话，并在加载页面时注入仅指向本机的测试配置；登录、已发布版本、资产详情和配置保存均由固定响应模拟。测试拦截并拒绝所有非本机请求，**不会读取或写入生产 Supabase**。这套结果只证明本地页面交互和错误处理，不能证明生产登录、CORS、数据库或部署正常。
+
+测试覆盖页面与 3 个 JS 文件加载、模拟登录与退出、资产列表和筛选、指数与股票详情、图表悬停标签、缺数及 API 错误、弹窗滚动、模拟配置保存失败和刷新回读；还检查缺失的风格分数不会显示成 0、行业模板不会被某只股票的评估污染，以及 API 文本不会当作 HTML 执行。浏览器测试报告在 `playwright-report/`；失败截图与 trace 在 `test-results/`。这两个目录和 `node_modules/` 已加入 Git 忽略。trace 只含固定测试令牌，但仍建议仅在本机查看。
+
+如果出现 `Executable doesn't exist`，重新运行 `npm run browser:setup`。如果显示 `EADDRINUSE`，先停止占用 8767 端口的进程。如果提示无法绑定回环端口，说明当前执行环境禁止启动本地服务；请在允许本机服务的终端运行上述命令，不要改用其他 URL 绕过浏览器限制。测试失败时先看终端中的用例名，再用 `npx playwright show-report` 打开报告。需要手工预览真实页面时仍使用上文的 8766 端口，并留意该页面沿用生产配置。
 
 ## GitHub Actions
 
