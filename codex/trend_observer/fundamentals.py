@@ -38,6 +38,14 @@ def assess_high_dividend_fundamentals(metrics: Mapping[str, float | None], indus
     explicit rather than silently reusing a previous report period.
     """
 
+    if industry_template == "insurance":
+        # Insurers' distributable earnings, solvency and investment cash flows
+        # cannot be judged with the industrial operating-cash-flow/debt rules.
+        return FundamentalAssessment(
+            "数据不足", "数据不足", "数据不足", "数据不足", "数据不足", [],
+            "保险行业专属的偿付能力与可分配利润口径尚未接入，暂不评估分红保障。",
+        )
+
     evidence: list[str] = []
     risk: str | None = None
     payout = metrics.get("payout_ratio")

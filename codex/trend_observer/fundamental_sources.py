@@ -1,4 +1,4 @@
-"""Public, structured fundamentals ingestion for the nine tracked stocks.
+"""Public, structured fundamentals ingestion for tracked CN stocks.
 
 The adapter stores normalized facts and compact evidence metadata only.  It
 never saves a report PDF, HTML page, or provider response body.  A failed

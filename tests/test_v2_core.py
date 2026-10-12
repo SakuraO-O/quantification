@@ -20,13 +20,21 @@ from codex.trend_observer.supabase_store import payload_hash
 
 
 class V2CoreTest(unittest.TestCase):
-    def test_active_registry_is_twelve_indices_and_nine_stocks(self):
+    def test_active_registry_is_twelve_indices_and_thirteen_stocks(self):
         assets = active_assets()
         self.assertEqual(sum(asset["asset_type"] == "指数" for asset in assets), 12)
-        self.assertEqual(sum(asset["asset_type"] == "股票" for asset in assets), 9)
-        self.assertNotIn("sh601919", {asset["symbol"] for asset in assets})
-        self.assertEqual(len(security_rows()), 21)
-        self.assertGreaterEqual(len(provider_symbol_rows()), 21)
+        self.assertEqual(sum(asset["asset_type"] == "股票" for asset in assets), 13)
+        added = {
+            "sh601919": ("中远海控", "resource_cycle"),
+            "sz000933": ("神火股份", "resource_cycle"),
+            "sh600941": ("中国移动", "telecom"),
+            "sh601318": ("中国平安", "insurance"),
+        }
+        by_symbol = {asset["symbol"]: asset for asset in assets}
+        for symbol, (name, template) in added.items():
+            self.assertEqual((by_symbol[symbol]["name"], by_symbol[symbol]["industry_template"]), (name, template))
+        self.assertEqual(len(security_rows()), 25)
+        self.assertGreaterEqual(len(provider_symbol_rows()), 25)
         currencies = {row["market"]: row["currency"] for row in security_rows()}
         self.assertEqual(currencies, {"CN": "CNY", "HK": "HKD", "US": "USD"})
 
@@ -105,6 +113,17 @@ class V2CoreTest(unittest.TestCase):
         )
         self.assertEqual(assessment.dividend_safety_status, "稳健")
         self.assertEqual(assessment.cash_reinvestment_status, "稳健")
+
+    def test_insurance_assessment_does_not_reuse_industrial_cashflow_rules(self):
+        assessment = assess_high_dividend_fundamentals(
+            {"revenue": 1, "net_profit": 1, "roe": 1, "payout_ratio": 0.3,
+             "dividend_coverage": 2, "free_cashflow_growth": 1, "debt_change": -1,
+             "operating_quality_change": 1},
+            "insurance",
+        )
+        self.assertEqual(assessment.fundamental_status, "数据不足")
+        self.assertEqual(assessment.dividend_safety_status, "数据不足")
+        self.assertIn("偿付能力", assessment.main_risk)
 
     def test_version_hash_is_stable(self):
         self.assertEqual(payload_hash({"a": 1, "b": [2]}), payload_hash({"b": [2], "a": 1}))

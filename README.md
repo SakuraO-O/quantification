@@ -44,7 +44,7 @@ python -B -m codex.trend_observer.cli sync-valuation --market CN
 python -B -m codex.trend_observer.cli publish-dashboard
 ```
 
-启用资产清单固定为 **12 个指数和当前 9 只股票**。`sync-market` 仅同步行情；`sync-valuation` 独立同步指数估值。二者都会读取数据水位，正常情况下只请求新增日期及向前重叠的两个交易日；`--force` 仅用于补抓或修订检查。
+启用资产清单当前为 **12 个指数和 13 只股票**，以 `config.py` 为权威名单；看板读取发布版本中的资产清单，不另行写死股票数量。`sync-market` 仅同步行情；`sync-valuation` 独立同步指数估值。二者都会读取数据水位，正常情况下只请求新增日期及向前重叠的两个交易日；`--force` 仅用于补抓或修订检查。
 
 飞书派发只读取完整的 `dashboard_versions`，周一至周六在 08:00—09:30 每 10 分钟检查；同一内容版本只成功派发一次，周日不发送：
 
@@ -76,7 +76,9 @@ python -B -m codex.trend_observer.cli sync-market --market CN --force
 python -B -m codex.trend_observer.cli publish-dashboard
 ```
 
-`sync-market --market CN --force` 对股票抓取完整历史以回填未复权价格；正常定时仍为增量抓取。未复权价格优先取东方财富，失败时从腾讯独立原始日线降级；腾讯前复权历史分段抓取并验证重叠价格。旧版行情库中 8 只股票截至 2026-10-09 只有不足三年的历史，迁移本身不会凭空补齐数据。上线后需检查 9 只股票的 `market_daily.raw_close`、`dividend_events` 送转股比例和最新发布版本的两项三年回报；本地代码修改不等于已执行生产回填。
+`sync-market --market CN --force` 对股票抓取完整历史以回填未复权价格；正常定时仍为增量抓取。未复权价格优先取东方财富，失败时从腾讯独立原始日线降级；腾讯前复权历史分段抓取并验证重叠价格。旧版行情库中 8 只股票截至 2026-10-09 只有不足三年的历史，迁移本身不会凭空补齐数据。新增股票上线后需检查 `market_daily.raw_close`、`dividend_events` 送转股比例和最新发布版本的两项三年回报；本地代码修改不等于已执行生产回填。
+
+新增中远海控（601919）、神火股份（000933）、中国移动 A 股（600941）和中国平安 A 股（601318）时，无需数据库迁移。先将配置和看板脚本部署到 `main`，再依次运行 `sync-fundamentals --force`、`sync-market --market CN --force`、`publish-dashboard`。**务必等前两个任务结束后再发布**，否则新股票会先显示数据延迟或三年回报数据不足。核对最新完整版本的 `payload.assets` 含 25 项，其中股票 13 项，并逐只检查新增股票的历史行情起止日期、财务事实、分红事件、三年回报状态。中国平安暂不套用工业企业现金流阈值，四维基本面评估保持“数据不足”，直至保险专属规则接入。
 
 ### 上线检查清单
 
@@ -87,7 +89,7 @@ python -B -m codex.trend_observer.cli publish-dashboard
 3. 部署发生变更的函数（通常为 `supabase functions deploy dashboard-api` 与 `supabase functions deploy portfolio-config`），并等待 Pages 部署静态资源；
 4. 对修改过行情、估值或计算规则的版本，依次强制运行受影响市场的 `sync-valuation`、`sync-market`，确认所有资产的 `calculation_version` 已更新后才运行 `publish-dashboard`；
 5. 首次或修复基本面后，手动运行 `sync-fundamentals`（需要补抓时选择 `--force`），随后运行 `publish-dashboard`；
-6. 验证 `fundamental_assessments`、`financial_facts` 与最新 `dashboard_versions.payload` 均有 9 只股票的有效数据，并在浏览器确认 `/overview` 的 `allocation` 与 `/asset/{symbol}` 的基本面字段正常返回。
+6. 验证 `fundamental_assessments`、`financial_facts` 与最新 `dashboard_versions.payload` 均覆盖启用的 13 只股票，并在浏览器确认 `/overview` 的 `allocation` 与 `/asset/{symbol}` 的基本面字段正常返回。中国平安的保险行业专属评估口径尚未接入，原始事实可展示，四维摘要应明确为“数据不足”。
 
 配置偏离、理论调整额及摘要由数据库 RPC 实时计算；若迁移尚未部署，Edge API 不应以浏览器计算或旧版本快照代替该结果。
 
@@ -143,7 +145,7 @@ python -m codex.trend_observer.market_valuation
 
 ## 本地查看看板
 
-未配置 Supabase 时可直接打开，本地会使用内嵌的 12 个指数与 9 只股票 Mock 数据：
+未配置 Supabase 时可直接打开，本地会使用内嵌的 12 个指数与 9 只股票固定 Mock 样例；Mock 不代表当前生产跟踪清单：
 
 ```text
 codex/dashboard_example.html

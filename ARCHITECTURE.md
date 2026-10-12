@@ -28,7 +28,7 @@ supabase/
 ├── functions/dashboard-api/index.ts                  # 需 Auth 的只读 Edge API
 └── functions/portfolio-config/index.ts               # editor 配置写入与实时回传
 codex/trend_observer/
-├── assets.py             # 12 个指数、9 只股票与来源代码映射
+├── assets.py             # 12 个指数、13 只股票与来源代码映射
 ├── supabase_store.py     # Supabase REST 仓储、水位、版本与通知记录
 ├── ingestion.py          # 两交易日重叠的增量行情/估值同步与退避
 ├── allocation.py         # 单测契约镜像；生产实时配置仅由数据库 RPC 统一计算
@@ -180,7 +180,7 @@ python codex/trend_observer.py --notify
 `codex/dashboard_example.html` 在浏览器中：
 
 1. `dashboard_runtime.js` 检查 Edge API 地址与 Supabase Auth access token；
-2. 已配置时读取 `dashboard-api/overview`，并校验启用资产必须为 12 个指数和 9 只股票；
+2. 已配置时读取 `dashboard-api/overview`，由发布器校验权威启用资产清单，前端不固定股票数量；
 3. 打开详情弹窗或切换时间范围时，按需读取 `dashboard-api/asset/{symbol}?range=...`；
 4. 未配置、未认证或 API 暂不可用时，明确标记并使用内嵌 Mock 数据；
 5. `editor` 通过 `portfolio-config` 原子写入六类目标比例或实际金额，重新加载时 `dashboard-api` 以最新持久化配置覆盖版本快照中的旧配置；

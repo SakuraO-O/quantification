@@ -76,7 +76,9 @@
     utility_concession: "公用事业与特许经营",
     resource_cycle: "资源周期",
     durable_manufacturing: "耐用消费制造",
-    bank: "银行"
+    bank: "银行",
+    telecom: "通信运营",
+    insurance: "保险与综合金融"
   })[template] || "行业经营";
 
   function setSourceStatus(source, message, generatedAt) {
@@ -150,8 +152,10 @@
     const assets = Array.isArray(payload.assets) ? payload.assets : [];
     const apiIndices = assets.filter(item => item.asset_type === "指数").map(item => mapAsset(item, "index"));
     const apiStocks = assets.filter(item => item.asset_type === "股票").map(item => mapAsset(item, "stock"));
-    if (apiIndices.length !== 12 || apiStocks.length !== 9) {
-      throw new Error(`资产清单不完整：指数 ${apiIndices.length}/12，股票 ${apiStocks.length}/9`);
+    // The publisher owns the enabled catalogue. A client-side stock count
+    // would reject a valid new version whenever the registry expands.
+    if (!apiIndices.length || !apiStocks.length || payload.completeness?.asset_catalog_valid === false) {
+      throw new Error(`资产清单不完整：指数 ${apiIndices.length}，股票 ${apiStocks.length}`);
     }
     const indexOrder = ["沪深300", "中证500", "中证A500", "创业板100", "科创50", "红利低波", "国证自由现金流", "恒生指数", "中证消费", "全指医药", "标普500", "纳斯达克100"];
     const indexRank = new Map(indexOrder.map((name, index) => [name, index]));

@@ -25,7 +25,8 @@ class DashboardV2Test(unittest.TestCase):
         self.assertEqual(self.runtime.count('name:"'), 5)
         self.assertIn("apiFetch(\"/overview\")", self.runtime)
         self.assertIn("encodeURIComponent(asset.code)", self.runtime)
-        self.assertIn("apiIndices.length !== 12 || apiStocks.length !== 9", self.runtime)
+        self.assertIn("payload.completeness?.asset_catalog_valid === false", self.runtime)
+        self.assertNotIn("apiStocks.length !== 9", self.runtime)
 
     def test_auth_uses_publishable_key_and_session_only_tokens(self):
         self.assertIn("calebaqhmihatnssjgon", self.config)

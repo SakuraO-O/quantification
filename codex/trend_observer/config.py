@@ -30,7 +30,7 @@ FEISHU_KEYWORD = "妙啊"
 DISCLAIMER = "本结果仅用于趋势观察，不构成投资建议。均线信号存在滞后性和假突破风险。"
 
 # The dashboard always uses this explicit registry.  It deliberately contains
-# 12 indices and the current 9 stock holdings; adding a historical file alone
+# 12 indices and the current 13 tracked stocks; adding a historical file alone
 # must not make a security appear in calculations or notifications.
 PORTFOLIO_CATEGORIES = ("海外", "红利", "成长", "债券", "大宗商品", "现金")
 STYLE_COMPASS_PAIRS = (
@@ -70,6 +70,10 @@ ASSETS = [
     {"name": "粤高速A", "symbol": "sz000429", "market": "CN", "asset_type": "股票", "provider": "tencent", "industry_template": "utility_concession"},
     {"name": "国电电力", "symbol": "sh600795", "market": "CN", "asset_type": "股票", "provider": "tencent", "industry_template": "utility_concession"},
     {"name": "云铝股份", "symbol": "sz000807", "market": "CN", "asset_type": "股票", "provider": "tencent", "industry_template": "resource_cycle"},
+    {"name": "中远海控", "symbol": "sh601919", "market": "CN", "asset_type": "股票", "provider": "tencent", "industry_template": "resource_cycle"},
+    {"name": "神火股份", "symbol": "sz000933", "market": "CN", "asset_type": "股票", "provider": "tencent", "industry_template": "resource_cycle"},
+    {"name": "中国移动", "symbol": "sh600941", "market": "CN", "asset_type": "股票", "provider": "tencent", "industry_template": "telecom"},
+    {"name": "中国平安", "symbol": "sh601318", "market": "CN", "asset_type": "股票", "provider": "tencent", "industry_template": "insurance"},
 ]
 
 REPORT_COLUMNS = [
