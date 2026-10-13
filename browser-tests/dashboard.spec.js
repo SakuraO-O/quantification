@@ -84,8 +84,8 @@ async function mockBackend(page, options = {}) {
           short_trend: '短期强势', mid_trend: '中期上升', long_trend: '长期上升',
           pe: 12, pe_percentile: 40
         })),
-        fundamentals_access: true, fundamental_assessment: null,
-        financial_facts: [], dividend_events: [], industry_metrics: [], sources: []
+        fundamentals_access: true, fundamental_assessment: state.detailAssessment || null,
+        financial_facts: [], dividend_events: state.detailDividends || [], industry_metrics: [], sources: []
       });
     }
     if (url.pathname === '/functions/v1/portfolio-config') {
@@ -131,7 +131,10 @@ test('loads the exact preview bundle, logs in, reads a version, and logs out', a
 });
 
 test('filters assets and opens index and stock details with chart labels', async ({ page }) => {
-  const state = await mockBackend(page);
+  const state = await mockBackend(page, {
+    detailAssessment: { report_period: '2026Q2' },
+    detailDividends: [{ report_period: '2025', event_stage: '中期', cash_dividend_per_share: 0.12345 }]
+  });
   await login(page);
   await expect(page.locator('#dashboard-source')).toHaveClass(/api/);
   await page.locator('#index-search').fill('不存在');
@@ -149,10 +152,13 @@ test('filters assets and opens index and stock details with chart labels', async
   await page.locator('.tab[data-view="stock"]').click();
   await page.locator('#stock-search').fill('长江');
   await expect(page.locator('#stock-body tr')).toHaveCount(1);
-  await expect(page.locator('#stock-body tr')).toContainText('1.20');
+  await expect(page.locator('#stock-body tr')).toContainText('1.2000');
   await expect(page.locator('#stock-body tr')).toContainText('4.00%');
+  expect(await page.evaluate(() => dividendAmount(1.23456))).toBe('1.2346');
   await page.locator('#stock-body tr').click();
   await expect(page.locator('#detail-title')).toContainText('长江电力');
+  await expect(page.locator('#detail-modal .metric-card').filter({ hasText: '每股分红' }).locator('b')).toHaveText('1.2000 元/股');
+  await expect(page.locator('#detail-content .research-section').filter({ hasText: '分红事件' }).locator('tbody tr').first()).toContainText('0.1235');
   await expect(page.locator('#detail-content')).toBeVisible();
   await page.locator('#detail-content').evaluate(element => { element.scrollTop = element.scrollHeight; });
   await expect(page.locator('#detail-modal')).toBeVisible();

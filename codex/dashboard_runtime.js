@@ -548,7 +548,7 @@
     if (runtimeState.source === "api" && assessment.report_period) {
       const profile = profileFor(asset);
       const factRows = facts.slice(0, 60).map(row => `<tr><td>${escapeHtml(row.report_period)}</td><td>${escapeHtml(row.metric_code)}</td><td class="num">${escapeHtml(row.value)}</td><td>${escapeHtml(row.unit)}</td><td>${escapeHtml(row.period_type)}</td><td>${escapeHtml(row.announcement_date)}</td></tr>`).join("");
-      const dividendRows = dividends.slice(0, 12).map(row => `<tr><td>${escapeHtml(row.report_period || row.fiscal_year)}</td><td>${escapeHtml(row.event_stage)}</td><td class="num">${escapeHtml(row.cash_dividend_per_share)}</td><td>${escapeHtml(row.announcement_date)}</td><td>${escapeHtml(row.announcement_id)}</td></tr>`).join("");
+      const dividendRows = dividends.slice(0, 12).map(row => `<tr><td>${escapeHtml(row.report_period || row.fiscal_year)}</td><td>${escapeHtml(row.event_stage)}</td><td class="num">${dividendAmount(row.cash_dividend_per_share)}</td><td>${escapeHtml(row.announcement_date)}</td><td>${escapeHtml(row.announcement_id)}</td></tr>`).join("");
       const industryRows = industry.slice(0, 24).map(row => `<div class="anchor-item"><small>${escapeHtml(row.metric_code)} · ${escapeHtml(row.period)}</small><b>${escapeHtml(row.value)} ${escapeHtml(row.unit)}</b></div>`).join("");
       const sourceRows = sources.slice(0, 12).map(row => {
         const href = safeExternalHref(row.document_url);
