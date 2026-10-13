@@ -27,7 +27,8 @@ const assets = [
     asset_type: '股票', symbol: '600900', name: '长江电力', market: 'CN', trade_date: '2026-10-10',
     close: 30, daily_return: 0.005, investment_advice: '可关注', overall_status: '健康上升',
     short_trend: '短期强势', mid_trend: '中期上升', long_trend: '长期上升',
-    dividend_yield: 0.035, last_year_dividend: 1.2, dividend_safety_status: '稳健',
+    dividend_yield: 4, last_year_dividend: 1.2, dividend_fiscal_year: 2025,
+    dividend_yield_status: '已计算', dividend_safety_status: '稳健',
     fundamental_status: '稳健', report_period: '2026Q2'
   }
 ];
@@ -148,6 +149,8 @@ test('filters assets and opens index and stock details with chart labels', async
   await page.locator('.tab[data-view="stock"]').click();
   await page.locator('#stock-search').fill('长江');
   await expect(page.locator('#stock-body tr')).toHaveCount(1);
+  await expect(page.locator('#stock-body tr')).toContainText('1.20');
+  await expect(page.locator('#stock-body tr')).toContainText('4.00%');
   await page.locator('#stock-body tr').click();
   await expect(page.locator('#detail-title')).toContainText('长江电力');
   await expect(page.locator('#detail-content')).toBeVisible();
@@ -246,6 +249,22 @@ test('keeps missing production allocation and style score visibly unavailable', 
   await page.locator('[data-edit="target"]').click();
   await expect(page.locator('[data-edit-index="0"]')).toHaveValue('');
   expect(state.unexpected).toEqual([]);
+});
+
+test('shows published dividend gaps without inventing a zero yield', async ({ page }) => {
+  await mockBackend(page, { customAssets: [assets[0], {
+    ...assets[1], dividend_yield: null, last_year_dividend: null,
+    dividend_yield_status: '数据不足', dividend_yield_issue: '分红来源尚未完成近期核验'
+  }] });
+  await login(page);
+  await page.locator('.tab[data-view="stock"]').click();
+  const row = page.locator('#stock-body tr');
+  await expect(row).toContainText('数据不足');
+  await expect(row.locator('td[title="分红来源尚未完成近期核验"]')).toHaveText('数据不足');
+  await expect(row).not.toContainText('0.00%');
+  await row.click();
+  await expect(page.locator('#detail-modal .metric-card').filter({ hasText: '股息率' }).locator('b')).toHaveText('数据不足');
+  await expect(page.locator('#detail-modal .metric-card').filter({ hasText: '每股分红' }).locator('b')).toHaveText('—');
 });
 
 test('adapting one assessment does not alter a shared industry template', async ({ page }) => {

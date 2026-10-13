@@ -52,6 +52,8 @@ python -B -m codex.trend_observer.cli dispatch-feishu
 
 `sync-market` 在没有水位时执行历史初始化；之后只请求从数据库最新日期向前重叠两个交易日的窗口。连续三次失败后水位进入退避状态。资金风格建议由 Python 在发布时计算并写入 `dashboard_versions`，包括占优侧投资建议与 PE 百分位不高于 50% 的约束及原因。六类配置的比例、偏离四档、理论调整额与摘要由 `compute_portfolio_allocation()` RPC 实时统一计算，Edge API 与前端只转发和渲染。`dispatch-feishu` 不调用任何行情来源，只读取完整且尚未发送过的 `dashboard_versions`。
 
+股票股息率也由 Python 发布器独占计算：`sync-fundamentals` 保存来源报告期明确的分红事件，发布时按交易日前一报告年度汇总已实施且已除息的每股现金分红，再除以当日收盘价。`last_year_dividend`、`dividend_fiscal_year`、`dividend_yield`、状态和缺数原因一并写入版本；Edge、前端和飞书只消费版本。V1 的 `dividends.json` 手工配置与历史 `asset_daily_signals.dividend_yield` 不作为 V2 依据。旧事件报告期不明时保持缺数，须回填后重新发布。
+
 ## 附录 A：历史 V1 兼容架构（非生产路径）
 
 ## V1 兼容目录树

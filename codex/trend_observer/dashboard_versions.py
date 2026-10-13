@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 
 from .config import ASSETS, MARKET_TIMEZONE, STYLE_COMPASS_PAIRS
+from .dividends import annual_dividend_summary
 from .ingestion import CALCULATION_VERSION
 from .style_compass import calculate_style_compass, style_recommendation_details
 from .supabase_store import SupabaseStore
@@ -39,33 +40,22 @@ class DashboardPublisher:
 
         return bool(signal and signal.get("calculation_version") == CALCULATION_VERSION)
 
-    def _latest_dividend(self, sid: str) -> dict | None:
-        rows = self.store.select(
+    def _dividend_events(self, sid: str) -> list[dict]:
+        return self.store.select(
             "dividend_events",
-            select="fiscal_year,cash_dividend_per_share,announcement_date,announcement_id,event_stage",
-            filters={"security_id": f"eq.{sid}", "event_stage": "eq.implemented"},
-            order="fiscal_year.desc,announcement_date.desc",
-            limit=1,
+            select="fiscal_year,report_period,cash_dividend_per_share,announcement_date,announcement_id,event_stage,ex_date,bonus_shares_per_share,transfer_shares_per_share",
+            filters={"security_id": f"eq.{sid}", "report_period": "not.is.null", "is_current": "eq.true"},
         )
-        return rows[0] if rows else None
 
-    def _stock_three_year_returns(self, asset: dict, trade_date: str) -> dict:
-        sid = asset["security_id"]
+    def _dividend_history_current(self, asset: dict, trade_date: str) -> bool:
         watermark = getattr(self.store, "get_watermark", lambda _key: None)(
-            f"fundamentals:CN:{asset['symbol']}:eastmoney-sina"
+            f"fundamentals:CN:{asset['symbol']}:eastmoney"
         )
         last_success = (watermark or {}).get("last_success_at")
-        verified = bool(
+        return bool(
             watermark and watermark.get("status") == "normal" and last_success
             and pd.Timestamp(last_success).date() >= pd.Timestamp(trade_date).date() - timedelta(days=14)
         )
-        events = self.store.select(
-            "dividend_events",
-            select="event_stage,announcement_date,ex_date,cash_dividend_per_share,bonus_shares_per_share,transfer_shares_per_share",
-            filters={"security_id": f"eq.{sid}"},
-        )
-        return stock_three_year_returns(self.store.history(sid), events, trade_date,
-                                        dividend_history_current=verified)
 
     def _latest_fundamental_assessment(self, sid: str) -> dict | None:
         rows = self.store.select(
@@ -186,17 +176,33 @@ class DashboardPublisher:
                 "industry_template": asset.get("industry_template"),
             } | signal
             if asset["asset_type"] == "股票":
-                dividend = self._latest_dividend(asset["security_id"])
+                dividends = self._dividend_events(asset["security_id"])
                 assessment = self._latest_fundamental_assessment(asset["security_id"])
                 record |= {
-                    "last_year_dividend": (dividend or {}).get("cash_dividend_per_share"),
-                    "latest_announcement_date": (dividend or {}).get("announcement_date"),
+                    "latest_announcement_date": max((row.get("announcement_date") for row in dividends if row.get("announcement_date")), default=None),
                     "fundamental_assessment": assessment,
                 }
                 if signal.get("data_status") == "current":
-                    record |= self._stock_three_year_returns(asset, signal["trade_date"])
+                    verified = self._dividend_history_current(asset, signal["trade_date"])
+                    if verified:
+                        record |= annual_dividend_summary(dividends, signal["trade_date"], signal.get("close"))
+                    else:
+                        record |= {
+                            "last_year_dividend": None, "dividend_yield": None,
+                            "dividend_fiscal_year": pd.Timestamp(signal["trade_date"]).year - 1,
+                            "dividend_yield_status": "数据不足",
+                            "dividend_yield_issue": "分红来源尚未完成近期核验",
+                        }
+                    record |= stock_three_year_returns(
+                        self.store.history(asset["security_id"]), dividends, signal["trade_date"],
+                        dividend_history_current=verified,
+                    )
                 else:
                     record |= {
+                        "last_year_dividend": None, "dividend_yield": None,
+                        "dividend_fiscal_year": (expected_date.year - 1),
+                        "dividend_yield_status": "数据延迟",
+                        "dividend_yield_issue": signal.get("data_issue"),
                         "price_return_3y": None, "total_return_3y": None,
                         "total_return_3y_status": "数据延迟", "total_return_3y_issue": signal.get("data_issue"),
                         "total_return_3y_start_date": None, "total_return_3y_end_date": signal.get("trade_date"),

@@ -47,6 +47,9 @@ class MemoryStore:
     def select(self, table, select="*", filters=None, order=None, limit=None):
         rows = list(self.tables.get(table, []))
         for key, value in (filters or {}).items():
+            if value == "not.is.null":
+                rows = [row for row in rows if row.get(key) is not None]
+                continue
             expected = value.removeprefix("eq.")
             rows = [row for row in rows if str(row.get(key)).lower() == expected.lower()]
         if order:
@@ -84,8 +87,10 @@ def finance_frame(*, bank=False):
 
 
 def dividend_frame():
-    return pd.DataFrame([{"公告日期": "2026-06-01", "派息": 10, "送股": 0, "转增": 0,
-                          "进度": "实施", "除权除息日": "2026-06-10"}])
+    return pd.DataFrame([{"报告期": "2025-12-31", "最新公告日期": "2026-06-01",
+                          "现金分红-现金分红比例": 10, "送转股份-送股比例": 0,
+                          "送转股份-转股比例": 0, "方案进度": "实施分配",
+                          "除权除息日": "2026-06-10"}])
 
 
 class FundamentalSourceTest(unittest.TestCase):
@@ -99,6 +104,7 @@ class FundamentalSourceTest(unittest.TestCase):
         self.assertTrue(all("content" not in row and "response" not in row for row in store.tables["source_documents"]))
         event = store.tables["dividend_events"][0]
         self.assertEqual(event["fiscal_year"], 2025)
+        self.assertEqual(event["report_period"], date(2025, 12, 31))
         self.assertEqual(event["cash_dividend_per_share"], 1)
         self.assertEqual(event["bonus_shares_per_share"], 0)
         self.assertEqual(event["transfer_shares_per_share"], 0)
@@ -114,14 +120,51 @@ class FundamentalSourceTest(unittest.TestCase):
         sync = FundamentalSynchronizer(store, FundamentalSource(lambda _: finance_frame(), lambda _: initial))
         self.assertEqual(sync.sync_asset(asset, today=date(2026, 7, 19), force=True).status, "succeeded")
         revised = dividend_frame()
-        revised.loc[0, "送股"] = 2
-        revised.loc[0, "转增"] = 1
+        revised.loc[0, "送转股份-送股比例"] = 2
+        revised.loc[0, "送转股份-转股比例"] = 1
         sync = FundamentalSynchronizer(store, FundamentalSource(lambda _: finance_frame(), lambda _: revised))
         self.assertEqual(sync.sync_asset(asset, today=date(2026, 7, 19), force=True).status, "succeeded")
         self.assertEqual(len(store.tables["dividend_events"]), 1)
         event = store.tables["dividend_events"][0]
         self.assertAlmostEqual(event["bonus_shares_per_share"], .2)
         self.assertAlmostEqual(event["transfer_shares_per_share"], .1)
+
+    def test_revised_ex_date_retires_previous_event(self):
+        asset = next(item for item in active_assets() if item["symbol"] == "sh600900")
+        store = MemoryStore()
+        original = dividend_frame()
+        sync = FundamentalSynchronizer(store, FundamentalSource(lambda _: finance_frame(), lambda _: original))
+        self.assertEqual(sync.sync_asset(asset, today=date(2026, 7, 19), force=True).status, "succeeded")
+        revised = dividend_frame()
+        revised.loc[0, "除权除息日"] = "2026-06-11"
+        sync = FundamentalSynchronizer(store, FundamentalSource(lambda _: finance_frame(), lambda _: revised))
+        self.assertEqual(sync.sync_asset(asset, today=date(2026, 7, 19), force=True).status, "succeeded")
+        events = store.tables["dividend_events"]
+        self.assertEqual(len(events), 2)
+        self.assertEqual(sum(row["is_current"] for row in events), 1)
+        self.assertEqual(next(row["ex_date"] for row in events if row["is_current"]), date(2026, 6, 11))
+
+    def test_short_source_response_keeps_existing_event_current(self):
+        asset = next(item for item in active_assets() if item["symbol"] == "sh600900")
+        store = MemoryStore()
+        original = dividend_frame()
+        second = original.copy()
+        second.loc[0, "报告期"] = "2025-06-30"
+        second.loc[0, "除权除息日"] = "2025-09-10"
+        complete = pd.concat([original, second], ignore_index=True)
+        sync = FundamentalSynchronizer(store, FundamentalSource(lambda _: finance_frame(), lambda _: complete))
+        self.assertEqual(sync.sync_asset(asset, today=date(2026, 7, 19), force=True).status, "succeeded")
+        sync = FundamentalSynchronizer(store, FundamentalSource(lambda _: finance_frame(), lambda _: original))
+        self.assertEqual(sync.sync_asset(asset, today=date(2026, 7, 19), force=True).status, "failed")
+        self.assertEqual(sum(row["is_current"] for row in store.tables["dividend_events"]), 2)
+
+    def test_duplicate_source_identity_fails_without_writing_events(self):
+        asset = next(item for item in active_assets() if item["symbol"] == "sh600900")
+        duplicated = pd.concat([dividend_frame(), dividend_frame()], ignore_index=True)
+        store = MemoryStore()
+        sync = FundamentalSynchronizer(store, FundamentalSource(lambda _: finance_frame(), lambda _: duplicated))
+        self.assertEqual(sync.sync_asset(asset, today=date(2026, 7, 19), force=True).status, "failed")
+        self.assertEqual(store.tables["dividend_events"], [])
 
     def test_bank_uses_capital_metric_and_not_free_cashflow_requirement(self):
         asset = next(item for item in active_assets() if item["symbol"] == "sh600036")
@@ -172,13 +215,58 @@ class FundamentalSourceTest(unittest.TestCase):
 
     def test_nat_dividend_date_is_treated_as_missing_not_a_float_year(self):
         asset = next(item for item in active_assets() if item["symbol"] == "sh600900")
-        dividends = pd.DataFrame([{"公告日期": "2026-06-01", "派息": 10, "进度": "预案", "除权除息日": pd.NaT}])
+        dividends = dividend_frame()
+        dividends.loc[0, "方案进度"] = "预案"
+        dividends.loc[0, "除权除息日"] = pd.NaT
         store = MemoryStore()
         sync = FundamentalSynchronizer(store, FundamentalSource(lambda _: finance_frame(), lambda _: dividends))
         self.assertEqual(sync.sync_asset(asset, today=date(2026, 7, 19), force=True).status, "succeeded")
         event = store.tables["dividend_events"][0]
         self.assertEqual(event["fiscal_year"], 2025)
         self.assertIsNone(event["ex_date"])
+
+    def test_interim_report_year_does_not_follow_ex_date_year(self):
+        asset = next(item for item in active_assets() if item["symbol"] == "sh600900")
+        dividends = dividend_frame()
+        interim = dividends.iloc[0].copy()
+        interim["报告期"] = "2025-06-30"
+        interim["最新公告日期"] = "2025-09-01"
+        interim["除权除息日"] = "2025-09-10"
+        interim["现金分红-现金分红比例"] = 5
+        store = MemoryStore()
+        sync = FundamentalSynchronizer(store, FundamentalSource(
+            lambda _: finance_frame(), lambda _: pd.concat([dividends, interim.to_frame().T], ignore_index=True)))
+        self.assertEqual(sync.sync_asset(asset, today=date(2026, 7, 19), force=True).status, "succeeded")
+        self.assertEqual(len(store.tables["dividend_events"]), 2)
+        self.assertEqual({row["fiscal_year"] for row in store.tables["dividend_events"]}, {2025})
+
+    def test_missing_report_period_fails_instead_of_guessing_from_ex_date(self):
+        asset = next(item for item in active_assets() if item["symbol"] == "sh600900")
+        dividends = dividend_frame()
+        dividends.loc[0, "报告期"] = pd.NaT
+        store = MemoryStore()
+        sync = FundamentalSynchronizer(store, FundamentalSource(lambda _: finance_frame(), lambda _: dividends))
+        self.assertEqual(sync.sync_asset(asset, today=date(2026, 7, 19), force=True).status, "failed")
+        self.assertEqual(store.tables["dividend_events"], [])
+
+    def test_unimplemented_plan_is_not_treated_as_paid(self):
+        asset = next(item for item in active_assets() if item["symbol"] == "sh600900")
+        dividends = dividend_frame()
+        dividends.loc[0, "方案进度"] = "尚未实施"
+        store = MemoryStore()
+        sync = FundamentalSynchronizer(store, FundamentalSource(lambda _: finance_frame(), lambda _: dividends))
+        self.assertEqual(sync.sync_asset(asset, today=date(2026, 7, 19), force=True).status, "succeeded")
+        self.assertEqual(store.tables["dividend_events"][0]["event_stage"], "proposal")
+
+    def test_implemented_event_without_amount_fails(self):
+        asset = next(item for item in active_assets() if item["symbol"] == "sh600900")
+        dividends = dividend_frame()
+        for column in ("现金分红-现金分红比例", "送转股份-送股比例", "送转股份-转股比例"):
+            dividends.loc[0, column] = float("nan")
+        store = MemoryStore()
+        sync = FundamentalSynchronizer(store, FundamentalSource(lambda _: finance_frame(), lambda _: dividends))
+        self.assertEqual(sync.sync_asset(asset, today=date(2026, 7, 19), force=True).status, "failed")
+        self.assertEqual(store.tables["dividend_events"], [])
 
     def test_all_failed_run_is_marked_partial_for_cli_to_surface(self):
         store = MemoryStore()

@@ -14,7 +14,6 @@ from .assets import security_id
 from .config import MARKET_TIMEZONE
 from .data_sources import fetch_history, fetch_unadjusted_stock_history, make_session
 from .freshness import completed_history, expected_market_date, history_is_current
-from .dividends import apply_dividend_config
 from .supabase_store import SupabaseStore, payload_hash
 from .valuation_sources import fetch_valuation_batch, valuation_source_name
 
@@ -248,7 +247,7 @@ class MarketSynchronizer:
         for column in ["open", "high", "low", "close", "volume"]:
             stored[column] = pd.to_numeric(stored[column], errors="coerce")
         history = _merge_valuation_history(stored[["date", "open", "high", "low", "close", "volume"]], self.store.valuation_history(sid))
-        enriched = enrich_history(history, apply_dividend_config([asset], allow_subset=True)[0])
+        enriched = enrich_history(history, asset)
         state = self.store.latest_signal_state(sid)
         current_version = state and state.get("calculation_version") == CALCULATION_VERSION
         start = pd.Timestamp(first_affected_date) if first_affected_date and current_version else enriched.iloc[0]["date"]
@@ -279,7 +278,6 @@ class MarketSynchronizer:
 
     def sync_asset(self, asset: dict, *, now: datetime | None = None, force: bool = False, run_id: str | None = None) -> SyncResult:
         now = now or datetime.now(MARKET_TIMEZONE)
-        asset = apply_dividend_config([asset], allow_subset=True)[0]
         key = self.dataset_key(asset)
         def calendar(market, day):
             value = self.store.calendar_is_trading_day(market, day)

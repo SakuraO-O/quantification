@@ -8,6 +8,7 @@ is recorded in the per-security watermark.
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 import math
@@ -22,7 +23,7 @@ from .supabase_store import SupabaseStore, payload_hash
 
 
 FINANCE_URL = "https://emweb.securities.eastmoney.com/pc_hsf10/pages/index.html?type=web&code={market}{symbol}&color=b#/cwfx"
-DIVIDEND_URL = "https://vip.stock.finance.sina.com.cn/corp/go.php/vISSUE_ShareBonus/stockid/{symbol}.phtml"
+DIVIDEND_URL = "https://data.eastmoney.com/yjfp/detail/{symbol}.html"
 
 FINANCE_FIELDS = {
     "TOTALOPERATEREVE": ("revenue", "CNY"),
@@ -128,7 +129,7 @@ class FundamentalSource:
                 return ak.stock_financial_analysis_indicator_em(symbol=symbol, indicator="按报告期")
         def dividends(symbol: str):
             with _source_timeout(SOURCE_TIMEOUT_SECONDS):
-                return ak.stock_history_dividend_detail(symbol=symbol, indicator="分红")
+                return ak.stock_fhps_detail_em(symbol=symbol)
         return cls(
             finance=finance,
             dividends=dividends,
@@ -146,7 +147,7 @@ class FundamentalSynchronizer:
 
     @staticmethod
     def dataset_key(asset: dict) -> str:
-        return f"fundamentals:CN:{asset['symbol']}:eastmoney-sina"
+        return f"fundamentals:CN:{asset['symbol']}:eastmoney"
 
     def _source_document(self, asset: dict, *, source: str, record_id: str, title: str, document_type: str,
                          report_period: date | None, announcement_date: date | None, url: str, evidence: dict) -> str:
@@ -226,42 +227,71 @@ class FundamentalSynchronizer:
 
     def _write_dividends(self, asset: dict, frame: Any) -> tuple[int, int]:
         sid = security_id(asset["symbol"], asset["market"])
+        required = {"报告期", "现金分红-现金分红比例", "送转股份-送股比例",
+                    "送转股份-转股比例", "方案进度", "除权除息日"}
+        if not required.issubset(frame.columns):
+            raise ValueError(f"分红来源缺少必要字段: {', '.join(sorted(required - set(frame.columns)))}")
         documents: list[dict] = []
         candidates: list[dict] = []
         for raw in frame.to_dict("records"):
-            announcement_date = _date(raw.get("公告日期"))
-            ex_date = _date(raw.get("除权除息日"))
-            cash_per_ten = _number(raw.get("派息"))
-            bonus_per_ten = _number(raw.get("送股"))
-            transfer_per_ten = _number(raw.get("转增"))
-            stage_name = str(raw.get("进度") or "")
-            stage = "implemented" if "实施" in stage_name else "proposal"
-            if announcement_date is None or all(value is None for value in (cash_per_ten, bonus_per_ten, transfer_per_ten)):
+            stage_name = str(raw.get("方案进度") or "")
+            cash_per_ten = _number(raw.get("现金分红-现金分红比例"))
+            bonus_per_ten = _number(raw.get("送转股份-送股比例"))
+            transfer_per_ten = _number(raw.get("送转股份-转股比例"))
+            if all(value is None for value in (cash_per_ten, bonus_per_ten, transfer_per_ten)):
+                if stage_name.startswith(("实施", "已实施")):
+                    raise ValueError("已实施分红缺少金额和送转股比例")
                 continue
-            # In Chinese A-share disclosures, a dividend implemented in year N
-            # normally belongs to fiscal year N-1.  The event date is used only
-            # for aggregation; each original event remains separately traceable.
-            fiscal_year = (ex_date or announcement_date).year - 1 if ex_date else announcement_date.year - 1
+            if "未实施" in stage_name or "待实施" in stage_name or "预案" in stage_name:
+                stage = "proposal"
+            elif stage_name.startswith(("实施", "已实施")):
+                stage = "implemented"
+            elif "通过" in stage_name or "批准" in stage_name:
+                stage = "approved"
+            else:
+                raise ValueError(f"无法识别分红方案进度: {stage_name}")
+            if any(value < 0 for value in (cash_per_ten, bonus_per_ten, transfer_per_ten) if value is not None):
+                raise ValueError("分红来源存在负数派息或送转股比例")
+            report_period = _date(raw.get("报告期"))
+            if report_period is None:
+                # A partial fiscal-year classification is worse than an
+                # explicit sync failure: the publisher could undercount.
+                raise ValueError("分红来源存在缺少报告期的记录")
+            announcement_date = (_date(raw.get("最新公告日期")) or _date(raw.get("预案公告日"))
+                                 or _date(raw.get("业绩披露日期")))
+            ex_date = _date(raw.get("除权除息日"))
+            fiscal_year = report_period.year
             cash_per_share = (cash_per_ten or 0) / 10.0
             code = _stock_code(asset)
-            record_id = f"{code}:{announcement_date.isoformat()}:{ex_date or 'unannounced'}:{stage}:{cash_per_ten}"
-            content_hash = payload_hash({"code": code, "announcement_date": announcement_date, "ex_date": ex_date,
+            record_id = f"{code}:{report_period.isoformat()}:{ex_date or 'unannounced'}:{stage}"
+            content_hash = payload_hash({"code": code, "report_period": report_period,
+                "announcement_date": announcement_date, "ex_date": ex_date,
                 "stage": stage, "cash_per_ten": cash_per_ten, "bonus_per_ten": bonus_per_ten,
                 "transfer_per_ten": transfer_per_ten})
-            documents.append({"security_id": sid, "source": "sina", "source_record_id": record_id,
-                "title": f"新浪分红派息：{asset['name']} {announcement_date}", "document_type": "structured_dividend_event",
-                "report_period": date(fiscal_year, 12, 31), "announcement_date": announcement_date,
+            documents.append({"security_id": sid, "source": "eastmoney", "source_record_id": record_id,
+                "title": f"东方财富分红送配：{asset['name']} {report_period}", "document_type": "structured_dividend_event",
+                "report_period": report_period, "announcement_date": announcement_date,
                 "document_url": DIVIDEND_URL.format(symbol=code), "content_hash": content_hash})
-            candidates.append({"security_id": sid, "fiscal_year": fiscal_year, "event_stage": stage, "announcement_id": record_id,
+            candidates.append({"security_id": sid, "fiscal_year": fiscal_year, "report_period": report_period,
+                "event_stage": stage, "announcement_id": record_id, "is_current": True,
                 "cash_dividend_per_share": cash_per_share, "ex_date": ex_date, "announcement_date": announcement_date,
-                "bonus_shares_per_share": None if bonus_per_ten is None else bonus_per_ten / 10.0,
-                "transfer_shares_per_share": None if transfer_per_ten is None else transfer_per_ten / 10.0,
+                "bonus_shares_per_share": (bonus_per_ten or 0) / 10.0,
+                "transfer_shares_per_share": (transfer_per_ten or 0) / 10.0,
                 "document_key": (record_id, content_hash)})
+        identities = [row["announcement_id"] for row in candidates]
+        if len(identities) != len(set(identities)):
+            raise ValueError("分红来源存在无法区分的重复事件")
+        existing = {row["announcement_id"]: row for row in self.store.select(
+            "dividend_events", select="announcement_id,report_period,fiscal_year,event_stage,is_current,announcement_date,ex_date,bonus_shares_per_share,transfer_shares_per_share,cash_dividend_per_share,source_document_id",
+            filters={"security_id": f"eq.{sid}", "report_period": "not.is.null"})}
+        incoming_counts = Counter(str(row["report_period"]) for row in candidates
+                                  if row["event_stage"] == "implemented")
+        verified_counts = Counter(str(row["report_period"]) for row in existing.values()
+                                  if row.get("is_current") and row.get("event_stage") == "implemented")
+        if any(incoming_counts[period] < count for period, count in verified_counts.items()):
+            raise ValueError("分红来源按报告期返回的已实施事件少于已核验历史，拒绝缩减")
         saved_documents = self.store.upsert("source_documents", documents, "source,source_record_id,content_hash")
         document_ids = {(row["source_record_id"], row["content_hash"]): row["source_document_id"] for row in saved_documents}
-        existing = {row["announcement_id"]: row for row in self.store.select(
-            "dividend_events", select="announcement_id,bonus_shares_per_share,transfer_shares_per_share,cash_dividend_per_share,source_document_id",
-            filters={"security_id": f"eq.{sid}"})}
         # Remove the in-memory join key before serializing the event.  Sending
         # it to PostgREST would make it look for a non-existent
         # ``dividend_events.document_key`` column and reject the whole batch.
@@ -278,15 +308,21 @@ class FundamentalSynchronizer:
             if prior is None:
                 continue
             changed = {field: row[field] for field in (
+                "report_period", "fiscal_year", "event_stage", "is_current", "announcement_date", "ex_date",
                 "bonus_shares_per_share", "transfer_shares_per_share", "cash_dividend_per_share", "source_document_id"
             ) if prior.get(field) != row[field]}
             if changed:
                 self.store.patch("dividend_events", {"security_id": f"eq.{sid}", "announcement_id": f"eq.{row['announcement_id']}"}, changed)
                 updated += 1
-        # Events are immutable.  Avoid PostgREST's composite-conflict path
-        # (which currently returns 400 in this project) after idempotently
-        # excluding existing announcement IDs above.
+        # Insert only unseen identities. PostgREST's composite-conflict path
+        # currently returns 400 in this project.
         self.store.insert("dividend_events", new_rows)
+        stale_ids = set(existing) - set(identities)
+        for announcement_id in stale_ids:
+            if existing[announcement_id].get("is_current"):
+                self.store.patch("dividend_events", {"security_id": f"eq.{sid}",
+                    "announcement_id": f"eq.{announcement_id}"}, {"is_current": False})
+                updated += 1
         return len(rows), len(new_rows) + updated
 
     @staticmethod
@@ -312,7 +348,8 @@ class FundamentalSynchronizer:
         if prior_periods:
             prior = self._latest_by_metric([row for row in rows if _date(row.get("report_period")) == prior_periods[-1]])[1]
         dividends = self.store.select("dividend_events", select="cash_dividend_per_share", filters={
-            "security_id": f"eq.{sid}", "fiscal_year": f"eq.{latest_period.year}", "event_stage": "eq.implemented"})
+            "security_id": f"eq.{sid}", "fiscal_year": f"eq.{latest_period.year}",
+            "event_stage": "eq.implemented", "report_period": "not.is.null", "is_current": "eq.true"})
         dividend_per_share = sum(_number(row.get("cash_dividend_per_share")) or 0 for row in dividends)
         eps = current.get("earnings_per_share")
         ocf_ps = current.get("operating_cashflow_per_share")

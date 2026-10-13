@@ -125,11 +125,12 @@ class DashboardV2Test(unittest.TestCase):
     def test_dashboard_publisher_uses_store_select_contract(self):
         publisher = (self.root / "codex/trend_observer/dashboard_versions.py").read_text(encoding="utf-8")
         self.assertNotIn("\n            columns=", publisher)
-        self.assertIn('select="fiscal_year,cash_dividend_per_share', publisher)
+        self.assertIn('select="fiscal_year,report_period,cash_dividend_per_share', publisher)
 
     def test_stock_three_year_total_return_is_a_server_field_after_price_return(self):
         publisher = (self.root / "codex/trend_observer/dashboard_versions.py").read_text(encoding="utf-8")
-        self.assertIn("stock_three_year_returns(self.store.history(sid), events", publisher)
+        self.assertIn("record |= stock_three_year_returns(", publisher)
+        self.assertIn("dividend_history_current=verified", publisher)
         self.assertIn('asset.price_return_3y', self.runtime)
         self.assertIn('asset.total_return_3y', self.runtime)
         self.assertIn('data-stock-sort="y3Total"', self.html)

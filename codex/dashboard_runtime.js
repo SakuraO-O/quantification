@@ -158,6 +158,9 @@
       s200: delayed ? null : returnPercent(asset.ma200_slope_40d),
       div: numberOr(asset.last_year_dividend) ?? blankDecimal,
       yield: delayed ? blankDecimal : (numberOr(asset.dividend_yield) ?? blankDecimal),
+      dividendFiscalYear: asset.dividend_fiscal_year || null,
+      dividendYieldStatus: asset.dividend_yield_status || "数据不足",
+      dividendYieldIssue: asset.dividend_yield_issue || null,
       dividendSafety: assessment.dividend_safety_status || asset.dividend_safety_status || "数据不足",
       fund: assessment.fundamental_status || asset.fundamental_status || "数据不足",
       period: assessment.report_period || "数据不足",
@@ -545,14 +548,14 @@
     if (runtimeState.source === "api" && assessment.report_period) {
       const profile = profileFor(asset);
       const factRows = facts.slice(0, 60).map(row => `<tr><td>${escapeHtml(row.report_period)}</td><td>${escapeHtml(row.metric_code)}</td><td class="num">${escapeHtml(row.value)}</td><td>${escapeHtml(row.unit)}</td><td>${escapeHtml(row.period_type)}</td><td>${escapeHtml(row.announcement_date)}</td></tr>`).join("");
-      const dividendRows = dividends.slice(0, 12).map(row => `<tr><td>${escapeHtml(row.fiscal_year)}</td><td>${escapeHtml(row.event_stage)}</td><td class="num">${escapeHtml(row.cash_dividend_per_share)}</td><td>${escapeHtml(row.announcement_date)}</td><td>${escapeHtml(row.announcement_id)}</td></tr>`).join("");
+      const dividendRows = dividends.slice(0, 12).map(row => `<tr><td>${escapeHtml(row.report_period || row.fiscal_year)}</td><td>${escapeHtml(row.event_stage)}</td><td class="num">${escapeHtml(row.cash_dividend_per_share)}</td><td>${escapeHtml(row.announcement_date)}</td><td>${escapeHtml(row.announcement_id)}</td></tr>`).join("");
       const industryRows = industry.slice(0, 24).map(row => `<div class="anchor-item"><small>${escapeHtml(row.metric_code)} · ${escapeHtml(row.period)}</small><b>${escapeHtml(row.value)} ${escapeHtml(row.unit)}</b></div>`).join("");
       const sourceRows = sources.slice(0, 12).map(row => {
         const href = safeExternalHref(row.document_url);
         const title = escapeHtml(row.title || row.source_record_id);
         return `<li>${href ? `<a href="${href}" target="_blank" rel="noopener noreferrer">${title}</a>` : title} · ${escapeHtml(row.source)} · ${escapeHtml(row.announcement_date)} · hash ${escapeHtml(String(row.content_hash || "").slice(0, 12))}</li>`;
       }).join("");
-      return `<div class="research-header"><div><h4>高股息研究摘要</h4><p>${escapeHtml(asset.anchor)} · 不将研究摘要直接转化为交易建议</p></div><div class="research-meta"><span>最新报告期 ${escapeHtml(assessment.report_period)}</span><span>计算版本 ${escapeHtml(assessment.calculation_version)}</span><span>数据完整度：结构化事实</span></div></div><div class="pillar-grid">${safeStatusCard("分红保障", profile.pillars[0])}${safeStatusCard("经营质量", profile.pillars[1])}${safeStatusCard("现金与再投资", profile.pillars[2])}${safeStatusCard("资本结构", profile.pillars[3])}</div><div class="research-conclusion"><b>研究摘要 · ${escapeHtml(profile.summary)}</b><ul class="research-evidence">${profile.evidence.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div><section class="research-section"><h4>年度与 TTM 结构化指标</h4><div class="historical-wrap"><table><thead><tr><th>报告期</th><th>指标</th><th class="num">数值</th><th>单位</th><th>口径</th><th>公告日期</th></tr></thead><tbody>${factRows || '<tr><td colspan="6">数据不足：财务事实适配器尚未产出稳定数据。</td></tr>'}</tbody></table></div></section><section class="research-section"><h4>分红事件</h4><div class="historical-wrap"><table><thead><tr><th>年度</th><th>阶段</th><th class="num">每股分红</th><th>公告日期</th><th>公告编号</th></tr></thead><tbody>${dividendRows || '<tr><td colspan="5">数据不足</td></tr>'}</tbody></table></div></section><section class="research-section"><h4>行业经营锚点 · ${escapeHtml(asset.anchor)}</h4><div class="industry-anchor">${industryRows || '<div class="data-missing">暂无已确认的行业指标；待适配器接入后展示。</div>'}</div></section><section class="research-section"><h4>来源与追溯</h4><div class="chart-box"><ul class="research-evidence">${sourceRows || "<li>暂无来源元数据。</li>"}</ul><p class="research-source">仅展示来源链接、公告编号、内容哈希、抓取时间及结构化字段；不保存原始公告、财报文件或接口响应全文。</p></div></section>`;
+      return `<div class="research-header"><div><h4>高股息研究摘要</h4><p>${escapeHtml(asset.anchor)} · 不将研究摘要直接转化为交易建议</p></div><div class="research-meta"><span>最新报告期 ${escapeHtml(assessment.report_period)}</span><span>计算版本 ${escapeHtml(assessment.calculation_version)}</span><span>数据完整度：结构化事实</span></div></div><div class="pillar-grid">${safeStatusCard("分红保障", profile.pillars[0])}${safeStatusCard("经营质量", profile.pillars[1])}${safeStatusCard("现金与再投资", profile.pillars[2])}${safeStatusCard("资本结构", profile.pillars[3])}</div><div class="research-conclusion"><b>研究摘要 · ${escapeHtml(profile.summary)}</b><ul class="research-evidence">${profile.evidence.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div><section class="research-section"><h4>年度与 TTM 结构化指标</h4><div class="historical-wrap"><table><thead><tr><th>报告期</th><th>指标</th><th class="num">数值</th><th>单位</th><th>口径</th><th>公告日期</th></tr></thead><tbody>${factRows || '<tr><td colspan="6">数据不足：财务事实适配器尚未产出稳定数据。</td></tr>'}</tbody></table></div></section><section class="research-section"><h4>分红事件</h4><div class="historical-wrap"><table><thead><tr><th>报告期</th><th>阶段</th><th class="num">每股分红</th><th>公告日期</th><th>公告编号</th></tr></thead><tbody>${dividendRows || '<tr><td colspan="5">数据不足</td></tr>'}</tbody></table></div></section><section class="research-section"><h4>行业经营锚点 · ${escapeHtml(asset.anchor)}</h4><div class="industry-anchor">${industryRows || '<div class="data-missing">暂无已确认的行业指标；待适配器接入后展示。</div>'}</div></section><section class="research-section"><h4>来源与追溯</h4><div class="chart-box"><ul class="research-evidence">${sourceRows || "<li>暂无来源元数据。</li>"}</ul><p class="research-source">仅展示来源链接、公告编号、内容哈希、抓取时间及结构化字段；不保存原始公告、财报文件或接口响应全文。</p></div></section>`;
     }
     let html = originalAnnualResearch(asset);
     return html.replace("数据完整度：原型示例", "数据完整度：Mock 示例");
@@ -562,8 +565,10 @@
     const ranges = [[3,"近3个月"],[6,"近6个月"],[12,"近1年"],[36,"近3年"],[60,"近5年"]];
     const movingAverages = [["ma20","MA20"],["ma60","MA60"],["ma120","MA120"],["ma200","MA200"]];
     const trends = [["short","短期"],["mid","中期"],["long","长期"]];
-    const yieldText = Number.isFinite(Number(asset.yield)) ? `${Number(asset.yield).toFixed(2)}%` : "—";
-    const dividendText = Number.isFinite(Number(asset.div)) ? `${Number(asset.div).toFixed(2)} 元/股` : "—";
+    const yieldText = asset.yield != null && Number.isFinite(Number(asset.yield))
+      ? `${Number(asset.yield).toFixed(2)}%` : escapeHtml(asset.dividendYieldStatus || "数据不足");
+    const dividendText = asset.div != null && Number.isFinite(Number(asset.div))
+      ? `${dividendAmount(asset.div)} 元/股` : "—";
     const pricePane = `<div class="modal-pane active" id="pane-price"><div class="chart-box"><div class="chart-title"><h4>价格与趋势</h4><small>趋势带默认仅展示长期</small></div><div class="chart-control-bar"><div class="chart-controls"><span class="control-label">时间范围</span>${ranges.map(([value, label]) => `<button class="chart-chip ${detailRange === value ? "active" : ""}" data-range="${value}">${label}</button>`).join("")}</div><div class="chart-controls"><span class="control-label">均线</span>${movingAverages.map(([value, label]) => `<button class="chart-chip ${selectedMAs.has(value) ? "active" : ""}" data-ma="${value}">${label}</button>`).join("")}<span class="control-label">趋势带</span>${trends.map(([value, label]) => `<button class="chart-chip ${selectedTrendBands.has(value) ? "active" : ""}" data-trend-band="${value}">${label}</button>`).join("")}</div></div><div class="chart-legend-row"><div class="chart-legend"><span><i style="background:#172b3a"></i>收盘</span><span><i style="background:#75a7d8"></i>MA20</span><span><i style="background:#8fc4b5"></i>MA60</span><span><i style="background:#b09bc9"></i>MA120</span><span><i style="background:#d7a68f"></i>MA200</span></div><div class="trend-key"><span><i style="background:#9fcfb7"></i>上升</span><span><i style="background:#aebfe2"></i>修复</span><span><i style="background:#e2c891"></i>转弱</span><span><i style="background:#e4aaa7"></i>下跌</span><span><i style="background:#cfd5da"></i>震荡</span></div></div><canvas id="price-chart"></canvas></div></div>`;
     const assessment = asset.assessment || {};
     const sourceRows = Array.isArray(asset.sources) ? asset.sources : [];
@@ -588,7 +593,7 @@
       metric("分红保障", safeBadge(asset.dividendSafety)),
       metric("基本面状态", safeBadge(asset.fund)),
       metric("最新报告期", escapeHtml(assessment.report_period || "数据不足")),
-      metric("上一年度每股分红", dividendText),
+      metric(`上一报告年度（${escapeHtml(asset.dividendFiscalYear || "—")}）每股分红`, dividendText),
       metric("主要变化", escapeHtml(asset.change || "数据不足"))
     ].join("");
     return `<div class="overview-grid">${overview}</div><div class="modal-tabs"><button class="modal-tab active" data-pane="price">价格与趋势</button>${fundamentals}</div>${pricePane}${fundamentalPanes}`;
