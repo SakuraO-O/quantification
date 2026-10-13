@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 import math
 import signal
 import threading
@@ -261,7 +262,7 @@ class FundamentalSynchronizer:
                                  or _date(raw.get("业绩披露日期")))
             ex_date = _date(raw.get("除权除息日"))
             fiscal_year = report_period.year
-            cash_per_share = (cash_per_ten or 0) / 10.0
+            cash_per_share = float(Decimal(str(cash_per_ten or 0)) / 10)
             code = _stock_code(asset)
             record_id = f"{code}:{report_period.isoformat()}:{ex_date or 'unannounced'}:{stage}"
             content_hash = payload_hash({"code": code, "report_period": report_period,
@@ -275,8 +276,8 @@ class FundamentalSynchronizer:
             candidates.append({"security_id": sid, "fiscal_year": fiscal_year, "report_period": report_period,
                 "event_stage": stage, "announcement_id": record_id, "is_current": True,
                 "cash_dividend_per_share": cash_per_share, "ex_date": ex_date, "announcement_date": announcement_date,
-                "bonus_shares_per_share": (bonus_per_ten or 0) / 10.0,
-                "transfer_shares_per_share": (transfer_per_ten or 0) / 10.0,
+                "bonus_shares_per_share": float(Decimal(str(bonus_per_ten or 0)) / 10),
+                "transfer_shares_per_share": float(Decimal(str(transfer_per_ten or 0)) / 10),
                 "document_key": (record_id, content_hash)})
         identities = [row["announcement_id"] for row in candidates]
         if len(identities) != len(set(identities)):

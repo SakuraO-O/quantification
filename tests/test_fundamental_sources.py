@@ -240,6 +240,15 @@ class FundamentalSourceTest(unittest.TestCase):
         self.assertEqual(len(store.tables["dividend_events"]), 2)
         self.assertEqual({row["fiscal_year"] for row in store.tables["dividend_events"]}, {2025})
 
+    def test_per_ten_cash_ratio_converts_without_float_tail(self):
+        asset = next(item for item in active_assets() if item["symbol"] == "sh601088")
+        dividends = dividend_frame()
+        dividends["现金分红-现金分红比例"] = 9.8
+        store = MemoryStore()
+        sync = FundamentalSynchronizer(store, FundamentalSource(lambda _: finance_frame(), lambda _: dividends))
+        self.assertEqual(sync.sync_asset(asset, today=date(2026, 7, 19), force=True).status, "succeeded")
+        self.assertEqual(store.tables["dividend_events"][0]["cash_dividend_per_share"], 0.98)
+
     def test_missing_report_period_fails_instead_of_guessing_from_ex_date(self):
         asset = next(item for item in active_assets() if item["symbol"] == "sh600900")
         dividends = dividend_frame()
