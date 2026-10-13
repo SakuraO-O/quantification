@@ -37,7 +37,7 @@ function json(route, body, status = 200) {
 }
 
 async function mockBackend(page, options = {}) {
-  const state = { allocation: fixedAllocation(), writes: [], unexpected: [], requests: [], ...options };
+  const state = { allocation: fixedAllocation(), writes: [], unexpected: [], requests: [], detailGates: [], ...options };
   const localOrigin = new URL(test.info().project.use.baseURL).origin;
   await page.route('**/*', async route => {
     const request = route.request();
@@ -72,6 +72,7 @@ async function mockBackend(page, options = {}) {
       });
     }
     if (url.pathname.startsWith('/functions/v1/dashboard-api/asset/')) {
+      if (state.holdDetails) await new Promise(resolve => state.detailGates.push(resolve));
       const symbol = decodeURIComponent(url.pathname.split('/').pop());
       const asset = assets.find(item => item.symbol === symbol);
       return json(route, {
@@ -152,6 +153,26 @@ test('filters assets and opens index and stock details with chart labels', async
   await expect(page.locator('#detail-content')).toBeVisible();
   await page.locator('#detail-content').evaluate(element => { element.scrollTop = element.scrollHeight; });
   await expect(page.locator('#detail-modal')).toBeVisible();
+  expect(state.unexpected).toEqual([]);
+});
+
+test('closing index and stock details stays closed when their API responses arrive', async ({ page }) => {
+  const state = await mockBackend(page, { holdDetails: true });
+  await login(page);
+  await expect(page.locator('#dashboard-source')).toHaveClass(/api/);
+  for (const type of ['index', 'stock']) {
+    if (type === 'stock') await page.locator('.tab[data-view="stock"]').click();
+    await page.locator(`#${type}-body tr`).first().click();
+    await expect(page.locator('#detail-modal')).toBeVisible();
+    await expect.poll(() => state.detailGates.length).toBe(1);
+    await page.locator('[data-close="detail-modal"]').click();
+    await expect(page.locator('#detail-modal')).not.toBeVisible();
+    const response = page.waitForResponse(res => res.url().includes('/dashboard-api/asset/'));
+    state.detailGates.shift()();
+    await response;
+    await page.waitForTimeout(50);
+    await expect(page.locator('#detail-modal')).not.toBeVisible();
+  }
   expect(state.unexpected).toEqual([]);
 });
 

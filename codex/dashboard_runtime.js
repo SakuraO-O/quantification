@@ -697,7 +697,9 @@
     const list = type === "index" ? indices : stocks;
     const asset = list[Number(index)];
     loadAssetDetail(asset, detailRange).then(() => {
-      if (detailType === type && detailIndex === Number(index)) originalOpenDetail(type, index);
+      if (document.querySelector("#detail-modal").open && detailType === type && detailIndex === Number(index)) {
+        originalOpenDetail(type, index);
+      }
     }).catch(error => {
       console.warn("详情数据加载失败，保留当前摘要：", error);
     });
