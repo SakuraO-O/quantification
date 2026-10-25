@@ -8,7 +8,6 @@ import pandas as pd
 
 from codex.trend_observer.assets import active_assets, security_id
 from codex.trend_observer.ingestion import MarketSynchronizer, SyncResult, CALCULATION_VERSION
-from codex.trend_observer.dividends import apply_dividend_config
 from codex.trend_observer.data_sources import fetch_history
 from codex.trend_observer.supabase_store import SupabaseSettings, SupabaseStore, payload_hash
 
@@ -256,11 +255,6 @@ class V2RegressionTest(unittest.TestCase):
         with patch("codex.trend_observer.data_sources.fetch_eastmoney_stock", return_value=frame):
             result = fetch_history(object(), asset, start_date=date(2026, 9, 7), expected_date=date(2026, 9, 10))
         self.assertEqual(result["date"].dt.date.tolist(), [date(2026, 9, 10)])
-
-    def test_single_asset_sync_can_apply_its_dividend(self):
-        asset = next(item for item in active_assets() if item["symbol"] == "sh600900")
-        result = apply_dividend_config([asset], allow_subset=True)
-        self.assertEqual(result[0]["last_year_dividend"], 1)
 
     def test_incremental_stock_fetch_keeps_eastmoney_for_short_overlap(self):
         frame = pd.DataFrame({

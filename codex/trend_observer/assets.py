@@ -1,7 +1,7 @@
 """Asset master-data helpers.
 
 The source of truth for the first release is deliberately small and explicit:
-12 indices and 13 tracked stocks. Database identities are deterministic so a
+12 indices and 14 tracked stocks. Database identities are deterministic so a
 local backfill, CI run and Supabase migration all address the same security.
 """
 

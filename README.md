@@ -1,6 +1,6 @@
 # 趋势观察台
 
-指数和股票趋势观察工具。V2 将行情、估值、配置和派生信号写入 Supabase，并由受控 Edge API 提供给看板；旧 JSON 导出暂时保留，用于迁移核对与回退。
+指数和股票趋势观察工具。行情、估值、配置和派生信号写入 Supabase，由受控 Edge API 提供给看板。
 
 本项目只用于趋势观察，不构成投资建议。
 
@@ -45,15 +45,15 @@ python -B -m codex.trend_observer.cli sync-fundamentals --force
 python -B -m codex.trend_observer.cli publish-dashboard
 ```
 
-启用资产清单当前为 **12 个指数和 13 只股票**，以 `config.py` 为权威名单；看板读取发布版本中的资产清单，不另行写死股票数量。`sync-market` 仅同步行情；`sync-valuation` 独立同步指数估值。二者都会读取数据水位，正常情况下只请求新增日期及向前重叠的两个交易日；`--force` 仅用于补抓或修订检查。
+启用资产清单当前为 **12 个指数和 14 只股票**，以 `config.py` 为权威名单；看板读取发布版本中的资产清单，不另行写死股票数量。`sync-market` 仅同步行情；`sync-valuation` 独立同步指数估值。二者都会读取数据水位，正常情况下只请求新增日期及向前重叠的两个交易日；`--force` 仅用于补抓或修订检查。
 
 ### 股票股息率与上一年度每股分红
 
 生产口径由 Python `DashboardPublisher` 统一计算：以资产交易日所在自然年的**前一报告年度**为统计年度（例如 2026-10-12 使用 2025 年报告期），按来源明确给出的 `report_period` 归属年度，汇总该年度所有截至交易日已实施、已除息的税前每股现金分红，包含季度、中期和年终方案。`last_year_dividend` 是这笔合计，`dividend_yield` 为合计 ÷ 当日收盘价 × 100%，保留两位小数；页面每股分红金额固定显示四位小数，计算时仍保留来源精度，不使用页面显示值反算股息率。尚未实施或除息日未到的方案不计入；报告期、除息日、分红金额或来源同步缺失时不猜测年度，显示数据不足。年内尚未实施的方案可能使上一报告年度合计随确认进度变化，发布值是截至当前交易日的已实施金额。
 
-分红事实使用带明确“报告期”的东方财富分红送配详情，经 `sync-fundamentals` 写入 `dividend_events.report_period`。来源更正事件时，旧记录保留追溯但标记 `is_current=false`，不重复计入；任一报告期返回的已实施事件数少于已核验历史时同步失败，待人工核查。历史新浪记录的 `fiscal_year` 曾由除息年份减一推断，无法可靠覆盖季度和中期分红；迁移不会把这些旧记录当成已核验事实。V2 发布器、三年含息回报与资产详情只消费已回填且当前有效的事件。旧 `dividends.json` 只供 V1 兼容输出使用，`asset_daily_signals.dividend_yield` 不再作为 V2 股息率依据；Edge、前端和飞书读取发布版本，不重算该指标。
+分红事实使用带明确“报告期”的东方财富分红送配详情，经 `sync-fundamentals` 写入 `dividend_events.report_period`。来源更正事件时，旧记录保留追溯但标记 `is_current=false`，不重复计入；任一报告期返回的已实施事件数少于已核验历史时同步失败，待人工核查。历史新浪记录的 `fiscal_year` 曾由除息年份减一推断，无法可靠覆盖季度和中期分红；迁移不会把这些旧记录当成已核验事实。发布器、三年含息回报与资产详情只消费已回填且当前有效的事件。`asset_daily_signals.dividend_yield` 不作为看板股息率依据；Edge、前端和飞书读取发布版本，不重算该指标。
 
-本规则上线需先部署 `20261013120000_dividend_report_period.sql`，再部署更新后的 `dashboard-api`，执行 `sync-fundamentals --force` 回填 13 只股票，检查报告期与各阶段分红，运行 `publish-dashboard`，最后发布静态看板。以同一版本核对 `last_year_dividend`、`dividend_fiscal_year`、`dividend_yield` 与页面显示；若历史事件尚未回填，该股票应保持缺数。修改代码或 Pages 本身不会补齐生产事实。
+本规则上线需先部署 `20261013120000_dividend_report_period.sql`，再部署更新后的 `dashboard-api`，执行 `sync-fundamentals --force` 回填当前启用的股票，检查报告期与各阶段分红，运行 `publish-dashboard`，最后发布静态看板。以同一版本核对 `last_year_dividend`、`dividend_fiscal_year`、`dividend_yield` 与页面显示；若历史事件尚未回填，该股票应保持缺数。修改代码或 Pages 本身不会补齐生产事实。
 
 飞书派发只读取完整的 `dashboard_versions`，周一至周六在 08:00—09:30 每 10 分钟检查；同一内容版本只成功派发一次，周日不发送：
 
@@ -87,7 +87,7 @@ python -B -m codex.trend_observer.cli publish-dashboard
 
 `sync-market --market CN --force` 对股票抓取完整历史以回填未复权价格；正常定时仍为增量抓取。未复权价格优先取东方财富，失败时从腾讯独立原始日线降级；腾讯前复权历史分段抓取并验证重叠价格。旧版行情库中 8 只股票截至 2026-10-09 只有不足三年的历史，迁移本身不会凭空补齐数据。新增股票上线后需检查 `market_daily.raw_close`、`dividend_events` 送转股比例和最新发布版本的两项三年回报；本地代码修改不等于已执行生产回填。
 
-新增中远海控（601919）、神火股份（000933）、中国移动 A 股（600941）和中国平安 A 股（601318）时，无需数据库迁移。先将配置和看板脚本部署到 `main`，再依次运行 `sync-fundamentals --force`、`sync-market --market CN --force`、`publish-dashboard`。**务必等前两个任务结束后再发布**，否则新股票会先显示数据延迟或三年回报数据不足。核对最新完整版本的 `payload.assets` 含 25 项，其中股票 13 项，并逐只检查新增股票的历史行情起止日期、财务事实、分红事件、三年回报状态。中国平安暂不套用工业企业现金流阈值，四维基本面评估保持“数据不足”，直至保险专属规则接入。
+新增陕西煤业（601225）沿用现有股票入库流程，无需数据库迁移。将代码部署到 `main` 后，依次运行 `bootstrap`、`sync-fundamentals --force`、`sync-market --market CN --force`、`publish-dashboard`。**务必等同步任务结束后再发布**，否则新股票会先显示数据延迟或三年回报数据不足。核对最新完整版本的 `payload.assets` 含 26 项，其中股票 14 项；单独检查陕西煤业的历史行情起止日期、财务事实、分红事件、股息率和三年回报状态。中国平安暂不套用工业企业现金流阈值，四维基本面评估保持“数据不足”，直至保险专属规则接入。
 
 ### 上线检查清单
 
@@ -98,59 +98,9 @@ python -B -m codex.trend_observer.cli publish-dashboard
 3. 部署发生变更的函数（通常为 `supabase functions deploy dashboard-api` 与 `supabase functions deploy portfolio-config`），并等待 Pages 部署静态资源；
 4. 对修改过行情、估值或计算规则的版本，依次强制运行受影响市场的 `sync-valuation`、`sync-market`，确认所有资产的 `calculation_version` 已更新后才运行 `publish-dashboard`；
 5. 首次或修复基本面后，手动运行 `sync-fundamentals`（需要补抓时选择 `--force`），随后运行 `publish-dashboard`；
-6. 验证 `fundamental_assessments`、`financial_facts` 与最新 `dashboard_versions.payload` 均覆盖启用的 13 只股票，并在浏览器确认 `/overview` 的 `allocation` 与 `/asset/{symbol}` 的基本面字段正常返回。中国平安的保险行业专属评估口径尚未接入，原始事实可展示，四维摘要应明确为“数据不足”。
+6. 验证 `fundamental_assessments`、`financial_facts` 与最新 `dashboard_versions.payload` 均覆盖启用的 14 只股票，并在浏览器确认 `/overview` 的 `allocation` 与 `/asset/{symbol}` 的基本面字段正常返回。中国平安的保险行业专属评估口径尚未接入，原始事实可展示，四维摘要应明确为“数据不足”。
 
 配置偏离、理论调整额及摘要由数据库 RPC 实时计算；若迁移尚未部署，Edge API 不应以浏览器计算或旧版本快照代替该结果。
-
-## 迁移期：兼容 JSON 导出
-
-```bash
-python -B -m codex.trend_observer.cli legacy-export
-```
-
-兼容旧单体入口（仅人工核对，不得配置为定时任务）：
-
-```bash
-python codex/trend_observer.py
-```
-
-运行后会生成：
-
-- `codex/data/trend_snapshot.json`
-- `codex/data/market_valuation_snapshot.json`
-- `codex/dashboard_data.json`
-- `codex/history/manifest.json`
-- `codex/history/{symbol}.json`
-- `codex/trend_observer_report.csv`
-- `codex/trend_observer_report.md`
-- `codex/trend_history.csv`
-- `codex/trend_history.json`
-
-## 发送飞书通知
-
-先配置环境变量：
-
-```bash
-export FEISHU_WEBHOOK_URL="你的飞书机器人 webhook"
-export FEISHU_SECRET="可选的签名密钥"
-```
-
-然后运行：
-
-```bash
-python -B -m codex.trend_observer.cli legacy-export --notify
-```
-
-这条命令仅用于迁移期核对。它的飞书消息从统一快照 `codex/data/trend_snapshot.json` 派生；正式 V2 推送必须使用 `dispatch-feishu`。
-市场估值与利率数据单独保存，不进入看板、飞书消息或趋势判断。
-
-## 单独抓取市场估值与利率
-
-```bash
-python -m codex.trend_observer.market_valuation
-```
-
-该命令写入 `codex/data/market_valuation_snapshot.json`。每个指标独立记录来源、来源网址、数据日期、抓取时间和错误信息；指定来源不可用时保存空值，不会使用其他来源替代。
 
 ## 本地查看看板
 
@@ -166,7 +116,7 @@ python3 scripts/serve_dashboard.py
 http://127.0.0.1:8766/
 ```
 
-脚本不会生成数据，也不会写入数据库。当前 V2 看板不读取旧版 `codex/dashboard_data.json`：登录后通过 Edge API 加载已发布版本；缺少认证或 API 不可用时，页面会明确标记并回退内嵌 Mock，Mock 不代表生产跟踪清单。Edge API 仅接受 `DASHBOARD_ALLOWED_ORIGINS` 白名单中的来源；若未允许 `http://127.0.0.1:8766`，本地页只能验收静态页面与 Mock，不能据此断定生产数据链路正常。不要为验收而绕过白名单；真实 API 验收应在获准来源或隔离测试项目进行。预览页面沿用仓库中的 Supabase 配置，登录和“编辑配置”可能访问**生产环境**；测试写入功能前须确认使用了隔离的测试项目。不要在共享网络上提供该页面。
+脚本不会生成数据，也不会写入数据库。看板登录后通过 Edge API 加载已发布版本；缺少认证或 API 不可用时，页面会明确标记并回退内嵌 Mock，Mock 不代表生产跟踪清单。Edge API 仅接受 `DASHBOARD_ALLOWED_ORIGINS` 白名单中的来源；若未允许 `http://127.0.0.1:8766`，本地页只能验收静态页面与 Mock，不能据此断定生产数据链路正常。不要为验收而绕过白名单；真实 API 验收应在获准来源或隔离测试项目进行。预览页面沿用仓库中的 Supabase 配置，登录和“编辑配置”可能访问**生产环境**；测试写入功能前须确认使用了隔离的测试项目。不要在共享网络上提供该页面。
 
 浏览器验收时，先核对页面及 3 个 JS 文件均成功加载、控制台没有页面自身的异常，再验证登录、资产列表、详情弹窗、图表、筛选和缺数据状态；生产结果还须在 GitHub Pages 页面复核。若自动化浏览器本身拒绝本地地址，应遵守该限制，改用获准的浏览器环境或手工验收，不能以换 URL 绕过拒绝。
 
@@ -176,7 +126,7 @@ http://127.0.0.1:8766/
 当前标签页的 `sessionStorage`。不要把 secret key 或 `service_role` key 填入页面或
 提交到仓库。
 
-看板只通过受控 Edge API 读取数据；资产配置编辑会通过 editor 专用 API 原子写入 Supabase，并在重新加载时读取最新版本。详情弹窗打开时才按需请求历史行情、结构化财务指标、分红事件、行业指标及来源元数据。API 不可用或认证缺失时，页面会明确标记并回退到 Mock，不会读取旧版 `dashboard_data.json`。
+看板只通过受控 Edge API 读取数据；资产配置编辑会通过 editor 专用 API 原子写入 Supabase，并在重新加载时读取最新版本。详情弹窗打开时才按需请求历史行情、结构化财务指标、分红事件、行业指标及来源元数据。API 不可用或认证缺失时，页面会明确标记并回退到 Mock。
 
 ## 运行测试
 
@@ -205,13 +155,7 @@ npm run test:browser
 
 `.github/workflows/trend_observer_v2.yml` 按数据类型的预定时间执行增量同步，并在周一至周六早间发布看板版本和推送飞书。
 
-`.github/workflows/daily_trend_observer.yml` 现仅可手动触发，用于迁移期生成 JSON 与 GitHub Pages 回退数据：
-
-```bash
-python -B -m codex.trend_observer.cli legacy-export
-```
-
-工作流会提交最新的统一快照、看板截面数据和拆分历史数据，并发布 GitHub Pages。
+`.github/workflows/deploy_dashboard.yml` 仅打包并发布静态页面与脚本；行情和分红事实由 V2 数据管道维护。
 
 ## 架构说明
 
