@@ -3,12 +3,23 @@ import unittest
 import numpy as np
 import pandas as pd
 
-from codex.trend_observer.analysis import add_indicators, percentile_last, determine_overall_status, determine_short_trend, valuation_status
+from codex.trend_observer.analysis import add_indicators, daily_pe_percentile_periods, percentile_last, determine_overall_status, determine_short_trend, valuation_status
 from codex.trend_observer.config import PE_MIN_PERIODS
 from codex.trend_observer.dividends import calculate_dividend_yield
 
 
 class AnalysisTest(unittest.TestCase):
+    def test_daily_pe_period_uses_each_observation_window(self):
+        frame = pd.DataFrame({
+            "date": pd.date_range("2010-01-01", periods=300, freq="B"),
+            "close": 10.0,
+            "pe": [20.0] * 299 + [np.nan],
+        })
+        enriched = add_indicators(frame)
+        labels = daily_pe_percentile_periods(enriched)
+        self.assertEqual(labels[251], "近1年（历史不足10年）")
+        self.assertEqual(labels[-1], "")
+
     def test_missing_current_pe_never_reuses_historical_percentile(self):
         values = np.arange(1, PE_MIN_PERIODS + 1, dtype=float)
         self.assertEqual(percentile_last(values), 100.0)

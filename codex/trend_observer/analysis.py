@@ -1,5 +1,7 @@
 """Indicator, trend, valuation, and signal calculations."""
 
+from bisect import bisect_left
+
 import numpy as np
 import pandas as pd
 
@@ -165,6 +167,21 @@ def pe_percentile_period(frame):
     return f"近{rounded_years}年（历史不足10年）"
 
 
+def daily_pe_percentile_periods(frame):
+    """Label each day's actual PE sample window, rather than the full history."""
+
+    valid_positions = np.flatnonzero(frame["pe"].notna().to_numpy())
+    labels = []
+    for position, row in enumerate(frame.itertuples(index=False)):
+        if pd.isna(row.pe_percentile):
+            labels.append("")
+            continue
+        first_position = valid_positions[bisect_left(valid_positions, max(0, position - PE_WINDOW_ROWS + 1))]
+        years = (row.date - frame.iloc[first_position]["date"]).days / 365.25
+        labels.append("近10年" if years >= 10 else f"近{max(1, round(years))}年（历史不足10年）")
+    return labels
+
+
 def build_signals(row):
     signals = [row["overall_status"]]
     for tag in ["长期下跌", "中期下跌", "长期转弱", "短期强势", "短期下跌"]:
@@ -193,6 +210,8 @@ def enrich_history(frame, asset):
         else np.nan
     )
     data["pe_percentile_period"] = pe_percentile_period(data) if asset["asset_type"] == "指数" else ""
+    if asset.get("symbol") == "sz399006":
+        data["pe_percentile_period"] = daily_pe_percentile_periods(data)
     if asset["asset_type"] == "指数" and "pe_percentile_period_override" in data:
         data["pe_percentile_period"] = data["pe_percentile_period_override"].fillna(data["pe_percentile_period"])
     data.loc[data["pe_percentile"].isna(), "pe_percentile_period"] = ""
