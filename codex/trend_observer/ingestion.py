@@ -133,6 +133,10 @@ class MarketSynchronizer:
                 except Exception:
                     pass
             return result
+        if configured_source == "wind_manual":
+            return record_run_item(SyncResult(
+                asset["symbol"], key, "skipped", message="PE由手动导入的Wind历史数据维护",
+            ))
         if watermark and watermark.get("status") == "backoff" and watermark.get("next_retry_at") and pd.Timestamp(watermark["next_retry_at"]) > pd.Timestamp(now):
             return record_run_item(SyncResult(asset["symbol"], key, "skipped", message="估值源退避中"))
         try:

@@ -16,10 +16,24 @@ from codex.trend_observer.valuation_sources import (
     fetch_json,
     fetch_valuation_batch,
     parse_cnindex_index_list,
+    valuation_source_name,
 )
 
 
 class ValuationSourcesTest(unittest.TestCase):
+    def test_gem100_manual_pe_skips_network_and_preserves_market_provider(self):
+        class Store:
+            def get_watermark(self, _key): return None
+
+        asset = {"name": "创业板100", "symbol": "sz399006", "market": "CN", "asset_type": "指数", "provider": "tencent"}
+        self.assertEqual(valuation_source_name(asset), "wind_manual")
+        self.assertEqual(asset["provider"], "tencent")
+        with patch("codex.trend_observer.ingestion.make_session") as session:
+            result = MarketSynchronizer(Store()).sync_valuation_asset(asset)
+        session.assert_not_called()
+        self.assertEqual(result.status, "skipped")
+        self.assertEqual(result.dataset_key, "valuation_daily:CN:sz399006:wind_manual")
+
     def test_csindex_valuation_route_filters_invalid_observations(self):
         frame = pd.DataFrame({"date": pd.date_range("2026-09-07", periods=5),
                               "pe": [13.62, float("nan"), 0, float("inf"), 13.52]})

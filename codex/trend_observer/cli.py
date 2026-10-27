@@ -14,7 +14,7 @@ from .supabase_store import SupabaseStore
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="趋势观察台数据管道。")
-    parser.add_argument("command", choices=("bootstrap", "sync-market", "sync-valuation", "sync-fundamentals", "publish-dashboard", "dispatch-feishu"))
+    parser.add_argument("command", choices=("bootstrap", "sync-market", "sync-valuation", "sync-fundamentals", "rebuild-gem100", "publish-dashboard", "dispatch-feishu"))
     parser.add_argument("--market", choices=("CN", "HK", "US"), help="sync-market 时仅同步指定市场。")
     parser.add_argument("--force", action="store_true", help="忽略当日水位并进行重叠补抓。")
     parser.add_argument("--trigger", default="schedule", choices=("schedule", "manual", "retry"), help="任务触发方式。")
@@ -67,6 +67,11 @@ def main(argv=None):
                 print(f"基本面 {item.asset}｜{item.status}｜接收 {item.rows_received} 项｜变化 {item.rows_changed} 项｜{item.message}")
             if results and all(item.status == "failed" for item in results):
                 raise RuntimeError("全部股票基本面同步失败，请检查 ingestion_run_items 与 data_quality_issues。")
+        elif args.command == "rebuild-gem100":
+            asset = next(asset for asset in active_assets() if asset["symbol"] == "sz399006")
+            count = MarketSynchronizer(store).recalculate_valuation_signals(asset, None)
+            version = DashboardPublisher(store).publish()
+            print(f"已重算创业板100的 {count} 行信号并发布看板版本：{version['dashboard_version_id']}")
         elif args.command == "publish-dashboard":
             version = DashboardPublisher(store).publish()
             print(f"已发布看板版本：{version['dashboard_version_id']}")
