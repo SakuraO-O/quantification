@@ -14,7 +14,8 @@ from .supabase_store import SupabaseStore
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="趋势观察台数据管道。")
-    parser.add_argument("command", choices=("bootstrap", "sync-market", "sync-valuation", "sync-fundamentals", "rebuild-gem100", "publish-dashboard", "dispatch-feishu"))
+    parser.add_argument("command", choices=("bootstrap", "sync-market", "sync-valuation", "sync-fundamentals", "rebuild-gem100", "rebuild-manual-index", "publish-dashboard", "dispatch-feishu"))
+    parser.add_argument("--symbol", choices=("sz399006", "980092", "hkHSTECH"), help="rebuild-manual-index 时指定手动 PE 指数。")
     parser.add_argument("--market", choices=("CN", "HK", "US"), help="sync-market 时仅同步指定市场。")
     parser.add_argument("--force", action="store_true", help="忽略当日水位并进行重叠补抓。")
     parser.add_argument("--trigger", default="schedule", choices=("schedule", "manual", "retry"), help="任务触发方式。")
@@ -72,6 +73,13 @@ def main(argv=None):
             count = MarketSynchronizer(store).recalculate_valuation_signals(asset, None)
             version = DashboardPublisher(store).publish()
             print(f"已重算创业板100的 {count} 行信号并发布看板版本：{version['dashboard_version_id']}")
+        elif args.command == "rebuild-manual-index":
+            if not args.symbol:
+                raise RuntimeError("rebuild-manual-index 需要 --symbol。")
+            asset = next(asset for asset in active_assets() if asset["symbol"] == args.symbol)
+            count = MarketSynchronizer(store).recalculate_valuation_signals(asset, None)
+            version = DashboardPublisher(store).publish()
+            print(f"已重算{asset['name']}的 {count} 行信号并发布看板版本：{version['dashboard_version_id']}")
         elif args.command == "publish-dashboard":
             version = DashboardPublisher(store).publish()
             print(f"已发布看板版本：{version['dashboard_version_id']}")
