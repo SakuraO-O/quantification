@@ -17,7 +17,12 @@ on:
         required: true
         default: "sync-market"
         type: choice
-        options: ["bootstrap", "sync-market", "sync-valuation", "sync-fundamentals", "rebuild-gem100", "publish-dashboard", "dispatch-feishu"]
+        options: ["bootstrap", "sync-market", "sync-valuation", "sync-fundamentals", "rebuild-gem100", "rebuild-manual-index", "publish-dashboard", "dispatch-feishu"]
+      symbol:
+        description: "Manual PE index for rebuild-manual-index"
+        required: false
+        type: choice
+        options: ["", "sz399006", "980092", "hkHSTECH"]
       market:
         description: "Optional market for sync-market"
         required: false
@@ -72,6 +77,7 @@ jobs:
           SCHEDULE: ${{ github.event.schedule }}
           MANUAL_COMMAND: ${{ inputs.command }}
           MANUAL_MARKET: ${{ inputs.market }}
+          MANUAL_SYMBOL: ${{ inputs.symbol }}
           MANUAL_FORCE: ${{ inputs.force }}
         run: |
           failed=0
@@ -86,6 +92,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             args=("$MANUAL_COMMAND")
             if [ -n "$MANUAL_MARKET" ]; then args+=(--market "$MANUAL_MARKET"); fi
+            if [ -n "$MANUAL_SYMBOL" ]; then args+=(--symbol "$MANUAL_SYMBOL"); fi
             if [ "$MANUAL_FORCE" = "true" ]; then args+=(--force); fi
             run_task "${args[@]}"
           elif [ "$SCHEDULE" = "45 10 * * *" ]; then

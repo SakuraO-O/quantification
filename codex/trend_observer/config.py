@@ -20,7 +20,7 @@ FEISHU_KEYWORD = "妙啊"
 DISCLAIMER = "本结果仅用于趋势观察，不构成投资建议。均线信号存在滞后性和假突破风险。"
 
 # The dashboard always uses this explicit registry.  It deliberately contains
-# 12 indices and the current 14 tracked stocks; adding a historical file alone
+# 13 indices and the current 14 tracked stocks; adding a historical file alone
 # must not make a security appear in calculations or notifications.
 PORTFOLIO_CATEGORIES = ("海外", "红利", "成长", "债券", "大宗商品", "现金")
 STYLE_COMPASS_PAIRS = (
@@ -36,6 +36,7 @@ ASSETS = [
     {"name": "创业板100", "symbol": "sz399006", "market": "CN", "asset_type": "指数", "provider": "tencent"},
     {"name": "科创50", "symbol": "000688", "market": "CN", "asset_type": "指数", "provider": "csindex"},
     {"name": "恒生指数", "symbol": "hkHSI", "market": "HK", "asset_type": "指数", "provider": "tencent"},
+    {"name": "恒生科技", "symbol": "hkHSTECH", "market": "HK", "asset_type": "指数", "provider": "tencent"},
     {"name": "红利低波", "symbol": "H30269", "market": "CN", "asset_type": "指数", "provider": "csindex"},
     {"name": "国证自由现金流", "symbol": "980092", "market": "CN", "asset_type": "指数", "provider": "cnindex"},
     {"name": "中证消费", "symbol": "000932", "market": "CN", "asset_type": "指数", "provider": "csindex"},

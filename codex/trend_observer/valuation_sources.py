@@ -37,10 +37,8 @@ def valuation_source_name(asset: dict) -> str | None:
         return None
     if asset.get("provider") == "csindex":
         return "csindex"
-    if asset.get("symbol") == "sz399006":
+    if asset.get("symbol") in {"sz399006", "980092", "hkHSTECH"}:
         return "wind_manual"
-    if asset.get("symbol") == "980092":
-        return "cnindex"
     if asset.get("symbol") == "NDX100":
         return "worldperatio"
     if asset.get("symbol") == "SPX":

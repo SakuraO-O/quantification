@@ -20,9 +20,9 @@ from codex.trend_observer.supabase_store import payload_hash
 
 
 class V2CoreTest(unittest.TestCase):
-    def test_active_registry_is_twelve_indices_and_fourteen_stocks(self):
+    def test_active_registry_is_thirteen_indices_and_fourteen_stocks(self):
         assets = active_assets()
-        self.assertEqual(sum(asset["asset_type"] == "指数" for asset in assets), 12)
+        self.assertEqual(sum(asset["asset_type"] == "指数" for asset in assets), 13)
         self.assertEqual(sum(asset["asset_type"] == "股票" for asset in assets), 14)
         added = {
             "sh601919": ("中远海控", "resource_cycle"),
@@ -34,8 +34,8 @@ class V2CoreTest(unittest.TestCase):
         by_symbol = {asset["symbol"]: asset for asset in assets}
         for symbol, (name, template) in added.items():
             self.assertEqual((by_symbol[symbol]["name"], by_symbol[symbol]["industry_template"]), (name, template))
-        self.assertEqual(len(security_rows()), 26)
-        self.assertGreaterEqual(len(provider_symbol_rows()), 26)
+        self.assertEqual(len(security_rows()), 27)
+        self.assertGreaterEqual(len(provider_symbol_rows()), 27)
         currencies = {row["market"]: row["currency"] for row in security_rows()}
         self.assertEqual(currencies, {"CN": "CNY", "HK": "HKD", "US": "USD"})
 
