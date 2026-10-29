@@ -22,7 +22,7 @@ on:
         description: "Manual PE index for rebuild-manual-index"
         required: false
         type: choice
-        options: ["", "sz399006", "980092", "hkHSTECH"]
+        options: ["", "sz399006", "980092", "hkHSTECH", "hkHSI"]
       market:
         description: "Optional market for sync-market"
         required: false

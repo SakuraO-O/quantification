@@ -34,11 +34,11 @@ class ValuationSourcesTest(unittest.TestCase):
         self.assertEqual(result.status, "skipped")
         self.assertEqual(result.dataset_key, "valuation_daily:CN:sz399006:wind_manual")
 
-    def test_free_cash_flow_and_hstech_manual_pe_skip_network(self):
+    def test_manual_index_pe_skips_network(self):
         class Store:
             def get_watermark(self, _key): return None
 
-        for symbol, market, provider in (("980092", "CN", "cnindex"), ("hkHSTECH", "HK", "tencent")):
+        for symbol, market, provider in (("980092", "CN", "cnindex"), ("hkHSTECH", "HK", "tencent"), ("hkHSI", "HK", "tencent")):
             asset = {"name": symbol, "symbol": symbol, "market": market, "asset_type": "指数", "provider": provider}
             with self.subTest(symbol=symbol), patch("codex.trend_observer.ingestion.make_session") as session:
                 self.assertEqual(valuation_source_name(asset), "wind_manual")
