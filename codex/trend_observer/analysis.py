@@ -210,7 +210,7 @@ def enrich_history(frame, asset):
         else np.nan
     )
     data["pe_percentile_period"] = pe_percentile_period(data) if asset["asset_type"] == "指数" else ""
-    if asset.get("symbol") in {"sz399006", "980092", "hkHSTECH"}:
+    if asset.get("symbol") in {"sz399006", "980092", "hkHSTECH", "hkHSI"}:
         data["pe_percentile_period"] = daily_pe_percentile_periods(data)
     if asset["asset_type"] == "指数" and "pe_percentile_period_override" in data:
         data["pe_percentile_period"] = data["pe_percentile_period_override"].fillna(data["pe_percentile_period"])

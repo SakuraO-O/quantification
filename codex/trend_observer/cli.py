@@ -15,7 +15,7 @@ from .supabase_store import SupabaseStore
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="趋势观察台数据管道。")
     parser.add_argument("command", choices=("bootstrap", "sync-market", "sync-valuation", "sync-fundamentals", "rebuild-gem100", "rebuild-manual-index", "publish-dashboard", "dispatch-feishu"))
-    parser.add_argument("--symbol", choices=("sz399006", "980092", "hkHSTECH"), help="rebuild-manual-index 时指定手动 PE 指数。")
+    parser.add_argument("--symbol", choices=("sz399006", "980092", "hkHSTECH", "hkHSI"), help="rebuild-manual-index 时指定手动 PE 指数。")
     parser.add_argument("--market", choices=("CN", "HK", "US"), help="sync-market 时仅同步指定市场。")
     parser.add_argument("--force", action="store_true", help="忽略当日水位并进行重叠补抓。")
     parser.add_argument("--trigger", default="schedule", choices=("schedule", "manual", "retry"), help="任务触发方式。")
