@@ -68,12 +68,13 @@ Deno.serve(async (request) => {
     if (historyResult.error) return json(request, { error: "asset_detail_query_failed" }, 500);
     const peHistory: Array<{ trade_date: string; pe: number | null; pe_percentile: number | null; valuation_status: string | null }> = [];
     if (asset.asset_type === "指数") {
-      const peStart = new Date(String(asset.trade_date ?? new Date().toISOString().slice(0, 10)));
+      const peEnd = String(asset.trade_date ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
+      const peStart = new Date(peEnd);
       peStart.setFullYear(peStart.getFullYear() - 10);
       for (let offset = 0; ; offset += 1000) {
         const page = await admin.from("asset_daily_signals")
           .select("trade_date,pe,pe_percentile,valuation_status")
-          .eq("security_id", security.security_id).gte("trade_date", peStart.toISOString().slice(0, 10))
+          .eq("security_id", security.security_id).gte("trade_date", peStart.toISOString().slice(0, 10)).lte("trade_date", peEnd)
           .not("pe", "is", null).order("trade_date").range(offset, offset + 999);
         if (page.error) return json(request, { error: "asset_pe_history_query_failed" }, 500);
         peHistory.push(...(page.data ?? []));
