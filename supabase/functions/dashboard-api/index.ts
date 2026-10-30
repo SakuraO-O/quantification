@@ -66,8 +66,22 @@ Deno.serve(async (request) => {
       .select("trade_date,close,ma20,ma60,ma120,ma200,short_trend,mid_trend,long_trend,pe,pe_percentile,valuation_status")
       .eq("security_id", security.security_id).gte("trade_date", start.toISOString().slice(0, 10)).order("trade_date");
     if (historyResult.error) return json(request, { error: "asset_detail_query_failed" }, 500);
+    const peHistory: Array<{ trade_date: string; pe: number | null; pe_percentile: number | null; valuation_status: string | null }> = [];
+    if (asset.asset_type === "指数") {
+      const peStart = new Date(String(asset.trade_date ?? new Date().toISOString().slice(0, 10)));
+      peStart.setFullYear(peStart.getFullYear() - 10);
+      for (let offset = 0; ; offset += 1000) {
+        const page = await admin.from("asset_daily_signals")
+          .select("trade_date,pe,pe_percentile,valuation_status")
+          .eq("security_id", security.security_id).gte("trade_date", peStart.toISOString().slice(0, 10))
+          .not("pe", "is", null).order("trade_date").range(offset, offset + 999);
+        if (page.error) return json(request, { error: "asset_pe_history_query_failed" }, 500);
+        peHistory.push(...(page.data ?? []));
+        if ((page.data ?? []).length < 1000) break;
+      }
+    }
     if (!canViewFundamentals) {
-      return json(request, { version: version.dashboard_version_id, asset, range, history: historyResult.data ?? [], fundamentals_access: false });
+      return json(request, { version: version.dashboard_version_id, asset, range, history: historyResult.data ?? [], pe_history: peHistory, fundamentals_access: false });
     }
     const [assessmentResult, factsResult, dividendsResult, industryResult, sourcesResult] = await Promise.all([
       admin.from("fundamental_assessments").select("report_period,dividend_safety_status,operating_quality_status,cash_reinvestment_status,capital_structure_status,fundamental_status,evidence,main_risk,calculation_version,created_at").eq("security_id", security.security_id).order("report_period", { ascending: false }).order("created_at", { ascending: false }).limit(1).maybeSingle(),
@@ -84,6 +98,7 @@ Deno.serve(async (request) => {
       asset,
       range,
       history: historyResult.data ?? [],
+      pe_history: peHistory,
       fundamentals_access: true,
       fundamental_assessment: assessmentResult.data,
       financial_facts: factsResult.data ?? [],

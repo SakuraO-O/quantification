@@ -75,15 +75,16 @@ async function mockBackend(page, options = {}) {
     if (url.pathname.startsWith('/functions/v1/dashboard-api/asset/')) {
       if (state.holdDetails) await new Promise(resolve => state.detailGates.push(resolve));
       const symbol = decodeURIComponent(url.pathname.split('/').pop());
-      const asset = assets.find(item => item.symbol === symbol);
+      const asset = (state.customAssets || assets).find(item => item.symbol === symbol);
       return json(route, {
         version: 'local-fixed-version-1', asset, range: url.searchParams.get('range'),
-        history: ['2026-10-08', '2026-10-09', '2026-10-10'].map((date, index) => ({
+        history: state.customDetailHistory || ['2026-10-08', '2026-10-09', '2026-10-10'].map((date, index) => ({
           trade_date: date, close: (asset?.close || 30) + index, ma20: 29 + index,
           ma60: 28 + index, ma120: 27 + index, ma200: 26 + index,
           short_trend: '短期强势', mid_trend: '中期上升', long_trend: '长期上升',
           pe: 12, pe_percentile: 40
         })),
+        pe_history: state.customPeHistory || ['2026-10-08', '2026-10-09', '2026-10-10'].map((trade_date, index) => ({trade_date, pe: 11 + index, pe_percentile: 38 + index})),
         fundamentals_access: true, fundamental_assessment: state.detailAssessment || null,
         financial_facts: [], dividend_events: state.detailDividends || [], industry_metrics: [], sources: []
       });
@@ -182,6 +183,31 @@ test('closing index and stock details stays closed when their API responses arri
     await page.waitForTimeout(50);
     await expect(page.locator('#detail-modal')).not.toBeVisible();
   }
+  expect(state.unexpected).toEqual([]);
+});
+
+test('shows cloud PE history when the current trading day has no PE', async ({ page }) => {
+  const staleAsset = {...assets[0], trade_date: '2026-10-10', pe: null, pe_percentile: null, valuation_status: '估值数据缺失'};
+  const state = await mockBackend(page, {
+    customAssets: [staleAsset, assets[1]],
+    customPeHistory: [
+      {trade_date: '2026-09-20', pe: 11, pe_percentile: 35},
+      {trade_date: '2026-10-08', pe: 12, pe_percentile: 40}
+    ],
+    customDetailHistory: [
+      {trade_date: '2026-10-08', close: 4090, pe: 12, pe_percentile: 40},
+      {trade_date: '2026-10-09', close: 4095, pe: null, pe_percentile: null},
+      {trade_date: '2026-10-10', close: 4100, pe: null, pe_percentile: null}
+    ]
+  });
+  await login(page);
+  await expect(page.locator('#dashboard-source')).toHaveClass(/api/);
+  await page.locator('#index-body tr').click();
+  await expect(page.locator('#detail-content')).toContainText('最近 PE 12.00（2026-10-08）');
+  await expect(page.locator('#detail-content')).toContainText('PE 尚未更新至行情日');
+  await expect(page.locator('#detail-content')).toContainText('估值数据不足');
+  await page.locator('[data-range="3"]').first().click();
+  await expect(page.locator('#detail-content')).toContainText('最近 PE 12.00（2026-10-08）');
   expect(state.unexpected).toEqual([]);
 });
 
