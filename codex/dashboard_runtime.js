@@ -614,9 +614,16 @@
       ? `行情日期：${escapeHtml(asset.lastValidDate || asset.date)}；PE 历史窗口为近10年或实际有效历史区间。`
       : `行情日期：${escapeHtml(asset.date)}；当前为本地 Mock 预览。`;
     const pricePane = `<div class="chart-box"><div class="chart-title"><h4>价格与趋势</h4><small>趋势带默认仅展示长期</small></div><div class="chart-control-bar"><div class="chart-controls"><span class="control-label">时间范围</span>${ranges.map(([value, label]) => `<button class="chart-chip ${detailRange === value ? "active" : ""}" data-range="${value}">${label}</button>`).join("")}</div><div class="chart-controls"><span class="control-label">均线</span>${movingAverages.map(([value, label]) => `<button class="chart-chip ${selectedMAs.has(value) ? "active" : ""}" data-ma="${value}">${label}</button>`).join("")}<span class="control-label">趋势带</span>${trends.map(([value, label]) => `<button class="chart-chip ${selectedTrendBands.has(value) ? "active" : ""}" data-trend-band="${value}">${label}</button>`).join("")}</div></div><div class="chart-legend-row"><div class="chart-legend"><span><i style="background:#172b3a"></i>收盘</span><span><i style="background:#75a7d8"></i>MA20</span><span><i style="background:#8fc4b5"></i>MA60</span><span><i style="background:#b09bc9"></i>MA120</span><span><i style="background:#d7a68f"></i>MA200</span></div><div class="trend-key"><span><i style="background:#9fcfb7"></i>上升</span><span><i style="background:#aebfe2"></i>修复</span><span><i style="background:#e2c891"></i>转弱</span><span><i style="background:#e4aaa7"></i>下跌</span><span><i style="background:#cfd5da"></i>震荡</span></div></div><canvas id="price-chart"></canvas></div>`;
-    const pePane = percentile === null
-      ? `<div class="chart-box"><div class="chart-title"><h4>PE百分位趋势</h4><small>暂无足够数据</small></div><p class="muted">当前指数暂无可用的 PE 百分位历史数据。</p></div>`
-      : `<div class="chart-box"><div class="chart-title"><h4>PE百分位趋势</h4><small>当前PE ${num(numberOr(asset.pe))} · 当前百分位 ${percentile.toFixed(2)}%</small></div><canvas class="pe-canvas" id="pe-chart"></canvas><div class="chart-legend"><span>0–15% 极低估</span><span>15–35% 低估</span><span>35–70% 合理</span><span>70–90% 高估</span><span>90–100% 极高估</span></div></div>`;
+    const detail = runtimeState.histories.get(asset.code);
+    const peRows = detail && Array.isArray(detail.pe_history)
+      ? detail.pe_history.filter(row => numberOr(row.pe) !== null && Number(row.pe) > 0) : [];
+    const lastPe = peRows.at(-1);
+    const peDate = String(lastPe?.trade_date || "").slice(0, 10);
+    const marketDate = String(asset.lastValidDate || asset.date || "").slice(0, 10);
+    const peCaption = lastPe
+      ? `最近 PE ${num(numberOr(lastPe.pe))}（${escapeHtml(peDate)}）${numberOr(lastPe.pe_percentile) === null ? "" : ` · 百分位 ${num(numberOr(lastPe.pe_percentile))}%`}${peDate < marketDate ? " · PE 尚未更新至行情日" : ""}`
+      : runtimeState.source === "api" ? "暂无历史 PE 数据" : "本地 Mock 数据";
+    const pePane = `<div class="chart-box"><div class="chart-title"><h4>PE 与百分位历史</h4><small>${peCaption}</small></div><canvas class="pe-canvas" id="pe-chart"></canvas><div class="chart-legend"><span>PE（左轴）</span><span>PE 百分位（右轴）</span></div></div>`;
     return `<div class="overview-grid">${metric("投资建议", safeBadge(asset.advice))}${metric("综合状态", safeBadge(asset.status))}${metric("短期趋势", safeBadge(asset.short))}${metric("中期趋势", safeBadge(asset.mid))}${metric("长期趋势", safeBadge(asset.long))}${metric("PE / PE百分位", peSummary)}${metric("MA120 / MA200", `${num(numberOr(asset.ma120))} / ${num(numberOr(asset.ma200))}`)}${metric("斜率", `MA120 ${pct(numberOr(asset.s120))} · MA200 ${pct(numberOr(asset.s200))}`)}</div><div class="reason"><b>判断依据：</b>${escapeHtml(asset.long || "数据不足")}；${escapeHtml(asset.mid || "数据不足")}；当前投资建议为“${escapeHtml(asset.advice || "数据不足")}”。</div>${pricePane}${pePane}<p class="data-note">${dataNote}</p>`;
   };
 
@@ -782,15 +789,15 @@
   const mockDrawPeChart = drawPeChart;
   drawPeChart = function drawApiPeChart(asset) {
     const detail = hasLoadedDetailRange(asset) ? runtimeState.histories.get(asset.code) : null;
-    const rows = detail && Array.isArray(detail.history)
-      ? detail.history.filter(row => numberOr(row.pe_percentile) !== null)
+    const rows = detail && Array.isArray(detail.pe_history)
+      ? detail.pe_history.filter(row => numberOr(row.pe) !== null && Number(row.pe) > 0 && row.trade_date)
       : [];
     const canvas=document.querySelector("#pe-chart");if(!canvas)return;
-    if (rows.length < 2) {
+    if (!rows.length) {
       if (runtimeState.source === "api") {
         return isDetailLoading(asset)
           ? drawLoadingChart(canvas, "正在加载")
-          : drawUnavailableChart(canvas, "暂无可用的真实 PE 百分位历史数据");
+          : drawUnavailableChart(canvas, "暂无历史 PE 数据");
       }
       mockDrawPeChart(asset);
       bindChartTooltip(canvas, [], () => [
@@ -803,15 +810,26 @@
     }
     const dpr=window.devicePixelRatio||1,w=canvas.clientWidth,h=canvas.clientHeight;
     canvas.width=w*dpr;canvas.height=h*dpr;const c=canvas.getContext("2d");c.scale(dpr,dpr);c.clearRect(0,0,w,h);
-    const left=44,right=w-14,top=14,bottom=h-32,y=value=>top+(100-value)*(bottom-top)/100,x=i=>left+i*(right-left)/(rows.length-1);
-    [[0,15,"#edf7f1"],[15,35,"#f3f8ee"],[35,70,"#f7f7f4"],[70,90,"#fbf4e8"],[90,100,"#faecec"]].forEach(([lo,hi,color])=>{c.fillStyle=color;c.fillRect(left,y(hi),right-left,y(lo)-y(hi));});
-    c.strokeStyle="#596f9f";c.lineWidth=2;c.beginPath();rows.forEach((row,i)=>i?c.lineTo(x(i),y(Number(row.pe_percentile))):c.moveTo(x(i),y(Number(row.pe_percentile))));c.stroke();
-    c.fillStyle="#687684";c.font="10px sans-serif";c.textAlign="left";c.fillText(rows[0].trade_date,left,h-8);c.textAlign="right";c.fillText(rows[rows.length-1].trade_date,right,h-8);c.textAlign="left";
+    const left=48,right=w-43,top=14,bottom=h-32;
+    const firstDate=new Date(rows[0].trade_date).getTime(),lastDate=new Date(rows.at(-1).trade_date).getTime();
+    const x=row=>left+(new Date(row.trade_date).getTime()-firstDate)/Math.max(lastDate-firstDate,86400000)*(right-left);
+    const peValues=rows.map(row=>Number(row.pe)),min=Math.min(...peValues),max=Math.max(...peValues);
+    const padding=Math.max((max-min)*0.1,max*0.02,0.1),low=Math.max(0,min-padding),high=max+padding;
+    const peY=value=>top+(high-value)/(high-low)*(bottom-top);
+    const percentileY=value=>top+(100-value)/100*(bottom-top);
+    c.strokeStyle="#e1e7eb";c.lineWidth=1;c.fillStyle="#687684";c.font="10px sans-serif";
+    for(let i=0;i<=4;i++){const y=top+i*(bottom-top)/4;c.beginPath();c.moveTo(left,y);c.lineTo(right,y);c.stroke();c.textAlign="left";c.fillText((high-(high-low)*i/4).toFixed(1),3,y+3);c.textAlign="right";c.fillText(`${100-i*25}%`,w-2,y+3);}
+    const stroke=(points,y,color)=>{c.strokeStyle=color;c.lineWidth=2;c.beginPath();points.forEach((row,i)=>i?c.lineTo(x(row),y(row)):c.moveTo(x(row),y(row)));if(points.length>1)c.stroke();else if(points.length){c.fillStyle=color;c.beginPath();c.arc(x(points[0]),y(points[0]),4,0,Math.PI*2);c.fill();}};
+    stroke(rows,row=>peY(Number(row.pe)),"#172b3a");
+    const percentileRows=rows.filter(row=>numberOr(row.pe_percentile)!==null&&Number(row.pe_percentile)>=0&&Number(row.pe_percentile)<=100);
+    stroke(percentileRows,row=>percentileY(Number(row.pe_percentile)),"#b7791f");
+    c.fillStyle="#687684";c.font="10px sans-serif";c.textAlign="left";c.fillText(rows[0].trade_date,left,h-8);c.textAlign="right";c.fillText(rows.at(-1).trade_date,right,h-8);c.textAlign="left";
     bindChartTooltip(canvas, rows, event => {
       const rect = canvas.getBoundingClientRect();
-      const index = Math.max(0, Math.min(rows.length - 1, Math.round((event.clientX - rect.left - left) / Math.max(right - left, 1) * (rows.length - 1))));
+      const position=(event.clientX-rect.left)/rect.width*w;
+      let index=0;for(let i=1;i<rows.length;i++)if(Math.abs(x(rows[i])-position)<Math.abs(x(rows[index])-position))index=i;
       const row = rows[index];
-      return [`日期：${row.trade_date}`, `PE：${num(numberOr(row.pe))}`, `PE百分位：${num(numberOr(row.pe_percentile))}%`, `估值状态：${row.valuation_status || "—"}`];
+      return [`日期：${row.trade_date}`, `PE：${num(numberOr(row.pe))}`, ...(numberOr(row.pe_percentile)===null?[]:[`PE百分位：${num(numberOr(row.pe_percentile))}%`,`估值状态：${row.valuation_status || "—"}`])];
     });
   };
 
