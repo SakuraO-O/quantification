@@ -197,6 +197,7 @@ class FundamentalSynchronizer:
             return selected
         selected = latest_periods(annual, MAX_ANNUAL_REPORTS)
         selected += latest_periods(interim, MAX_INTERIM_REPORTS)
+        selected = latest_periods(selected, MAX_ANNUAL_REPORTS + MAX_INTERIM_REPORTS)
         sid = security_id(asset["symbol"], asset["market"])
         documents: list[dict] = []
         document_keys: list[tuple[str, str]] = []
@@ -250,7 +251,7 @@ class FundamentalSynchronizer:
         saved_documents = self.store.upsert("source_documents", documents, "source,source_record_id,content_hash")
         document_ids = {(row["source_record_id"], row["content_hash"]): row["source_document_id"] for row in saved_documents}
         history = self.store.select("financial_facts", select="financial_fact_id,report_period,metric_code,value,version,source_document_id,verification_status,is_current",
-            filters={"security_id": f"eq.{sid}"})
+            filters={"security_id": f"eq.{sid}"}, order="report_period.asc,metric_code.asc,version.asc")
         current = {(str(row["report_period"]), row["metric_code"]): row for row in history if row.get("is_current")}
         versions: dict[tuple[str, str], int] = {}
         for row in history:

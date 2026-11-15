@@ -140,13 +140,13 @@ def import_quarterly_evidence(store: SupabaseStore, manifest: dict, fetch_docume
     fact_history: dict[tuple[str, str], list[dict]] = {}
     for row in store.select("financial_facts",
                             select="financial_fact_id,report_period,metric_code,value,version,source_document_id,verification_status,is_current",
-                            filters={"security_id": f"eq.{sid}"}):
+                            filters={"security_id": f"eq.{sid}"}, order="report_period.asc,metric_code.asc,version.asc"):
         fact_history.setdefault((str(row["report_period"]), row["metric_code"]), []).append(row)
     event_history: dict[str, list[dict]] = {}
     candidates: dict[str, list[dict]] = {}
     for row in store.select("dividend_events",
                             select="dividend_event_id,announcement_id,fiscal_year,plan_key,version,event_stage,report_period,approval_basis,cash_dividend_per_share,cash_dividend_total,source_document_id,ex_date,bonus_shares_per_share,transfer_shares_per_share,is_current,verification_status",
-                            filters={"security_id": f"eq.{sid}"}):
+                            filters={"security_id": f"eq.{sid}"}, order="dividend_event_id.asc"):
         if row.get("plan_key"):
             event_history.setdefault(str(row["plan_key"]), []).append(row)
         if row.get("verification_status") == "candidate":

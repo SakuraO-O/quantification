@@ -163,7 +163,7 @@ class QuarterlyTest(unittest.TestCase):
                 self.tables = {name: [] for name in ("source_documents", "financial_facts", "dividend_events",
                                                      "dividend_event_sources", "dividend_year_reviews")}
 
-            def select(self, table, select="*", filters=None, limit=None):
+            def select(self, table, select="*", filters=None, order=None, limit=None):
                 rows = self.tables[table]
                 for key, condition in (filters or {}).items():
                     rows = [row for row in rows if str(row.get(key)).lower() == condition[3:].lower()]

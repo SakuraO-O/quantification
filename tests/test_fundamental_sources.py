@@ -97,6 +97,21 @@ def dividend_frame():
 
 
 class FundamentalSourceTest(unittest.TestCase):
+    def test_same_report_period_is_imported_once_across_source_labels(self):
+        asset = next(item for item in active_assets() if item["symbol"] == "sh600900")
+        store = MemoryStore()
+        frame = finance_frame()
+        duplicate = frame.iloc[1].copy()
+        duplicate["REPORT_TYPE"] = "修订报告"
+        duplicate["NOTICE_DATE"] = "2026-03-20"
+        frame = pd.concat([frame, pd.DataFrame([duplicate])], ignore_index=True)
+        sync = FundamentalSynchronizer(store, FundamentalSource(lambda _: frame, lambda _: dividend_frame()))
+        sync._write_finance(asset, frame)
+        rows = [row for row in store.tables["financial_facts"]
+                if str(row["report_period"]) == "2025-12-31" and row["metric_code"] == "net_profit"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["period_type"], "annual")
+
     def test_candidate_version_continues_after_prior_row_is_retired(self):
         asset = next(item for item in active_assets() if item["symbol"] == "sh600900")
         store = MemoryStore()
