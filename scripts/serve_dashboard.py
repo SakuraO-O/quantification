@@ -21,6 +21,7 @@ PAGE_ASSETS = (
     ("dashboard_example.html", "index.html"),
     ("dashboard_config.js", "dashboard_config.js"),
     ("dashboard_auth.js", "dashboard_auth.js"),
+    ("dashboard_quarterly.js", "dashboard_quarterly.js"),
     ("dashboard_runtime.js", "dashboard_runtime.js"),
 )
 LOOPBACK = "127.0.0.1"

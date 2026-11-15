@@ -29,6 +29,7 @@ DIVIDEND_URL = "https://data.eastmoney.com/yjfp/detail/{symbol}.html"
 FINANCE_FIELDS = {
     "TOTALOPERATEREVE": ("revenue", "CNY"),
     "PARENTNETPROFIT": ("net_profit", "CNY"),
+    "KCFJCXSYJLR": ("deducted_net_profit", "CNY"),
     "EPSJB": ("earnings_per_share", "CNY/share"),
     "MGJYXJJE": ("operating_cashflow_per_share", "CNY/share"),
     "FCFF_BACK": ("free_cashflow", "CNY"),
@@ -41,8 +42,8 @@ FINANCE_FIELDS = {
     "BLDKBBL": ("provision_coverage", "percent"),
 }
 SOURCE_TIMEOUT_SECONDS = 20
-MAX_ANNUAL_REPORTS = 5
-MAX_INTERIM_REPORTS = 4
+MAX_ANNUAL_REPORTS = 11
+MAX_INTERIM_REPORTS = 33
 
 
 class SourceTimeoutError(TimeoutError):
@@ -118,6 +119,7 @@ class FundamentalSource:
 
     finance: Callable[[str], Any]
     dividends: Callable[[str], Any]
+    cashflow: Callable[[str], Any] | None = None
 
     @classmethod
     def public(cls) -> "FundamentalSource":
@@ -131,9 +133,13 @@ class FundamentalSource:
         def dividends(symbol: str):
             with _source_timeout(SOURCE_TIMEOUT_SECONDS):
                 return ak.stock_fhps_detail_em(symbol=symbol)
+        def cashflow(symbol: str):
+            with _source_timeout(SOURCE_TIMEOUT_SECONDS):
+                return ak.stock_cash_flow_sheet_by_report_em(symbol=symbol)
         return cls(
             finance=finance,
             dividends=dividends,
+            cashflow=cashflow,
         )
 
 
@@ -169,15 +175,28 @@ class FundamentalSynchronizer:
         )
         return rows[0]["source_document_id"]
 
-    def _write_finance(self, asset: dict, frame: Any) -> tuple[int, int]:
+    def _write_finance(self, asset: dict, frame: Any, cashflow: Any = None) -> tuple[int, int]:
         """Persist a compact research window in batches, not one REST call per metric."""
 
         records = frame.to_dict("records")
         annual = [row for row in records if "年报" in str(row.get("REPORT_TYPE") or "")]
         interim = [row for row in records if "年报" not in str(row.get("REPORT_TYPE") or "")]
-        newest_first = lambda row: _date(row.get("REPORT_DATE")) or date.min
-        selected = sorted(annual, key=newest_first, reverse=True)[:MAX_ANNUAL_REPORTS]
-        selected += sorted(interim, key=newest_first, reverse=True)[:MAX_INTERIM_REPORTS]
+        def latest_periods(rows: list[dict], count: int) -> list[dict]:
+            ordered = sorted(rows, key=lambda row: (
+                _date(row.get("REPORT_DATE")) or date.min,
+                _date(row.get("UPDATE_DATE")) or _date(row.get("NOTICE_DATE")) or date.min,
+            ), reverse=True)
+            selected, seen = [], set()
+            for row in ordered:
+                period = _date(row.get("REPORT_DATE"))
+                if period and period not in seen:
+                    selected.append(row)
+                    seen.add(period)
+                if len(selected) == count:
+                    break
+            return selected
+        selected = latest_periods(annual, MAX_ANNUAL_REPORTS)
+        selected += latest_periods(interim, MAX_INTERIM_REPORTS)
         sid = security_id(asset["symbol"], asset["market"])
         documents: list[dict] = []
         document_keys: list[tuple[str, str]] = []
@@ -207,23 +226,61 @@ class FundamentalSynchronizer:
                 candidates.append({"report_period": report_period, "metric_code": metric_code, "value": value,
                     "unit": unit, "period_type": period_type, "announcement_date": notice_date,
                     "document_key": (record_id, content_hash)})
+        if cashflow is not None and "NETCASH_OPERATE" in cashflow.columns:
+            cash_rows = latest_periods(cashflow.to_dict("records"), 44)
+            for raw in cash_rows:
+                report_period = _date(raw.get("REPORT_DATE"))
+                value = _number(raw.get("NETCASH_OPERATE"))
+                if report_period is None or value is None:
+                    continue
+                notice_date = _date(raw.get("NOTICE_DATE")) or _date(raw.get("UPDATE_DATE"))
+                record_id = f"{_stock_code(asset)}:{report_period.isoformat()}:cashflow:{notice_date or 'unknown'}"
+                content_hash = payload_hash({"report_period": report_period, "value": value,
+                                             "notice_date": notice_date})
+                documents.append({"security_id": sid, "source": "eastmoney", "source_record_id": record_id,
+                    "title": f"东方财富现金流量表：{asset['name']} {report_period}",
+                    "document_type": "structured_cashflow_snapshot", "report_period": report_period,
+                    "announcement_date": notice_date,
+                    "document_url": FINANCE_URL.format(market=_market_suffix(asset), symbol=_stock_code(asset)),
+                    "content_hash": content_hash})
+                candidates.append({"report_period": report_period, "metric_code": "operating_cashflow",
+                    "value": value, "unit": "CNY",
+                    "period_type": "annual" if (report_period.month, report_period.day) == (12, 31) else "year_to_date",
+                    "announcement_date": notice_date, "document_key": (record_id, content_hash)})
         saved_documents = self.store.upsert("source_documents", documents, "source,source_record_id,content_hash")
         document_ids = {(row["source_record_id"], row["content_hash"]): row["source_document_id"] for row in saved_documents}
-        current_rows = self.store.select("financial_facts", select="financial_fact_id,report_period,metric_code,value,version,source_document_id",
-            filters={"security_id": f"eq.{sid}", "is_current": "eq.true"})
-        current = {(str(row["report_period"]), row["metric_code"]): row for row in current_rows}
+        history = self.store.select("financial_facts", select="financial_fact_id,report_period,metric_code,value,version,source_document_id,verification_status,is_current",
+            filters={"security_id": f"eq.{sid}"})
+        current = {(str(row["report_period"]), row["metric_code"]): row for row in history if row.get("is_current")}
+        versions: dict[tuple[str, str], int] = {}
+        for row in history:
+            identity = (str(row["report_period"]), row["metric_code"])
+            versions[identity] = max(versions.get(identity, 0), int(row["version"]))
         changed_rows = []
+        replaced = []
         for item in candidates:
             source_document_id = document_ids[item.pop("document_key")]
             identity = (item["report_period"].isoformat(), item["metric_code"])
             prior = current.get(identity)
+            # Formal-report values are authoritative; a later provider poll
+            # cannot silently replace a reviewed fact or its source.
+            if prior and prior.get("verification_status") == "verified":
+                continue
             if prior and _number(prior.get("value")) == item["value"] and prior.get("source_document_id") == source_document_id:
                 continue
             if prior:
-                self.store.patch("financial_facts", {"financial_fact_id": f"eq.{prior['financial_fact_id']}"}, {"is_current": False})
+                replaced.append(prior["financial_fact_id"])
             changed_rows.append({"security_id": sid, **item, "source_document_id": source_document_id,
-                "version": int(prior["version"]) + 1 if prior else 1, "is_current": True})
-        self.store.upsert("financial_facts", changed_rows, "security_id,report_period,metric_code,version")
+                "version": versions.get(identity, 0) + 1, "is_current": True,
+                "verification_status": "candidate"})
+        try:
+            for fact_id in replaced:
+                self.store.patch("financial_facts", {"financial_fact_id": f"eq.{fact_id}"}, {"is_current": False})
+            self.store.upsert("financial_facts", changed_rows, "security_id,report_period,metric_code,version")
+        except Exception:
+            for fact_id in replaced:
+                self.store.patch("financial_facts", {"financial_fact_id": f"eq.{fact_id}"}, {"is_current": True})
+            raise
         return len(candidates), len(changed_rows)
 
     def _write_dividends(self, asset: dict, frame: Any) -> tuple[int, int]:
@@ -275,6 +332,7 @@ class FundamentalSynchronizer:
                 "document_url": DIVIDEND_URL.format(symbol=code), "content_hash": content_hash})
             candidates.append({"security_id": sid, "fiscal_year": fiscal_year, "report_period": report_period,
                 "event_stage": stage, "announcement_id": record_id, "is_current": True,
+                "verification_status": "candidate",
                 "cash_dividend_per_share": cash_per_share, "ex_date": ex_date, "announcement_date": announcement_date,
                 "bonus_shares_per_share": float(Decimal(str(bonus_per_ten or 0)) / 10),
                 "transfer_shares_per_share": float(Decimal(str(transfer_per_ten or 0)) / 10),
@@ -283,12 +341,13 @@ class FundamentalSynchronizer:
         if len(identities) != len(set(identities)):
             raise ValueError("分红来源存在无法区分的重复事件")
         existing = {row["announcement_id"]: row for row in self.store.select(
-            "dividend_events", select="announcement_id,report_period,fiscal_year,event_stage,is_current,announcement_date,ex_date,bonus_shares_per_share,transfer_shares_per_share,cash_dividend_per_share,source_document_id",
+            "dividend_events", select="announcement_id,report_period,fiscal_year,event_stage,is_current,announcement_date,ex_date,bonus_shares_per_share,transfer_shares_per_share,cash_dividend_per_share,source_document_id,verification_status,superseded_by_plan_key",
             filters={"security_id": f"eq.{sid}", "report_period": "not.is.null"})}
         incoming_counts = Counter(str(row["report_period"]) for row in candidates
                                   if row["event_stage"] == "implemented")
         verified_counts = Counter(str(row["report_period"]) for row in existing.values()
-                                  if row.get("is_current") and row.get("event_stage") == "implemented")
+                                  if row.get("is_current") and row.get("event_stage") == "implemented"
+                                  and row.get("verification_status") != "verified")
         if any(incoming_counts[period] < count for period, count in verified_counts.items()):
             raise ValueError("分红来源按报告期返回的已实施事件少于已核验历史，拒绝缩减")
         saved_documents = self.store.upsert("source_documents", documents, "source,source_record_id,content_hash")
@@ -304,9 +363,12 @@ class FundamentalSynchronizer:
             rows.append(payload)
         new_rows = [row for row in rows if row["announcement_id"] not in existing]
         updated = 0
+        changed_years = {row["fiscal_year"] for row in new_rows}
         for row in rows:
             prior = existing.get(row["announcement_id"])
             if prior is None:
+                continue
+            if prior.get("verification_status") == "verified" or prior.get("superseded_by_plan_key"):
                 continue
             changed = {field: row[field] for field in (
                 "report_period", "fiscal_year", "event_stage", "is_current", "announcement_date", "ex_date",
@@ -315,15 +377,25 @@ class FundamentalSynchronizer:
             if changed:
                 self.store.patch("dividend_events", {"security_id": f"eq.{sid}", "announcement_id": f"eq.{row['announcement_id']}"}, changed)
                 updated += 1
+                changed_years.add(row["fiscal_year"])
         # Insert only unseen identities. PostgREST's composite-conflict path
         # currently returns 400 in this project.
         self.store.insert("dividend_events", new_rows)
         stale_ids = set(existing) - set(identities)
         for announcement_id in stale_ids:
+            if existing[announcement_id].get("verification_status") == "verified" or existing[announcement_id].get("superseded_by_plan_key"):
+                continue
             if existing[announcement_id].get("is_current"):
                 self.store.patch("dividend_events", {"security_id": f"eq.{sid}",
                     "announcement_id": f"eq.{announcement_id}"}, {"is_current": False})
                 updated += 1
+                changed_years.add(existing[announcement_id]["fiscal_year"])
+        # A newly seen plan invalidates an earlier "year complete" review
+        # until the official announcement is checked and linked.
+        for fiscal_year in changed_years:
+            self.store.patch("dividend_year_reviews",
+                {"security_id": f"eq.{sid}", "fiscal_year": f"eq.{fiscal_year}"},
+                {"status": "pending"})
         return len(rows), len(new_rows) + updated
 
     @staticmethod
@@ -402,8 +474,15 @@ class FundamentalSynchronizer:
         try:
             code = _stock_code(asset)
             finance = self.source.finance(f"{code}.{_market_suffix(asset)}")
+            cashflow = None
+            if self.source.cashflow:
+                try:
+                    cashflow = self.source.cashflow(f"{_market_suffix(asset)}{code}")
+                except Exception as error:
+                    self.store.record_quality_issue(key, "warning", "cashflow_source_unavailable",
+                                                    {"asset": asset["symbol"], "error": str(error)[:300]})
             dividends = self.source.dividends(code)
-            fact_received, fact_changed = self._write_finance(asset, finance)
+            fact_received, fact_changed = self._write_finance(asset, finance, cashflow)
             dividend_received, dividend_changed = self._write_dividends(asset, dividends)
             assessment_changed = self._write_assessment(asset)
             source_latest = max((_date(row.get("REPORT_DATE")) for row in finance.to_dict("records") if _date(row.get("REPORT_DATE"))), default=None)

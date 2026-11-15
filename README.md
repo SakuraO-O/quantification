@@ -45,7 +45,7 @@ python -B -m codex.trend_observer.cli sync-fundamentals --force
 python -B -m codex.trend_observer.cli publish-dashboard
 ```
 
-启用资产清单当前为 **12 个指数和 14 只股票**，以 `config.py` 为权威名单；看板读取发布版本中的资产清单，不另行写死股票数量。`sync-market` 仅同步行情；`sync-valuation` 独立同步指数估值。二者都会读取数据水位，正常情况下只请求新增日期及向前重叠的两个交易日；`--force` 仅用于补抓或修订检查。
+启用资产清单当前为 **13 个指数和 14 只股票，共 27 项**，以 `config.py` 为权威名单；看板读取发布版本中的资产清单，不另行写死股票数量。`sync-market` 仅同步行情；`sync-valuation` 独立同步指数估值。二者都会读取数据水位，正常情况下只请求新增日期及向前重叠的两个交易日；`--force` 仅用于补抓或修订检查。
 
 ### 股票股息率与上一年度每股分红
 
@@ -54,6 +54,16 @@ python -B -m codex.trend_observer.cli publish-dashboard
 分红事实使用带明确“报告期”的东方财富分红送配详情，经 `sync-fundamentals` 写入 `dividend_events.report_period`。来源更正事件时，旧记录保留追溯但标记 `is_current=false`，不重复计入；任一报告期返回的已实施事件数少于已核验历史时同步失败，待人工核查。历史新浪记录的 `fiscal_year` 曾由除息年份减一推断，无法可靠覆盖季度和中期分红；迁移不会把这些旧记录当成已核验事实。发布器、三年含息回报与资产详情只消费已回填且当前有效的事件。`asset_daily_signals.dividend_yield` 不作为看板股息率依据；Edge、前端和飞书读取发布版本，不重算该指标。
 
 本规则上线需先部署 `20261013120000_dividend_report_period.sql`，再部署更新后的 `dashboard-api`，执行 `sync-fundamentals --force` 回填当前启用的股票，检查报告期与各阶段分红，运行 `publish-dashboard`，最后发布静态看板。以同一版本核对 `last_year_dividend`、`dividend_fiscal_year`、`dividend_yield` 与页面显示；若历史事件尚未回填，该股票应保持缺数。修改代码或 Pages 本身不会补齐生产事实。
+
+### 股票季度经营与股利支付率
+
+季度页使用 Python 发布的十年结果。财报金额按相邻累计报告计算单季度值；ROE 与资产负债率直接展示报告值。页面只做单位、颜色和图形展示。顶部“当年”是最新已入库定期报告的报告年度；股利支付率采用最新已入库年报的报告年度。未核验的财报数值不展示确定金额。十年表的每股分红包含已实施及已批准未实施金额，并标明未实施部分；待批准的预案不计入确定金额。
+
+`sync-fundamentals` 抓取最近十一年的年报与非年报候选值：扣非归母净利润来自主要财务指标，经营现金流净额总额来自现金流量表。候选值不会直接进入季度图表。维护者须逐项对照正式报告和公告，准备核验清单，然后运行 `python -B scripts/import_quarterly_evidence.py /path/to/reviewed.json`。导入器会重新下载每份官方公告并核对 SHA-256；核验清单需注明核验人、报告期、金额、所属年度、分红方案稳定键和批准依据。正式文件无法核对时保持“数据不足”或“待核对”，不把候选值改成已核验。
+
+核验清单顶层包含 `symbol`（如 `sz000807`）、`market`（`CN`）、`reviewed_by`、`documents`、`facts`、`dividends`、`year_reviews`。每份 `documents` 记录填写本地唯一 `key`、正式公告直达 `url`、文件 `sha256`、公告 `announcement_id`、`title`、`document_type`、`report_period` 和 `announcement_date`。每项 `facts` 填 `report_period`、`metric_code`、原始元数值 `value`、`period_type`（前三季度为 `year_to_date`，年报为 `annual`）和公告 `document` 键。每项 `dividends` 填 `plan_key`、`fiscal_year`、`report_period`、`event_stage`、税前 `cash_dividend_per_share` 和 `cash_dividend_total`，并用 `documents: [{"key":"…","role":"approval"}]` 关联预案、授权、批准或实施公告；已批准方案还需 `approval_basis`。已实施方案还需除息日 `ex_date` 和每股送股、转增比例（无送转填0），以免影响含息总回报。每项还须填写 `supersedes_candidates`：列出同一方案在结构化来源中的候选公告编号，没有时填空列表，防止列表股息率和含息回报重复计入。每项 `year_reviews` 填 `fiscal_year`、`status`（`pending`、`authorization_only` 或 `complete`）与核验依据 `document`。只有确认该年所有分红事项已查全，才能填写 `complete`；无分红年度还需正式不分红依据。
+
+生产数据库已执行 `20261115100347_quarterly_verified_facts.sql`。导入经核验的来源后，需重新运行 `publish-dashboard`；季度结果随发布版本保存，详情 API 只返回所选资产的季度数据，列表不传输这些明细。发布前核对云铝股份和其他股票的正式报告、分红阶段、缺数原因与版本；本地 Mock 浏览器测试只验证展示交互，不能证明生产数据已补齐。
 
 飞书派发只读取完整的 `dashboard_versions`，周一至周六在 08:00—09:30 每 10 分钟检查；同一内容版本只成功派发一次，周日不发送：
 
@@ -90,7 +100,7 @@ python -B -m codex.trend_observer.cli publish-dashboard
 
 `sync-market --market CN --force` 对股票抓取完整历史以回填未复权价格；正常定时仍为增量抓取。未复权价格优先取东方财富，失败时从腾讯独立原始日线降级；腾讯前复权历史分段抓取并验证重叠价格。旧版行情库中 8 只股票截至 2026-10-09 只有不足三年的历史，迁移本身不会凭空补齐数据。新增股票上线后需检查 `market_daily.raw_close`、`dividend_events` 送转股比例和最新发布版本的两项三年回报；本地代码修改不等于已执行生产回填。
 
-新增陕西煤业（601225）沿用现有股票入库流程，无需数据库迁移。将代码部署到 `main` 后，依次运行 `bootstrap`、`sync-fundamentals --force`、`sync-market --market CN --force`、`publish-dashboard`。**务必等同步任务结束后再发布**，否则新股票会先显示数据延迟或三年回报数据不足。核对最新完整版本的 `payload.assets` 含 26 项，其中股票 14 项；单独检查陕西煤业的历史行情起止日期、财务事实、分红事件、股息率和三年回报状态。中国平安暂不套用工业企业现金流阈值，四维基本面评估保持“数据不足”，直至保险专属规则接入。
+新增陕西煤业（601225）沿用现有股票入库流程，无需数据库迁移。将代码部署到 `main` 后，依次运行 `bootstrap`、`sync-fundamentals --force`、`sync-market --market CN --force`、`publish-dashboard`。**务必等同步任务结束后再发布**，否则新股票会先显示数据延迟或三年回报数据不足。核对最新完整版本的 `payload.assets` 含 27 项，其中指数 13 项、股票 14 项；单独检查陕西煤业的历史行情起止日期、财务事实、分红事件、股息率和三年回报状态。中国平安暂不套用工业企业现金流阈值，四维基本面评估保持“数据不足”，直至保险专属规则接入。
 
 ### 上线检查清单
 

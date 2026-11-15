@@ -30,7 +30,10 @@ class MemoryStore:
             elif table == "financial_facts":
                 existing = next((value for value in self.tables[table] if value["security_id"] == item["security_id"] and value["report_period"] == item["report_period"] and value["metric_code"] == item["metric_code"] and value["version"] == item["version"]), None)
                 if existing: existing.update(item)
-                else: self.tables[table].append(item); existing = item
+                else:
+                    item["financial_fact_id"] = f"fact-{len(self.tables[table]) + 1}"
+                    self.tables[table].append(item)
+                    existing = item
                 result.append(existing)
             elif table == "dividend_events":
                 existing = next((value for value in self.tables[table] if value["announcement_id"] == item["announcement_id"]), None)
@@ -94,6 +97,33 @@ def dividend_frame():
 
 
 class FundamentalSourceTest(unittest.TestCase):
+    def test_candidate_version_continues_after_prior_row_is_retired(self):
+        asset = next(item for item in active_assets() if item["symbol"] == "sh600900")
+        store = MemoryStore()
+        sync = FundamentalSynchronizer(store, FundamentalSource(lambda _: finance_frame(), lambda _: dividend_frame()))
+        sync._write_finance(asset, finance_frame())
+        previous = next(row for row in store.tables["financial_facts"]
+                        if str(row["report_period"]) == "2025-12-31" and row["metric_code"] == "net_profit")
+        previous["is_current"] = False
+        revised = finance_frame()
+        revised.loc[1, "PARENTNETPROFIT"] = 24
+        sync._write_finance(asset, revised)
+        versions = [row["version"] for row in store.tables["financial_facts"]
+                    if str(row["report_period"]) == "2025-12-31" and row["metric_code"] == "net_profit"]
+        self.assertEqual(versions, [1, 2])
+
+    def test_cashflow_total_is_candidate_and_not_per_share(self):
+        asset = next(item for item in active_assets() if item["symbol"] == "sh600900")
+        store = MemoryStore()
+        cashflow = pd.DataFrame([{"REPORT_DATE": "2025-12-31", "NETCASH_OPERATE": 123_000_000}])
+        source = FundamentalSource(lambda _: finance_frame(), lambda _: dividend_frame(), lambda _: cashflow)
+        result = FundamentalSynchronizer(store, source).sync_asset(asset, today=date(2026, 7, 19), force=True)
+        self.assertEqual(result.status, "succeeded")
+        rows = [row for row in store.tables["financial_facts"] if row["metric_code"] == "operating_cashflow"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["value"], 123_000_000)
+        self.assertEqual(rows[0]["verification_status"], "candidate")
+
     def test_normalizes_facts_and_keeps_only_compact_provenance(self):
         asset = next(item for item in active_assets() if item["symbol"] == "sh600900")
         store = MemoryStore()
