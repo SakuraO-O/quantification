@@ -561,6 +561,19 @@
     return html.replace("数据完整度：原型示例", "数据完整度：Mock 示例");
   };
 
+  document.addEventListener("click", event => {
+    const button = event.target.closest("[data-quarter-metric]");
+    if (button) {
+      document.querySelectorAll("[data-quarter-metric]").forEach(item => {
+        item.classList.toggle("active", item === button);
+        item.setAttribute("aria-pressed", String(item === button));
+      });
+      window.TrendQuarterly.render(button.dataset.quarterMetric, stocks[detailIndex]?.quarterly);
+    } else if (event.target.closest('.modal-tab[data-pane="quarter"]')) {
+      window.TrendQuarterly.render("net_profit", stocks[detailIndex]?.quarterly);
+    }
+  });
+
   window.stockDetail = function stockDetailFromApi(asset) {
     const ranges = [[3,"近3个月"],[6,"近6个月"],[12,"近1年"],[36,"近3年"],[60,"近5年"]];
     const movingAverages = [["ma20","MA20"],["ma60","MA60"],["ma120","MA120"],["ma200","MA200"]];
@@ -584,7 +597,7 @@
       ? `<button class="modal-tab" data-pane="annual">基本面—年度</button><button class="modal-tab" data-pane="quarter">基本面—季度</button><button class="modal-tab" data-pane="source">数据说明</button>`
       : "";
     const fundamentalPanes = canViewFundamentals
-      ? `<div class="modal-pane" id="pane-annual">${annualResearch(asset)}</div><div class="modal-pane" id="pane-quarter"><div class="data-missing">季度基本面口径尚未统一，暂不展示未经确认的原型数字。</div></div><div class="modal-pane" id="pane-source"><div class="chart-box"><p>行情数据截至：${escapeHtml(asset.lastValidDate || asset.date)}</p><p>最新报告期：${escapeHtml(assessment.report_period || "数据不足")}</p><p>数据来源与追溯：</p>${sourceList}<p class="research-source">仅展示来源链接、公告编号、哈希及结构化字段；不保存原始公告、财报文件或接口响应全文。</p></div></div>`
+      ? `<div class="modal-pane" id="pane-annual">${annualResearch(asset)}</div><div class="modal-pane" id="pane-quarter">${window.TrendQuarterly.pane(asset.quarterly)}</div><div class="modal-pane" id="pane-source"><div class="chart-box"><p>行情数据截至：${escapeHtml(asset.lastValidDate || asset.date)}</p><p>最新报告期：${escapeHtml(assessment.report_period || "数据不足")}</p><p>数据来源与追溯：</p>${sourceList}<p class="research-source">仅展示来源链接、公告编号、哈希及结构化字段；不保存原始公告、财报文件或接口响应全文。</p></div></div>`
       : "";
     const overview = [
       metric("趋势建议", safeBadge(asset.advice)),
@@ -689,6 +702,7 @@
           asset.change = detail.fundamental_assessment.main_risk || asset.change;
         }
         asset.financialFacts = detail.financial_facts || [];
+        asset.quarterly = detail.quarterly || null;
         asset.dividendEvents = detail.dividend_events || [];
         asset.industryMetrics = detail.industry_metrics || [];
         asset.sources = detail.sources || [];

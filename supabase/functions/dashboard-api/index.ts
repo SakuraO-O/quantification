@@ -41,15 +41,19 @@ Deno.serve(async (request) => {
   const path = url.pathname.replace(/^.*dashboard-api/, "") || "/overview";
   const payload = version.payload as Record<string, unknown>;
   const assets = Array.isArray(payload.assets) ? payload.assets as Array<Record<string, unknown>> : [];
+  const withoutQuarterly = (item: Record<string, unknown>) => {
+    const { quarterly: _quarterly, ...summary } = item;
+    return summary;
+  };
   if (path === "/overview") {
     // The RPC is the sole source for allocation ratios, thresholds, and text.
     // Do not derive these values from a dashboard-version snapshot in Edge.
     const { data: allocation, error: allocationError } = await admin.rpc("compute_portfolio_allocation");
     if (allocationError) return json(request, { error: "allocation_query_failed" }, 500);
-    return json(request, { version: version.dashboard_version_id, generated_at: version.generated_at, latest_market_date: version.latest_market_date, completeness: version.completeness, permissions: [...permissions], ...payload, allocation });
+    return json(request, { version: version.dashboard_version_id, generated_at: version.generated_at, latest_market_date: version.latest_market_date, completeness: version.completeness, permissions: [...permissions], ...payload, assets: assets.map(withoutQuarterly), allocation });
   }
-  if (path === "/indexes") return json(request, { version: version.dashboard_version_id, assets: assets.filter((asset) => asset.asset_type === "指数") });
-  if (path === "/stocks") return json(request, { version: version.dashboard_version_id, assets: assets.filter((asset) => asset.asset_type === "股票") });
+  if (path === "/indexes") return json(request, { version: version.dashboard_version_id, assets: assets.filter((asset) => asset.asset_type === "指数").map(withoutQuarterly) });
+  if (path === "/stocks") return json(request, { version: version.dashboard_version_id, assets: assets.filter((asset) => asset.asset_type === "股票").map(withoutQuarterly) });
   if (path === "/style-compass") return json(request, { version: version.dashboard_version_id, results: payload.style_compass ?? [] });
   if (path === "/data-status") return json(request, { version: version.dashboard_version_id, generated_at: version.generated_at, completeness: version.completeness });
   if (path.startsWith("/asset/")) {
@@ -82,7 +86,7 @@ Deno.serve(async (request) => {
       }
     }
     if (!canViewFundamentals) {
-      return json(request, { version: version.dashboard_version_id, asset, range, history: historyResult.data ?? [], pe_history: peHistory, fundamentals_access: false });
+      return json(request, { version: version.dashboard_version_id, asset: withoutQuarterly(asset), range, history: historyResult.data ?? [], pe_history: peHistory, fundamentals_access: false });
     }
     const [assessmentResult, factsResult, dividendsResult, industryResult, sourcesResult] = await Promise.all([
       admin.from("fundamental_assessments").select("report_period,dividend_safety_status,operating_quality_status,cash_reinvestment_status,capital_structure_status,fundamental_status,evidence,main_risk,calculation_version,created_at").eq("security_id", security.security_id).order("report_period", { ascending: false }).order("created_at", { ascending: false }).limit(1).maybeSingle(),
@@ -96,7 +100,8 @@ Deno.serve(async (request) => {
     }
     return json(request, {
       version: version.dashboard_version_id,
-      asset,
+      asset: withoutQuarterly(asset),
+      quarterly: asset.asset_type === "股票" ? asset.quarterly ?? null : null,
       range,
       history: historyResult.data ?? [],
       pe_history: peHistory,

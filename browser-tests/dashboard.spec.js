@@ -86,7 +86,8 @@ async function mockBackend(page, options = {}) {
         })),
         pe_history: state.customPeHistory || ['2026-10-08', '2026-10-09', '2026-10-10'].map((trade_date, index) => ({trade_date, pe: 11 + index, pe_percentile: 38 + index})),
         fundamentals_access: true, fundamental_assessment: state.detailAssessment || null,
-        financial_facts: [], dividend_events: state.detailDividends || [], industry_metrics: [], sources: []
+        financial_facts: [], dividend_events: state.detailDividends || [], industry_metrics: [], sources: [],
+        quarterly: state.detailQuarterly || null
       });
     }
     if (url.pathname === '/functions/v1/portfolio-config') {
@@ -97,7 +98,7 @@ async function mockBackend(page, options = {}) {
       return json(route, { allocation_type: payload.allocation_type, data_date: payload.data_date,
         version: state.writes.length, allocation: state.allocation });
     }
-    if (['/', '/dashboard_auth.js', '/dashboard_runtime.js'].includes(url.pathname)) return route.continue();
+    if (['/', '/dashboard_auth.js', '/dashboard_quarterly.js', '/dashboard_runtime.js'].includes(url.pathname)) return route.continue();
     state.unexpected.push(`${request.method()} ${url.pathname}`);
     return route.abort();
   });
@@ -297,6 +298,58 @@ test('shows published dividend gaps without inventing a zero yield', async ({ pa
   await row.click();
   await expect(page.locator('#detail-modal .metric-card').filter({ hasText: '股息率' }).locator('b')).toHaveText('数据不足');
   await expect(page.locator('#detail-modal .metric-card').filter({ hasText: '每股分红' }).locator('b')).toHaveText('—');
+});
+
+test('renders published quarterly figures, switches metrics, and shows source labels', async ({ page }) => {
+  const cell = (value, period, minus = null) => ({
+    value, status: '已核验', basis: 'single_quarter',
+    source: { report_period: period, source: '巨潮资讯', announcement_date: '2026-10-28' },
+    minus_source: minus && { report_period: minus, source: '巨潮资讯', announcement_date: '2026-08-20' }
+  });
+  const missing = { value: null, status: '数据不足' };
+  const metric = (label, amount = 100000000) => ({
+    label, unit: 'CNY', years: [
+      { quarters: [cell(amount, '2025-03-31'), cell(amount, '2025-06-30', '2025-03-31'), missing, missing],
+        year_value: amount * 2, year_status: '已核验', year_quarter: 2, comparison: missing },
+      { quarters: [cell(amount, '2026-03-31'), cell(-amount, '2026-06-30', '2026-03-31'), missing, missing],
+        year_value: 0, year_status: '已核验', year_quarter: 2, comparison: { value: -100, status: '已计算' } }
+    ]
+  });
+  const quarterly = {
+    status: '已计算', years: [2025, 2026],
+    metrics: {
+      net_profit: metric('归母净利润'), deducted_net_profit: metric('扣非归母净利润'),
+      revenue: metric('营业总收入'), operating_cashflow: metric('经营现金流净额'),
+      roe: { ...metric('加权平均ROE'), unit: 'percent' },
+      asset_liability_ratio: { ...metric('资产负债率'), unit: 'percent' }
+    },
+    dividends: {
+      '2025': { per_share: 0.5, unimplemented: true, payout_ratio: 50, status: '已核验' },
+      '2026': { per_share: null, payout_ratio: null, status: '待核对' }
+    },
+    top: {
+      report_period: '2026Q2', announcement_date: '2026-08-20',
+      dividend_year: 2026, payout_year: 2025,
+      dividend: { implemented_per_share: null, approved_per_share: null, status: '待核对' },
+      payout: { payout_ratio: 50, status: '已核验' },
+      summary: Object.fromEntries(['net_profit', 'deducted_net_profit', 'revenue'].map(key =>
+        [key, { value: 0, comparison: { value: -100, status: '已计算' } }]))
+    }
+  };
+  const state = await mockBackend(page, { detailQuarterly: quarterly });
+  await login(page);
+  await page.locator('.tab[data-view="stock"]').click();
+  await page.locator('#stock-body tr').click();
+  await page.waitForFunction(() => window.__trendDashboardRuntime.histories.has('600900'));
+  await page.locator('.modal-tab[data-pane="quarter"]').click();
+  await expect(page.locator('#pane-quarter')).toContainText('2025报告年度');
+  await expect(page.locator('#quarter-content')).toContainText('含已批准未实施');
+  await expect(page.locator('#quarter-content .quarter-bar.quarter-negative')).toHaveCount(1);
+  await page.locator('#quarter-content [data-quarter-tip]').first().hover();
+  await expect(page.locator('#quarter-tooltip')).toContainText('本期依据：2025-03-31 · 巨潮资讯');
+  await page.locator('[data-quarter-metric="asset_liability_ratio"]').click();
+  await expect(page.locator('#quarter-content .quarter-line-chart')).toBeVisible();
+  expect(state.unexpected).toEqual([]);
 });
 
 test('adapting one assessment does not alter a shared industry template', async ({ page }) => {

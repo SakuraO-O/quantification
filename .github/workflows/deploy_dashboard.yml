@@ -8,6 +8,7 @@ on:
       - "codex/dashboard_config.js"
       - "codex/dashboard_auth.js"
       - "codex/dashboard_runtime.js"
+      - "codex/dashboard_quarterly.js"
       - ".github/workflows/deploy_dashboard.yml"
   workflow_dispatch:
 
@@ -32,7 +33,7 @@ jobs:
         run: |
           mkdir -p codex/site
           cp codex/dashboard_example.html codex/site/index.html
-          cp codex/dashboard_config.js codex/dashboard_auth.js codex/dashboard_runtime.js codex/site/
+          cp codex/dashboard_config.js codex/dashboard_auth.js codex/dashboard_quarterly.js codex/dashboard_runtime.js codex/site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

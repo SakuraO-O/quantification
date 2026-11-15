@@ -9,6 +9,7 @@ import pandas as pd
 from .config import ASSETS, MARKET_TIMEZONE, STYLE_COMPASS_PAIRS
 from .dividends import annual_dividend_summary
 from .ingestion import CALCULATION_VERSION
+from .quarterly import build_quarterly
 from .style_compass import calculate_style_compass, style_recommendation_details
 from .supabase_store import SupabaseStore
 from .total_return import stock_three_year_returns
@@ -43,9 +44,33 @@ class DashboardPublisher:
     def _dividend_events(self, sid: str) -> list[dict]:
         return self.store.select(
             "dividend_events",
-            select="fiscal_year,report_period,cash_dividend_per_share,announcement_date,announcement_id,event_stage,ex_date,bonus_shares_per_share,transfer_shares_per_share",
+            select="fiscal_year,report_period,cash_dividend_per_share,announcement_date,announcement_id,event_stage,ex_date,bonus_shares_per_share,transfer_shares_per_share,verification_status",
             filters={"security_id": f"eq.{sid}", "report_period": "not.is.null", "is_current": "eq.true"},
         )
+
+    def _quarterly(self, sid: str) -> dict:
+        filters = {"security_id": f"eq.{sid}"}
+        facts = self.store.select(
+            "financial_facts",
+            select="report_period,metric_code,value,period_type,announcement_date,source_document_id,is_current,verification_status",
+            filters=filters | {"is_current": "eq.true"},
+        )
+        events = self.store.select(
+            "dividend_events",
+            select="report_period,fiscal_year,plan_key,event_stage,cash_dividend_per_share,cash_dividend_total,approval_basis,is_current,verification_status",
+            filters=filters | {"is_current": "eq.true"},
+        )
+        documents = self.store.select(
+            "source_documents",
+            select="source_document_id,source,announcement_date,document_url",
+            filters=filters,
+        )
+        reviews = self.store.select(
+            "dividend_year_reviews",
+            select="fiscal_year,status,source_document_id",
+            filters=filters,
+        )
+        return build_quarterly(facts, events, documents, reviews)
 
     def _dividend_history_current(self, asset: dict, trade_date: str) -> bool:
         watermark = getattr(self.store, "get_watermark", lambda _key: None)(
@@ -181,9 +206,15 @@ class DashboardPublisher:
                 record |= {
                     "latest_announcement_date": max((row.get("announcement_date") for row in dividends if row.get("announcement_date")), default=None),
                     "fundamental_assessment": assessment,
+                    "quarterly": self._quarterly(asset["security_id"]),
                 }
                 if signal.get("data_status") == "current":
                     verified = self._dividend_history_current(asset, signal["trade_date"])
+                    by_year: dict[int, set[str]] = {}
+                    for event in dividends:
+                        by_year.setdefault(int(event["fiscal_year"]), set()).add(event.get("verification_status") or "candidate")
+                    if any(len(statuses) > 1 for statuses in by_year.values()):
+                        verified = False
                     if verified:
                         record |= annual_dividend_summary(dividends, signal["trade_date"], signal.get("close"))
                     else:
