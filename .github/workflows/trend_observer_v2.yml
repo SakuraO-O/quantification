@@ -46,7 +46,7 @@ jobs:
     # V2 is safe to add before a Supabase project exists: scheduled executions
     # become no-ops until the two server-side secrets are configured.
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
     env:
       TZ: Asia/Shanghai
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
