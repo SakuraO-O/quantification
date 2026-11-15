@@ -17,7 +17,7 @@ alter table public.dividend_events
 -- The old announcement/stage uniqueness prevents a corrected version of the
 -- same plan. Reviewed plans use (security, stable plan key, version) instead.
 alter table public.dividend_events
-  drop constraint if exists dividend_events_security_id_fiscal_year_event_stage_announcement_id_key;
+  drop constraint if exists dividend_events_security_id_fiscal_year_event_stage_announc_key;
 
 alter table public.dividend_events
   add column if not exists verified_by text,
