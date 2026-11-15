@@ -66,8 +66,8 @@ def main(argv=None):
             results = FundamentalSynchronizer(store).sync_assets(active_assets(), force=args.force, trigger_type=args.trigger)
             for item in results:
                 print(f"基本面 {item.asset}｜{item.status}｜接收 {item.rows_received} 项｜变化 {item.rows_changed} 项｜{item.message}")
-            if results and all(item.status == "failed" for item in results):
-                raise RuntimeError("全部股票基本面同步失败，请检查 ingestion_run_items 与 data_quality_issues。")
+            if any(item.status == "failed" for item in results):
+                raise RuntimeError("部分股票基本面同步失败，请检查 ingestion_run_items 与 data_quality_issues。")
         elif args.command == "rebuild-gem100":
             asset = next(asset for asset in active_assets() if asset["symbol"] == "sz399006")
             count = MarketSynchronizer(store).recalculate_valuation_signals(asset, None)

@@ -54,6 +54,7 @@ class DashboardPublisher:
             "financial_facts",
             select="report_period,metric_code,value,period_type,announcement_date,source_document_id,is_current,verification_status",
             filters=filters | {"is_current": "eq.true"},
+            order="report_period.asc,metric_code.asc",
         )
         events = self.store.select(
             "dividend_events",
