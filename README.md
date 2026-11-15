@@ -63,7 +63,7 @@ python -B -m codex.trend_observer.cli publish-dashboard
 
 核验清单顶层包含 `symbol`（如 `sz000807`）、`market`（`CN`）、`reviewed_by`、`documents`、`facts`、`dividends`、`year_reviews`。每份 `documents` 记录填写本地唯一 `key`、正式公告直达 `url`、文件 `sha256`、公告 `announcement_id`、`title`、`document_type`、`report_period` 和 `announcement_date`。每项 `facts` 填 `report_period`、`metric_code`、原始元数值 `value`、`period_type`（前三季度为 `year_to_date`，年报为 `annual`）和公告 `document` 键。每项 `dividends` 填 `plan_key`、`fiscal_year`、`report_period`、`event_stage`、税前 `cash_dividend_per_share` 和 `cash_dividend_total`，并用 `documents: [{"key":"…","role":"approval"}]` 关联预案、授权、批准或实施公告；已批准方案还需 `approval_basis`。已实施方案还需除息日 `ex_date` 和每股送股、转增比例（无送转填0），以免影响含息总回报。每项还须填写 `supersedes_candidates`：列出同一方案在结构化来源中的候选公告编号，没有时填空列表，防止列表股息率和含息回报重复计入。每项 `year_reviews` 填 `fiscal_year`、`status`（`pending`、`authorization_only` 或 `complete`）与核验依据 `document`。只有确认该年所有分红事项已查全，才能填写 `complete`；无分红年度还需正式不分红依据。
 
-本地开发先执行 `20261115100000_quarterly_verified_facts.sql`，再导入经核验的来源、运行 `publish-dashboard`。季度结果随发布版本保存，详情 API 只返回所选资产的季度数据，列表不传输这些明细。发布前核对云铝股份和其他股票的正式报告、分红阶段、缺数原因与版本；本地 Mock 浏览器测试只验证展示交互，不能证明生产数据已补齐。此处是本地实现说明，不表示数据库迁移、Edge 或 Pages 已在生产部署。
+生产数据库已执行 `20261115100347_quarterly_verified_facts.sql`。导入经核验的来源后，需重新运行 `publish-dashboard`；季度结果随发布版本保存，详情 API 只返回所选资产的季度数据，列表不传输这些明细。发布前核对云铝股份和其他股票的正式报告、分红阶段、缺数原因与版本；本地 Mock 浏览器测试只验证展示交互，不能证明生产数据已补齐。
 
 飞书派发只读取完整的 `dashboard_versions`，周一至周六在 08:00—09:30 每 10 分钟检查；同一内容版本只成功派发一次，周日不发送：
 
