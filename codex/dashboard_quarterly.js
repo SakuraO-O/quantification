@@ -64,7 +64,7 @@ window.TrendQuarterly = (() => {
     if (!host || !data) return;
     const rows = [1,2,3,4].map(q => [`Q${q}`, ...data.years.map(year => year.quarters[q-1])]);
     if (ratio(key)) rows.push([key === "roe" ? "年度ROE" : "年末资产负债率",
-      ...data.years.map(year => year.year_quarter === 4 ? {value:year.year_value} : {value:null,status:"未披露"})]);
+      ...data.years.map(year => year.quarters[3])]);
     else {
       rows.push(["全年／已披露累计", ...data.years.map(year => ({value:year.year_value,status:year.year_status}))]);
       rows.push(["同期累计同比", ...data.years.map(year => year.comparison)]);
