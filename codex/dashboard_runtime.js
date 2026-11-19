@@ -25,6 +25,8 @@
     historyRanges: new Map(),
     detailErrors: new Map(),
     detailRequests: new Map(),
+    fundamentalDetails: new Map(),
+    historyCache: new Map(),
     permissions: new Set(["view_dashboard", "view_fundamentals", "edit_configuration"])
   };
   // Mock is a precomputed fixture. It intentionally contains display results,
@@ -93,13 +95,15 @@
 
   function setSourceStatus(source, message, generatedAt) {
     runtimeState.source = source;
+    const publication = document.querySelector("#dashboard-publication-status");
+    if (publication) publication.hidden = source !== "api";
     const meta = document.querySelector(".topmeta");
     if (!meta) return;
     const parsedDate = generatedAt ? new Date(generatedAt) : null;
     const date = parsedDate && !Number.isNaN(parsedDate.getTime())
-      ? parsedDate.toLocaleString("zh-CN", {hour12:false}) : source === "mock" ? "2026-07-10" : "—";
+      ? parsedDate.toLocaleString("zh-CN", {hour12:false,timeZone:"Asia/Shanghai"}) : source === "mock" ? "2026-07-10" : "—";
     const label = document.createElement("b");
-    label.textContent = `数据更新 ${date}`;
+    label.textContent = `发布于 ${date}（北京时间）`;
     const badge = document.createElement("span");
     badge.id = "dashboard-source";
     badge.className = "source-pill " + (source === "api" ? "api" : source === "error" ? "error" : "mock");
@@ -159,8 +163,10 @@
       div: numberOr(asset.last_year_dividend) ?? blankDecimal,
       yield: delayed ? blankDecimal : (numberOr(asset.dividend_yield) ?? blankDecimal),
       dividendFiscalYear: asset.dividend_fiscal_year || null,
+      implementedDividend: asset.implemented_dividend_per_share, approvedDividend: asset.approved_dividend_per_share,
       dividendYieldStatus: asset.dividend_yield_status || "数据不足",
       dividendYieldIssue: asset.dividend_yield_issue || null,
+      dividendScopeStatus: asset.dividend_scope_status || "",
       dividendSafety: assessment.dividend_safety_status || asset.dividend_safety_status || "数据不足",
       fund: assessment.fundamental_status || asset.fundamental_status || "数据不足",
       period: assessment.report_period || "数据不足",
@@ -240,8 +246,44 @@
         lp: null, rp: null, la: "数据不足", ra: "数据不足"
       }));
     pairs.splice(0, pairs.length, ...publishedPairs, ...unavailablePairs);
+    if (runtimeState.version !== payload.version) {
+      runtimeState.histories.clear();
+      runtimeState.historyCache.clear();
+      runtimeState.historyRanges.clear();
+      runtimeState.fundamentalDetails.clear();
+      runtimeState.detailErrors.clear();
+    }
     runtimeState.version = payload.version || null;
     runtimeState.completeness = payload.completeness || {};
+    renderPublicationStatus(payload);
+  }
+
+  function renderPublicationStatus(payload) {
+    let host = document.querySelector("#dashboard-publication-status");
+    if (!host) {
+      host = document.createElement("div");
+      host.id = "dashboard-publication-status";
+      host.className = "data-note";
+      host.setAttribute("aria-live", "polite");
+      document.querySelector("main")?.prepend(host);
+    }
+    const time = value => value ? new Date(value).toLocaleString("zh-CN", {
+      timeZone:"Asia/Shanghai", year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", hour12:false
+    }) : "暂无记录";
+    const runtime = payload.runtime || {};
+    const labels = {current:"正常", pending:"已入库待发布", publishing:"正在发布", failed:"发布失败"};
+    const lines = [`本页发布于 ${time(payload.generated_at)}（北京时间）`, `最近成功检查 ${time(runtime.checked_at)}`];
+    const newer = runtime.current_version_id && runtime.current_version_id !== runtimeState.version;
+    if (newer) lines.push("有新版本，请刷新页面");
+    else if (runtime.state && runtime.state !== "current") lines.push(labels[runtime.state] || runtime.state);
+    for (const item of payload.market_dates || []) {
+      const calendar = (runtime.calendars || []).find(row => row.market === item.market);
+      const dates = item.dates || [];
+      const range = dates.length > 1 ? `${dates[0]}～${dates.at(-1)}` : dates[0] || "—";
+      const status = item.delayed ? " · 源数据延迟" : calendar?.is_trading_day === false ? " · 休市" : "";
+      lines.push(`${({CN:"A股",HK:"港股",US:"美股"})[item.market] || item.market}行情截至 ${range}${status}`);
+    }
+    host.textContent = lines.join("　｜　");
   }
 
   function renderAll() {
@@ -568,9 +610,11 @@
         item.classList.toggle("active", item === button);
         item.setAttribute("aria-pressed", String(item === button));
       });
-      window.TrendQuarterly.render(button.dataset.quarterMetric, stocks[detailIndex]?.quarterly);
+      const asset = stocks[detailIndex];
+      if (asset) asset.quarterMetric = button.dataset.quarterMetric;
+      window.TrendQuarterly.render(button.dataset.quarterMetric, asset?.quarterly);
     } else if (event.target.closest('.modal-tab[data-pane="quarter"]')) {
-      window.TrendQuarterly.render("net_profit", stocks[detailIndex]?.quarterly);
+      window.TrendQuarterly.render(stocks[detailIndex]?.quarterMetric || "net_profit", stocks[detailIndex]?.quarterly);
     }
   });
 
@@ -607,6 +651,7 @@
       metric("基本面状态", safeBadge(asset.fund)),
       metric("最新报告期", escapeHtml(assessment.report_period || "数据不足")),
       metric(`上一报告年度（${escapeHtml(asset.dividendFiscalYear || "—")}）每股分红`, dividendText),
+      metric("分红构成", `已实施 ${dividendAmount(asset.implementedDividend)} 元/股 · 已批准未实施 ${dividendAmount(asset.approvedDividend)} 元/股 · ${escapeHtml(asset.dividendScopeStatus || "")}`),
       metric("主要变化", escapeHtml(asset.change || "数据不足"))
     ].join("");
     return `<div class="overview-grid">${overview}</div><div class="modal-tabs"><button class="modal-tab active" data-pane="price">价格与趋势</button>${fundamentals}</div>${pricePane}${fundamentalPanes}`;
@@ -679,33 +724,54 @@
   runtimeState.saveAllocation = saveAllocation;
 
   const rangeKey = months => ({3:"3m",6:"6m",12:"1y",36:"3y",60:"5y"})[months] || "1y";
-  const detailRequestKey = (asset, months) => `${asset.code}:${rangeKey(months)}`;
+  const detailRequestKey = (asset, months, section = "history") => `${runtimeState.version}:${asset.code}:${section}:${rangeKey(months)}`;
   const hasLoadedDetailRange = (asset, months = detailRange) => runtimeState.historyRanges.get(asset.code) === rangeKey(months);
   const isDetailLoading = (asset, months = detailRange) => {
     const key = detailRequestKey(asset, months);
     return runtimeState.detailRequests.has(key) || (!hasLoadedDetailRange(asset, months) && !runtimeState.detailErrors.has(key));
   };
-  async function loadAssetDetail(asset, months) {
+  function applyFundamentalDetail(asset, detail) {
+    if (detail.fundamental_assessment) {
+      asset.assessment = detail.fundamental_assessment;
+      asset.dividendSafety = detail.fundamental_assessment.dividend_safety_status || asset.dividendSafety;
+      asset.fund = detail.fundamental_assessment.fundamental_status || asset.fund;
+      asset.period = detail.fundamental_assessment.report_period || asset.period;
+      asset.change = detail.fundamental_assessment.main_risk || asset.change;
+    }
+    asset.financialFacts = detail.financial_facts || [];
+    asset.quarterly = detail.quarterly || null;
+    asset.dividendEvents = detail.dividend_events || [];
+    asset.industryMetrics = detail.industry_metrics || [];
+    asset.sources = detail.sources || [];
+  }
+  async function loadAssetDetail(asset, months, section = "history") {
     if (runtimeState.source !== "api") return;
-    const key = detailRequestKey(asset, months);
+    const key = detailRequestKey(asset, section === "fundamentals" ? 12 : months, section);
     if (runtimeState.detailRequests.has(key)) return runtimeState.detailRequests.get(key);
-    const request = apiFetch(`/asset/${encodeURIComponent(asset.code)}?range=${rangeKey(months)}`)
+    if (section === "fundamentals" && runtimeState.fundamentalDetails.has(key)) {
+      applyFundamentalDetail(asset, runtimeState.fundamentalDetails.get(key));
+      return;
+    }
+    if (section === "history" && runtimeState.historyCache.has(key)) {
+      runtimeState.histories.set(asset.code, runtimeState.historyCache.get(key));
+      runtimeState.historyRanges.set(asset.code, rangeKey(months));
+      return;
+    }
+    const version = runtimeState.version;
+    const request = apiFetch(`/asset/${encodeURIComponent(asset.code)}?range=${rangeKey(months)}&section=${section}&version=${encodeURIComponent(version || "")}`)
       .then(detail => {
-        runtimeState.histories.set(asset.code, detail);
-        runtimeState.historyRanges.set(asset.code, rangeKey(months));
+        if (version !== runtimeState.version) return;
         runtimeState.detailErrors.delete(key);
-        if (detail.fundamental_assessment) {
-          asset.assessment = detail.fundamental_assessment;
-          asset.dividendSafety = detail.fundamental_assessment.dividend_safety_status || asset.dividendSafety;
-          asset.fund = detail.fundamental_assessment.fundamental_status || asset.fund;
-          asset.period = detail.fundamental_assessment.report_period || asset.period;
-          asset.change = detail.fundamental_assessment.main_risk || asset.change;
+        if (section === "history") {
+          runtimeState.historyCache.set(key, detail);
+          if (months === detailRange) {
+            runtimeState.histories.set(asset.code, detail);
+            runtimeState.historyRanges.set(asset.code, rangeKey(months));
+          }
+          return detail;
         }
-        asset.financialFacts = detail.financial_facts || [];
-        asset.quarterly = detail.quarterly || null;
-        asset.dividendEvents = detail.dividend_events || [];
-        asset.industryMetrics = detail.industry_metrics || [];
-        asset.sources = detail.sources || [];
+        runtimeState.fundamentalDetails.set(key, detail);
+        applyFundamentalDetail(asset, detail);
         return detail;
       })
       .catch(error => {
@@ -717,19 +783,101 @@
     return request;
   }
 
+  let detailGeneration = 0;
   const originalOpenDetail = openDetail;
-  openDetail = function openDetailWithApi(type, index) {
-    originalOpenDetail(type, index);
-    const list = type === "index" ? indices : stocks;
-    const asset = list[Number(index)];
-    loadAssetDetail(asset, detailRange).then(() => {
-      if (document.querySelector("#detail-modal").open && detailType === type && detailIndex === Number(index)) {
-        originalOpenDetail(type, index);
+  function refreshDetailSection(asset, type, section) {
+    if (section === "history") {
+      document.querySelector('[data-detail-retry="history"]')?.remove();
+      const pane = document.querySelector("#pane-price");
+      if (!pane || pane.classList.contains("active")) drawPriceChart(asset, type);
+      if (type === "index") {
+        const template = document.createElement("div");
+        template.innerHTML = indexDetail(asset);
+        const title = document.querySelector("#pe-chart")?.closest(".chart-box")?.querySelector(".chart-title");
+        const updated = template.querySelector("#pe-chart")?.closest(".chart-box")?.querySelector(".chart-title");
+        if (title && updated) title.replaceChildren(...updated.childNodes);
+        drawPeChart(asset);
+      }
+      return;
+    }
+    const currentMetric = document.querySelector("[data-quarter-metric].active")?.dataset.quarterMetric || asset.quarterMetric || "net_profit";
+    const body = document.querySelector("#detail-content");
+    const scrollTop = body.scrollTop;
+    const quarterScroll = document.querySelector(".quarter-table-scroll")?.scrollLeft || 0;
+    const template = document.createElement("div");
+    template.innerHTML = stockDetail(asset);
+    for (const selector of [".overview-grid", "#pane-annual", "#pane-quarter", "#pane-source"]) {
+      const current = document.querySelector(`#detail-content ${selector}`);
+      const updated = template.querySelector(selector);
+      if (current && updated) current.replaceChildren(...updated.childNodes);
+    }
+    if (document.querySelector("#pane-quarter.active")) {
+      window.TrendQuarterly.render(currentMetric, asset.quarterly);
+      document.querySelectorAll("[data-quarter-metric]").forEach(button => {
+        const active = button.dataset.quarterMetric === currentMetric;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-pressed", String(active));
+      });
+    }
+    body.scrollTop = scrollTop;
+    const table = document.querySelector(".quarter-table-scroll");
+    if (table) table.scrollLeft = quarterScroll;
+  }
+  function requestDetailSection(asset, type, section, generation) {
+    return loadAssetDetail(asset, detailRange, section).then(() => {
+      if (generation === detailGeneration && document.querySelector("#detail-modal").open) {
+        refreshDetailSection(asset, type, section);
       }
     }).catch(error => {
-      console.warn("详情数据加载失败，保留当前摘要：", error);
+      if (generation !== detailGeneration || !document.querySelector("#detail-modal").open) return;
+      if (section === "history") {
+        drawUnavailableChart(document.querySelector("#price-chart"), "价格历史加载失败");
+        if (!document.querySelector('[data-detail-retry="history"]')) {
+          const button = document.createElement("button");
+          button.dataset.detailRetry = "history";
+          button.textContent = "重试价格历史";
+          document.querySelector("#price-chart")?.before(button);
+        }
+      }
+      else document.querySelectorAll("#pane-annual, #pane-quarter, #pane-source").forEach(pane => {
+        pane.innerHTML = '<div class="data-missing">基本面加载失败 <button data-detail-retry="fundamentals">重试</button></div>';
+      });
+      console.warn("详情区域加载失败：", error);
     });
+  }
+  openDetail = function openDetailWithApi(type, index) {
+    const wasOpen = document.querySelector("#detail-modal").open;
+    const pane = wasOpen && type === "stock" && detailType === "stock"
+      ? document.querySelector(".modal-tab.active")?.dataset.pane : "price";
+    originalOpenDetail(type, index);
+    if (pane && pane !== "price") {
+      document.querySelectorAll(".modal-tab").forEach(tab => tab.classList.toggle("active", tab.dataset.pane === pane));
+      document.querySelectorAll(".modal-pane").forEach(item => item.classList.toggle("active", item.id === `pane-${pane}`));
+    }
+    const asset = (type === "index" ? indices : stocks)[Number(index)];
+    if (!asset || runtimeState.source !== "api") return;
+    const generation = ++detailGeneration;
+    if (type === "stock" && runtimeState.permissions.has("view_fundamentals")) {
+      const key = detailRequestKey(asset, 12, "fundamentals");
+      if (!runtimeState.fundamentalDetails.has(key)) document.querySelectorAll("#pane-annual, #pane-quarter, #pane-source").forEach(pane => {
+        pane.innerHTML = '<div class="data-missing">正在加载基本面…</div>';
+      });
+      requestDetailSection(asset, type, "fundamentals", generation);
+    }
+    requestDetailSection(asset, type, "history", generation);
   };
+  document.querySelector("#detail-modal").addEventListener("close", () => { detailGeneration += 1; });
+  document.addEventListener("click", event => {
+    const retry = event.target.closest("[data-detail-retry]");
+    if (!retry) return;
+    const asset = (detailType === "index" ? indices : stocks)[detailIndex];
+    if (retry.dataset.detailRetry === "fundamentals") {
+      document.querySelectorAll("#pane-annual, #pane-quarter, #pane-source").forEach(pane => {
+        pane.innerHTML = '<div class="data-missing">正在加载基本面…</div>';
+      });
+    } else retry.textContent = "正在重试…";
+    requestDetailSection(asset, detailType, retry.dataset.detailRetry, detailGeneration);
+  });
 
   const mockDrawPriceChart = drawPriceChart;
   drawPriceChart = function drawApiPriceChart(asset, type) {
@@ -945,6 +1093,15 @@
     canvas.onmousemove = null; canvas.onmouseleave = null;
   }
 
+  function redrawActivePriceChart() {
+    if (!document.querySelector("#detail-modal").open) return;
+    const asset = (detailType === "index" ? indices : stocks)[detailIndex];
+    if (!asset) return;
+    const pricePane = document.querySelector("#pane-price");
+    if (!pricePane || pricePane.classList.contains("active")) drawPriceChart(asset, detailType);
+    if (detailType === "index") drawPeChart(asset);
+  }
+
   document.addEventListener("click", event => {
     const range = event.target.closest("[data-range]");
     if (!range || runtimeState.source !== "api") return;
@@ -1009,5 +1166,12 @@
     setSourceStatus("mock", "已退出 · 本地 Mock");
   });
   bindResearchTooltips();
+  setInterval(async () => {
+    if (runtimeState.source !== "api" || document.hidden) return;
+    try {
+      const status = await apiFetch(`/data-status?version=${encodeURIComponent(runtimeState.version || "")}`);
+      renderPublicationStatus(status);
+    } catch (_) { /* The last successful status remains visible until the next check. */ }
+  }, 60000);
   boot();
 })();

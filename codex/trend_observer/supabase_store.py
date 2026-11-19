@@ -7,8 +7,10 @@ only read in CI/Edge environments; it is never returned by this module.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, time, timezone
+from zoneinfo import ZoneInfo
 import hashlib
 import json
 import math
@@ -60,6 +62,7 @@ class SupabaseStore:
         self.settings = settings
         self.session = session or requests.Session()
         self.timeout = timeout
+        self.publication_check_id = None
 
     @classmethod
     def from_env(cls) -> "SupabaseStore | None":
@@ -264,6 +267,13 @@ class SupabaseStore:
             if candidate.weekday() < 5:
                 return candidate
 
+    def last_completed_trading_date(self, market: str, now: datetime) -> date:
+        zone, close = {"CN": ("Asia/Shanghai", time(15)), "HK": ("Asia/Hong_Kong", time(16)),
+                       "US": ("America/New_York", time(16))}[market]
+        local = now.astimezone(ZoneInfo(zone))
+        boundary = local.date() + timedelta(days=1) if local.time() >= close else local.date()
+        return self.previous_trading_date(market, boundary)
+
     def valuation_history(self, security_id: str, valuation_type: str = "pe") -> list[dict]:
         return self.select(
             "valuation_daily",
@@ -287,24 +297,60 @@ class SupabaseStore:
     def save_style_result(self, row: dict) -> list[dict]:
         return self.upsert("style_compass_results", row, "as_of_date,left_security_id,right_security_id,calculation_version")
 
+    def create_dashboard_batch(self, phase: str, tasks: dict | None = None) -> str:
+        return self.insert("dashboard_batches", {"phase": phase, "tasks": tasks or {}})[0]["batch_id"]
+
+    def record_batch_task(self, batch_id: str, task: str, status: str) -> None:
+        self.rpc("record_dashboard_batch_task", {"p_batch": batch_id, "p_task": task, "p_status": status})
+
+    @contextmanager
+    def publication(self, batch_id: str | None = None):
+        batch_id = batch_id or self.create_dashboard_batch("manual")
+        attempt = self.rpc("begin_dashboard_publication", {"p_batch": batch_id})
+        self.publication_check_id = attempt["check_id"]
+        try:
+            yield
+        except BaseException as exc:
+            self.rpc("fail_dashboard_publication", {"p_check": self.publication_check_id, "p_error": str(exc)[:2000]})
+            raise
+        finally:
+            self.publication_check_id = None
+
     def publish_dashboard_version(self, payload: dict, *, is_complete: bool, completeness: dict, calculation_version: str, source_run_id: str | None = None) -> dict:
+        if not self.publication_check_id:
+            raise RuntimeError("发布必须先取得数据库发布锁")
         content_hash = payload_hash(payload | {"is_complete": is_complete, "completeness": completeness, "calculation_version": calculation_version})
-        rows = self.upsert(
-            "dashboard_versions",
-            {
-                "latest_market_date": payload.get("latest_market_date"),
-                "is_complete": is_complete,
-                "completeness": completeness,
-                "payload": payload,
-                "calculation_version": calculation_version,
-                "source_run_id": source_run_id,
-                "content_hash": content_hash,
-            },
-            "content_hash",
-        )
-        return rows[0]
+        return self.rpc("finish_dashboard_publication", {
+            "p_check": self.publication_check_id, "p_payload": payload,
+            "p_complete": is_complete, "p_completeness": completeness,
+            "p_calculation_version": calculation_version, "p_content_hash": content_hash,
+            "p_source_run": source_run_id,
+        })
+
+    def dashboard_runtime_status(self) -> dict:
+        return self.rpc("dashboard_runtime_status") or {}
+
+    def ready_morning_version(self, business_date: str) -> dict | None:
+        batches = self.select("dashboard_batches", filters={"phase": "eq.morning", "business_date": f"eq.{business_date}"}, order="started_at.desc", limit=1)
+        if not batches:
+            return None
+        tasks = batches[0]["tasks"]
+        if not tasks or any(status not in ("succeeded", "degraded") for status in tasks.values()):
+            return None
+        checks = self.select("dashboard_publication_checks", filters={"batch_id": f"eq.{batches[0]['batch_id']}"}, order="started_at.desc", limit=1)
+        if not checks or checks[0]["status"] != "succeeded":
+            return None
+        versions = self.select("dashboard_versions", filters={"dashboard_version_id": f"eq.{checks[0]['dashboard_version_id']}", "is_complete": "eq.true"}, limit=1)
+        return (versions[0] | {"checked_at": checks[0]["finished_at"], "business_date": business_date}) if versions else None
+
+    def claim_dispatch(self, dispatch_key: str, version_id: str | None, message_type: str) -> bool:
+        return bool(self.rpc("claim_dashboard_dispatch", {"p_key": dispatch_key, "p_version": version_id, "p_type": message_type}))
 
     def latest_complete_dashboard_version(self) -> dict | None:
+        current = self.dashboard_runtime_status().get("current_version_id")
+        if current:
+            versions = self.select("dashboard_versions", filters={"dashboard_version_id": f"eq.{current}"}, limit=1)
+            return versions[0] if versions else None
         rows = self.select("dashboard_versions", filters={"is_complete": "eq.true"}, order="generated_at.desc", limit=1)
         return rows[0] if rows else None
 
@@ -335,6 +381,7 @@ class SupabaseStore:
                 "response_code": response_code,
                 "error": error,
                 "dispatch_key": dispatch_key,
+                "sent_at": datetime.now(timezone.utc).isoformat(),
             },
             "dispatch_key",
         )

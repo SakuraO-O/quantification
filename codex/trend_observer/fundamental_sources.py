@@ -143,6 +143,33 @@ class FundamentalSource:
         )
 
 
+def _exchange_listing_loader():
+    """Load each official exchange directory once, including failed requests."""
+    import akshare as ak
+    cache = {}
+    def load(symbol):
+        shanghai = symbol.startswith("6")
+        board = "科创板" if symbol.startswith("688") else "主板A股"
+        key = board if shanghai else "深圳A股"
+        if key not in cache:
+            try:
+                cache[key] = ak.stock_info_sh_name_code(board) if shanghai else ak.stock_info_sz_name_code()
+            except Exception as exc:
+                cache[key] = exc
+        table = cache[key]
+        if isinstance(table, Exception):
+            raise table
+        code_column, date_column = ("证券代码", "上市日期") if shanghai else ("A股代码", "A股上市日期")
+        matches = table[table[code_column].astype(str).str.zfill(6) == symbol]
+        if len(matches) != 1:
+            raise ValueError("交易所上市名录未唯一匹配证券")
+        listed = _date(matches.iloc[0][date_column])
+        if listed is None:
+            raise ValueError("交易所上市日期缺失")
+        return {"item": ["股票代码", "上市时间"], "value": [symbol, listed.strftime("%Y%m%d")]}
+    return load
+
+
 class FundamentalSynchronizer:
     """Fetch financial facts and dividend events without coupling assets together."""
 
@@ -508,6 +535,42 @@ class FundamentalSynchronizer:
             self.store.add_run_item(run_id, dataset_key=key, status=result.status, rows_received=result.rows_received,
                                     rows_changed=result.rows_changed, first_affected_date=result.first_affected_date, message=result.message)
         return result
+
+    def sync_listing_dates(self, *, force: bool = False, loader=None) -> list[SyncResult]:
+        """One-time metadata backfill; listing dates never come from price-history bounds."""
+        exchange_source = loader is None
+        loader = loader or _exchange_listing_loader()
+        results = []
+        rows = self.store.select("securities", filters={"asset_type": "eq.股票", "market": "eq.CN", "is_active": "eq.true"})
+        for row in rows:
+            if row.get("listing_date") and not force:
+                continue
+            symbol = row["symbol"]
+            try:
+                with _source_timeout(SOURCE_TIMEOUT_SECONDS):
+                    info = loader(symbol[-6:])
+                values = dict(zip(info["item"], info["value"]))
+                reported_symbol = str(values.get("股票代码", "")).zfill(6)
+                if reported_symbol != symbol[-6:]:
+                    raise ValueError("上市信息证券代码不一致")
+                raw = str(values.get("上市时间", "")).split(".")[0]
+                listed = datetime.strptime(raw, "%Y%m%d").date()
+                asset = {"symbol": symbol, "market": "CN", "name": row["name"]}
+                source = ("sse" if symbol.startswith("sh") else "szse") if exchange_source else "eastmoney"
+                source_url = ("https://www.sse.com.cn/assortment/stock/list/share/" if source == "sse"
+                              else "https://www.szse.cn/market/product/stock/list/index.html" if source == "szse"
+                              else f"https://quote.eastmoney.com/{symbol}.html")
+                document_id = self._source_document(asset, source=source,
+                    record_id=f"{symbol}:listing-date", title=f"{row['name']} A股上市日期",
+                    document_type="structured_security_metadata", report_period=None, announcement_date=None,
+                    url=source_url,
+                    evidence={"symbol": symbol, "listing_date": listed.isoformat()})
+                self.store.patch("securities", {"security_id": f"eq.{row['security_id']}"},
+                                 {"listing_date": listed.isoformat(), "listing_source_document_id": document_id})
+                results.append(SyncResult(symbol, f"metadata:CN:{symbol}", "succeeded", rows_changed=1))
+            except Exception as exc:
+                results.append(SyncResult(symbol, f"metadata:CN:{symbol}", "failed", message=str(exc)))
+        return results
 
     def sync_assets(self, assets: list[dict], *, trigger_type: str = "schedule", today: date | None = None, force: bool = False) -> list[SyncResult]:
         run_id = self.store.start_run("sync_fundamentals", trigger_type)

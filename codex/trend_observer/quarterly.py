@@ -154,7 +154,7 @@ def _dividend_year(year: int, events: list[dict], review: dict | None, profit: D
 
 def build_quarterly(
     facts: list[dict], events: list[dict], documents: list[dict],
-    year_reviews: list[dict],
+    year_reviews: list[dict], listing_date: str | None = None,
 ) -> dict:
     """Return a versionable, presentation-ready ten-year quarterly contract."""
     sources = {str(row.get("source_document_id")): row for row in documents}
@@ -175,6 +175,16 @@ def build_quarterly(
         return {"status": "数据不足", "reason": "尚无已入库的定期报告", "years": [], "metrics": {}, "dividends": {}}
     latest_year, latest_quarter = max((year, q) for year, q, _ in reported)
     years = list(range(latest_year - 9, latest_year + 1))
+    # Report documents establish disclosure even when the selected metric is absent.
+    disclosed = {(year, quarter) for year, quarter, _ in reported}
+    for document in documents:
+        if document.get("document_type") in ("annual_report", "quarterly_report", "semi_annual_report", "financial_report"):
+            year, quarter = _year(document.get("report_period")), _quarter(document.get("report_period"))
+            if year and quarter:
+                disclosed.add((year, quarter))
+    if listing_date:
+        listed_year = date.fromisoformat(str(listing_date)[:10]).year
+        years = [year for year in years if year >= listed_year or any(y == year for y, _ in disclosed)]
     reviews = {int(row["fiscal_year"]): row for row in year_reviews
                if str(row.get("source_document_id")) in sources}
     metrics = {}
@@ -185,7 +195,13 @@ def build_quarterly(
             for q in range(1, 5):
                 fact = verified.get((year, q, metric))
                 prior = verified.get((year, q - 1, metric)) if q > 1 and metric in AMOUNTS else None
-                cells.append(_cell(fact, prior, metric, sources))
+                cell = _cell(fact, prior, metric, sources)
+                if (year, q) not in disclosed:
+                    cell = {"value": None, "status": "未披露", "reason": "尚无该报告期披露记录"}
+                elif fact is None:
+                    candidate = reported.get((year, q, metric))
+                    cell["reason"] = "报告尚未核验" if candidate else "报告未提供该指标"
+                cells.append(cell)
             last = max((q for q in range(1, 5) if (year, q, metric) in verified), default=0)
             current = verified.get((year, last, metric)) if last else None
             previous = verified.get((year - 1, last, metric)) if last else None
@@ -233,4 +249,6 @@ def build_quarterly(
         }
     return {"status": "已计算",
             "reason": None if verified else "已入库报告尚未完成正式公告核验",
-            "years": years, "metrics": metrics, "dividends": dividends, "top": top}
+            "years": years, "metrics": metrics, "dividends": dividends, "top": top,
+            "year_range_issue": None if listing_date else "上市日期待补充，保留近十年范围",
+            "dividend_year_complete": {str(year): reviews.get(year, {}).get("status") == "complete" for year in years}}

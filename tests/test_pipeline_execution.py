@@ -31,9 +31,10 @@ class PipelineExecutionTest(unittest.TestCase):
         self.assertIn("CALL:sync-market --market CN --trigger retry", result.stdout)
 
     def test_failed_publish_does_not_dispatch_old_report(self):
-        result = self.run_pipeline("0,10,20,30 1 * * 1-6", "publish-dashboard")
+        result = self.run_pipeline("0,10,20,30 1 * * 1-6", "retry-morning-publication")
         self.assertEqual(result.returncode, 1)
-        self.assertNotIn("CALL:dispatch-feishu", result.stdout)
+        self.assertIn("CALL:dispatch-feishu", result.stdout)
+        self.assertIn("checking delay notice", result.stdout)
 
     def test_evening_retry_failure_does_not_cancel_valuation(self):
         result = self.run_pipeline("30 12 * * *", "sync-market --market CN --trigger retry")

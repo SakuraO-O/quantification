@@ -67,19 +67,20 @@ async function mockBackend(page, options = {}) {
       if (state.overviewStatus) return json(route, { error: 'dashboard_not_ready' }, state.overviewStatus);
       return json(route, {
         version: 'local-fixed-version-1', generated_at: '2026-10-10T10:00:00Z',
+        runtime: state.runtime || null, market_dates: state.marketDates || [],
         completeness: { asset_catalog_valid: true }, permissions: ['view_dashboard', 'view_fundamentals', 'edit_configuration'],
         assets: state.incompleteCatalog ? assets.slice(0, 1) : (state.customAssets || assets),
         style_compass: state.styleCompass || [], allocation: state.allocation
       });
     }
     if (url.pathname.startsWith('/functions/v1/dashboard-api/asset/')) {
-      if (state.holdDetails) await new Promise(resolve => state.detailGates.push(resolve));
+      if (state.holdDetails && url.searchParams.get("section") !== "fundamentals") await new Promise(resolve => state.detailGates.push(resolve));
       const symbol = decodeURIComponent(url.pathname.split('/').pop());
       const asset = (state.customAssets || assets).find(item => item.symbol === symbol);
       return json(route, {
         version: 'local-fixed-version-1', asset, range: url.searchParams.get('range'),
         history: state.customDetailHistory || ['2026-10-08', '2026-10-09', '2026-10-10'].map((date, index) => ({
-          trade_date: date, close: (asset?.close || 30) + index, ma20: 29 + index,
+          trade_date: date, close: (asset?.close || 30) + index + (url.searchParams.get("range") === "5y" ? 100 : 0), ma20: 29 + index,
           ma60: 28 + index, ma120: 27 + index, ma200: 26 + index,
           short_trend: '短期强势', mid_trend: '中期上升', long_trend: '长期上升',
           pe: 12, pe_percentile: 40
@@ -306,7 +307,7 @@ test('renders published quarterly figures, switches metrics, and shows source la
     source: { report_period: period, source: '巨潮资讯', announcement_date: '2026-10-28' },
     minus_source: minus && { report_period: minus, source: '巨潮资讯', announcement_date: '2026-08-20' }
   });
-  const missing = { value: null, status: '数据不足' };
+  const missing = { value: null, status: '未披露' };
   const metric = (label, amount = 100000000) => ({
     label, unit: 'CNY', years: [
       { quarters: [cell(amount, '2025-03-31'), cell(amount, '2025-06-30', '2025-03-31'), missing, missing],
@@ -336,19 +337,38 @@ test('renders published quarterly figures, switches metrics, and shows source la
         [key, { value: 0, comparison: { value: -100, status: '已计算' } }]))
     }
   };
-  const state = await mockBackend(page, { detailQuarterly: quarterly });
+  const state = await mockBackend(page, { detailQuarterly: quarterly, holdDetails: true });
   await login(page);
   await page.locator('.tab[data-view="stock"]').click();
   await page.locator('#stock-body tr').click();
-  await page.waitForFunction(() => window.__trendDashboardRuntime.histories.has('600900'));
+  await page.waitForFunction(() => window.__trendDashboardRuntime.fundamentalDetails.size > 0);
   await page.locator('.modal-tab[data-pane="quarter"]').click();
   await expect(page.locator('#pane-quarter')).toContainText('2025报告年度');
   await expect(page.locator('#quarter-content')).toContainText('含已批准未实施');
   await expect(page.locator('#quarter-content .quarter-bar.quarter-negative')).toHaveCount(1);
+  await expect(page.locator('.quarter-matrix tbody tr').filter({hasText:'全年／已披露累计'}).locator('td').first()).toHaveCSS('font-weight', '700');
+  await expect(page.locator('.quarter-matrix tbody tr').filter({hasText:'Q4'}).locator('td').last()).toHaveText('-');
+  await expect(page.locator('.quarter-matrix tbody')).not.toContainText('亿元');
   await page.locator('#quarter-content [data-quarter-tip]').first().hover();
+  await expect(page.locator('#detail-modal #quarter-tooltip')).toBeVisible();
   await expect(page.locator('#quarter-tooltip')).toContainText('本期依据：2025-03-31 · 巨潮资讯');
+  const tooltipOnTop = await page.locator('#quarter-tooltip').evaluate(tip => tip.closest('dialog')?.open);
+  expect(tooltipOnTop).toBe(true);
   await page.locator('[data-quarter-metric="asset_liability_ratio"]').click();
   await expect(page.locator('#quarter-content .quarter-line-chart')).toBeVisible();
+  await page.locator('.quarter-line-chart circle').first().hover();
+  await expect(page.locator('#quarter-tooltip')).toBeVisible();
+  await expect.poll(() => state.detailGates.length).toBe(1);
+  state.detailGates.shift()();
+  await page.waitForFunction(() => window.__trendDashboardRuntime.histories.has('600900'));
+  await expect(page.locator('#pane-quarter')).toBeVisible();
+  await expect(page.locator('[data-quarter-metric="asset_liability_ratio"]')).toHaveClass(/active/);
+  await page.locator('[data-close="detail-modal"]').click();
+  await page.evaluate(() => window.dispatchEvent(new Event('trend-dashboard-authenticated')));
+  await expect(page.locator('#dashboard-source')).toHaveClass(/api/);
+  await page.locator('#stock-body tr').click();
+  await page.locator('.modal-tab[data-pane="quarter"]').click();
+  await expect(page.locator('#pane-quarter')).toContainText('2025报告年度');
   expect(state.unexpected).toEqual([]);
 });
 
@@ -375,4 +395,35 @@ test('renders API text as text instead of executable markup', async ({ page }) =
   await expect(page.locator('#index-body img')).toHaveCount(0);
   expect(await page.evaluate(() => window.__injected || false)).toBe(false);
   expect(state.unexpected).toEqual([]);
+});
+
+test('shows publication time, independent check state and market cutoff dates', async ({page}) => {
+  await mockBackend(page, {
+    runtime: {state:'pending', checked_at:'2026-10-10T11:00:00Z', current_version_id:'local-fixed-version-1', calendars:[{market:'CN', is_trading_day:false}]},
+    marketDates: [{market:'CN', dates:['2026-10-09'], delayed:false}, {market:'US', dates:['2026-10-08','2026-10-09'], delayed:true}]
+  });
+  await login(page);
+  const status = page.locator('#dashboard-publication-status');
+  await expect(status).toContainText('本页发布于');
+  await expect(status).toContainText('最近成功检查');
+  await expect(status).toContainText('已入库待发布');
+  await expect(status).toContainText('A股行情截至 2026-10-09 · 休市');
+  await expect(status).toContainText('美股行情截至 2026-10-08～2026-10-09 · 源数据延迟');
+  await page.locator('#dashboard-logout').click();
+  await expect(status).not.toBeVisible();
+});
+
+test('redraws chart after changing its time range without JavaScript errors', async ({page}) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await mockBackend(page);
+  await login(page);
+  await page.locator('.tab[data-view="stock"]').click();
+  await page.locator('#stock-body tr').click();
+  await page.waitForFunction(() => window.__trendDashboardRuntime.historyRanges.get('600900') === '1y');
+  await page.locator('[data-range="60"]').click();
+  await page.waitForFunction(() => window.__trendDashboardRuntime.historyRanges.get('600900') === '5y');
+  await page.locator('#price-chart').hover();
+  await expect(page.locator('#dashboard-chart-tooltip')).toContainText(/13[0-2]\.00/);
+  expect(errors).toEqual([]);
 });

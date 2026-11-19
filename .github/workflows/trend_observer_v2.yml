@@ -17,7 +17,7 @@ on:
         required: true
         default: "sync-market"
         type: choice
-        options: ["bootstrap", "sync-market", "sync-valuation", "sync-fundamentals", "rebuild-gem100", "rebuild-manual-index", "publish-dashboard", "dispatch-feishu"]
+        options: ["sync-security-metadata", "bootstrap", "sync-market", "sync-valuation", "sync-fundamentals", "rebuild-gem100", "rebuild-manual-index", "publish-dashboard", "dispatch-feishu"]
       symbol:
         description: "Manual PE index for rebuild-manual-index"
         required: false
@@ -81,6 +81,10 @@ jobs:
           MANUAL_FORCE: ${{ inputs.force }}
         run: |
           failed=0
+          begin_batch() {
+            DASHBOARD_BATCH_ID=$(python -u -B -m codex.trend_observer.cli begin-batch --phase "$1")
+            export DASHBOARD_BATCH_ID
+          }
           run_task() {
             if python -u -B -m codex.trend_observer.cli "$@"; then
               echo "Completed: $*"
@@ -98,9 +102,12 @@ jobs:
           elif [ "$SCHEDULE" = "45 10 * * *" ]; then
             run_task sync-market --market CN
           elif [ "$SCHEDULE" = "30 12 * * *" ]; then
+            begin_batch evening
             run_task sync-market --market CN --trigger retry
             run_task sync-valuation --market CN --force
+            run_task publish-dashboard
           elif [ "$SCHEDULE" = "30 23 * * *" ]; then
+            begin_batch morning
             run_task sync-market --market CN --trigger retry
             run_task sync-market --market HK
             run_task sync-market --market US
@@ -110,12 +117,15 @@ jobs:
             # Publish freshly synchronized assessments so overview/list fields
             # do not wait for the 08:00 dispatch window.
             run_task publish-dashboard
+            # A delayed morning pipeline may finish after the 09:30 polling window.
+            run_task dispatch-feishu
           else
             # Dispatch must not silently send a prior version if publish fails.
-            if python -u -B -m codex.trend_observer.cli publish-dashboard; then
+            if python -u -B -m codex.trend_observer.cli retry-morning-publication; then
               run_task dispatch-feishu
             else
-              echo "::error::Dashboard publication failed; notification skipped"
+              echo "::error::Morning publication unavailable; checking delay notice"
+              run_task dispatch-feishu
               failed=1
             fi
           fi

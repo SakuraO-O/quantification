@@ -6,6 +6,7 @@ window.TrendQuarterly = (() => {
     ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[char]));
   const number = (value, key) => value == null ? "数据不足" :
     `${(Number(value) / (ratio(key) ? 1 : 1e8)).toFixed(2)}${ratio(key) ? "%" : "亿元"}`;
+  const tableNumber = (value, key) => (Number(value) / (ratio(key) ? 1 : 1e8)).toFixed(2) + (ratio(key) ? "%" : "");
   const percent = value => value?.value == null ? escape(value?.status || "数据不足") :
     `${value.value > 0 ? "+" : ""}${Number(value.value).toFixed(2)}%`;
   const negative = value => value < 0 ? "quarter-negative" : "";
@@ -57,6 +58,8 @@ window.TrendQuarterly = (() => {
 
   function render(key, quarterly) {
     const host = document.querySelector("#quarter-content");
+    activeTarget = null;
+    document.querySelector("#quarter-tooltip")?.remove();
     const data = quarterly?.metrics?.[key], years = quarterly?.years;
     if (!host || !data) return;
     const rows = [1,2,3,4].map(q => [`Q${q}`, ...data.years.map(year => year.quarters[q-1])]);
@@ -68,7 +71,7 @@ window.TrendQuarterly = (() => {
     }
     rows.push(["每股分红（元/股）", ...years.map(year => quarterly.dividends[String(year)])]);
     rows.push(["股利支付率", ...years.map(year => quarterly.dividends[String(year)])]);
-    const body = rows.map(([label,...cells]) => `<tr><th>${escape(label)}</th>${cells.map(cell => {
+    const body = rows.map(([label,...cells]) => `<tr class="${["全年／已披露累计", "年度ROE", "年末资产负债率"].includes(label) ? "quarter-annual-total" : ""}"><th>${escape(label)}</th>${cells.map(cell => {
       let value;
       if (label === "每股分红（元/股）") value = cell?.per_share == null
         ? escape(cell?.status || "数据不足")
@@ -76,7 +79,7 @@ window.TrendQuarterly = (() => {
       else if (label === "股利支付率") value = cell?.payout_ratio == null
         ? escape(cell?.status || "数据不足") : `${Number(cell.payout_ratio).toFixed(2)}%`;
       else if (label === "同期累计同比") value = percent(cell);
-      else value = cell?.value == null ? escape(cell?.status || "数据不足") : number(cell.value, key);
+      else value = cell?.value == null ? (cell?.status === "未披露" ? "-" : escape(cell?.reason || cell?.status || "数据不足")) : tableNumber(cell.value, key);
       const tone = negative(cell?.value);
       return `<td class="${tone} ${label.startsWith("每股分红") && cell?.per_share === 0 ? "quarter-zero" : ""}">${value}</td>`;
     }).join("")}</tr>`).join("");
@@ -98,13 +101,15 @@ window.TrendQuarterly = (() => {
       ${summary("net_profit","归母净利润")}${summary("deducted_net_profit","扣非归母净利润")}${summary("revenue","营业总收入")}
       <div class="metric-card"><small>${top.dividend_year}年每股分红</small><b>已实施：${perShare(dividend.implemented_per_share)}</b><small>已批准未实施：${perShare(dividend.approved_per_share)} · ${escape(dividend.status)}</small></div>
       <div class="metric-card"><small>上一年度股利支付率 · ${escape(top.payout_year || "—")}报告年度</small><b>${payout.payout_ratio == null ? escape(payout.status || "数据不足") : Number(payout.payout_ratio).toFixed(2) + "%"}</b></div>
-    </div><div class="chart-box"><div class="chart-title"><h4>近10年季度经营</h4><small>仅展示已核验财报</small></div>
+    </div><div class="chart-box"><div class="chart-title"><h4>近10年季度经营</h4><small>仅展示已核验财报${quarterly.year_range_issue ? ` · ${escape(quarterly.year_range_issue)}` : ""}</small></div>
       <div class="quarter-control">${keys.map((key,i) => `<button class="chart-chip ${i ? "" : "active"}" data-quarter-metric="${key}" aria-pressed="${!i}">${escape(quarterly.metrics[key]?.label || key)}</button>`).join("")}</div>
       <div id="quarter-content"></div></div>`;
   }
 
   let activeTarget = null;
+  let pointerPosition = null;
   document.addEventListener("pointermove", event => {
+    pointerPosition = {x:event.clientX, y:event.clientY};
     const target = event.target.closest?.("[data-quarter-tip]");
     const tip = document.querySelector("#quarter-tooltip");
     if (!target) {
@@ -112,7 +117,9 @@ window.TrendQuarterly = (() => {
       if (tip) tip.hidden = true;
       return;
     }
-    const visibleTip = tip || Object.assign(document.body.appendChild(document.createElement("div")), {id:"quarter-tooltip"});
+    const host = target.closest("dialog") || document.body;
+    const visibleTip = tip || Object.assign(document.createElement("div"), {id:"quarter-tooltip", className:"chart-tooltip"});
+    if (visibleTip.parentElement !== host) host.appendChild(visibleTip);
     if (target !== activeTarget) {
       activeTarget = target;
       visibleTip.replaceChildren(...target.dataset.quarterTip.split("|").map((line, index) => {
@@ -122,13 +129,25 @@ window.TrendQuarterly = (() => {
         return row;
       }));
     }
+    visibleTip.style.visibility = "hidden";
     visibleTip.hidden = false;
     visibleTip.style.left = `${Math.max(8, event.clientX + 334 > innerWidth ? event.clientX - 334 : event.clientX + 14)}px`;
-    visibleTip.style.top = `${Math.max(8, event.clientY + 150 > innerHeight ? event.clientY - 150 : event.clientY + 14)}px`;
+    const bounds = visibleTip.getBoundingClientRect();
+    visibleTip.style.left = `${Math.max(8, Math.min(event.clientX + 14, innerWidth - bounds.width - 8))}px`;
+    visibleTip.style.top = `${Math.max(8, Math.min(event.clientY + 14, innerHeight - bounds.height - 8))}px`;
+    visibleTip.style.visibility = "visible";
   });
-  document.addEventListener("mouseleave", () => {
+  const hideTooltip = () => {
     const tip = document.querySelector("#quarter-tooltip");
+    activeTarget = null;
     if (tip) tip.hidden = true;
-  });
+  };
+  document.addEventListener("mouseleave", hideTooltip);
+  document.addEventListener("scroll", event => {
+    const hovered = pointerPosition && document.elementFromPoint(pointerPosition.x, pointerPosition.y)?.closest("[data-quarter-tip]");
+    if (event.target.matches?.(".quarter-chart-scroll, .quarter-table-scroll") || hovered !== activeTarget) hideTooltip();
+  }, true);
+  document.addEventListener("click", hideTooltip);
+  document.addEventListener("close", hideTooltip, true);
   return {pane, render};
 })();

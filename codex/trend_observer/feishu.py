@@ -31,7 +31,20 @@ def format_dashboard_version_message(version):
 
     payload = version.get("payload", version)
     latest_date = payload.get("latest_market_date") or "--"
-    lines = [f"{FEISHU_KEYWORD} | 趋势观察晨报 | 数据截至 {latest_date}", ""]
+    business_date = version.get("business_date") or latest_date
+    lines = [f"{FEISHU_KEYWORD} | 趋势观察晨报 | {business_date}", ""]
+    for label, timestamp in (("本页发布于", version.get("generated_at")), ("最近成功检查", version.get("checked_at"))):
+        if timestamp:
+            shown = pd.Timestamp(timestamp).tz_convert(MARKET_TIMEZONE).strftime("%Y-%m-%d %H:%M")
+            lines.append(f"{label} {shown}（北京时间）")
+    for market in ("CN", "HK", "US"):
+        dates = sorted({str(row.get("last_valid_trade_date") or row.get("trade_date"))[:10]
+                        for row in payload.get("assets", []) if row.get("market") == market
+                        and (row.get("last_valid_trade_date") or row.get("trade_date"))})
+        if dates:
+            label = {"CN":"A股", "HK":"港股", "US":"美股"}[market]
+            lines.append(f"{label}行情截至 {dates[0] if len(dates) == 1 else dates[0] + '～' + dates[-1]}")
+    lines.append("")
     issues = (version.get("completeness") or {}).get("asset_issues") or []
     if issues:
         labels = "、".join(
