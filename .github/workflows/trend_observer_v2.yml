@@ -38,7 +38,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: trend-observer-v2-${{ github.event.schedule || inputs.command }}
+  group: trend-observer-v2-${{ github.event.schedule || inputs.command }}-${{ inputs.market || 'all' }}
   cancel-in-progress: false
 
 jobs:
