@@ -42,6 +42,21 @@ class PublicationReadinessTest(unittest.TestCase):
                 dispatch_morning_report(store, datetime(2026, 11, 19, 8, tzinfo=ZoneInfo('Asia/Shanghai')))
         store.record_dispatch.assert_not_called()
 
+    def test_listing_directory_is_requested_once_per_exchange(self):
+        store = Mock()
+        store.select.return_value = [
+            {"security_id":"a", "symbol":"sh600938", "name":"中国海油"},
+            {"security_id":"b", "symbol":"sh600941", "name":"中国移动"},
+        ]
+        store.upsert.return_value = [{"source_document_id":"official-listing"}]
+        source = FundamentalSource(finance=lambda _:None, dividends=lambda _:None)
+        directory = pd.DataFrame({"证券代码":["600938","600941"], "上市日期":["2022-04-21","2022-01-05"]})
+        with patch("akshare.stock_info_sh_name_code", return_value=directory) as load:
+            results = FundamentalSynchronizer(store,source).sync_listing_dates()
+        self.assertEqual(load.call_count,1)
+        self.assertTrue(all(result.status == "succeeded" for result in results))
+        self.assertEqual(store.upsert.call_args.args[1]["source"], "sse")
+
     def test_listing_date_requires_matching_security_and_keeps_evidence(self):
         store = Mock()
         store.select.return_value = [{'security_id': 'stock', 'symbol': 'sh600938', 'name': '中国海油'}]

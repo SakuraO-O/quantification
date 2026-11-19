@@ -1,6 +1,12 @@
 name: Trend Observer CI
 
 on:
+  workflow_dispatch:
+    inputs:
+      verify_production:
+        description: "Run read-only acceptance against the deployed dashboard"
+        type: boolean
+        default: false
   pull_request:
   push:
     branches: [main]
@@ -27,3 +33,42 @@ jobs:
         run: |
           node --check codex/dashboard_auth.js
           node --check codex/dashboard_runtime.js
+
+  browser-and-edge:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:database
+      - name: Run isolated browser acceptance
+        env:
+          PLAYWRIGHT_USE_BUNDLED_CHROMIUM: "1"
+        run: npm run test:browser
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno test --no-lock --node-modules-dir=none --allow-env supabase/functions/dashboard-api/index_test.ts
+
+  production-acceptance:
+    if: github.event_name == 'workflow_dispatch' && inputs.verify_production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Verify deployed Auth, Edge, Pages and quarterly interaction
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+        run: node scripts/verify_dashboard_production.mjs

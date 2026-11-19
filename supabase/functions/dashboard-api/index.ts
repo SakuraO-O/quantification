@@ -27,6 +27,7 @@ Deno.serve(async (request) => {
       ? configuredPermissions.map(String)
       : ["view_dashboard", "view_fundamentals", ...(role === "editor" ? ["edit_configuration"] : [])],
   );
+  if (!permissions.has("view_dashboard")) return json(request, {error:"forbidden"}, 403);
   const canViewFundamentals = permissions.has("view_fundamentals");
   const {data: runtime, error: runtimeError} = await admin.rpc("dashboard_runtime_status");
   if (runtimeError) return json(request, {error:"dashboard_runtime_query_failed"}, 500);
@@ -76,14 +77,24 @@ Deno.serve(async (request) => {
     if (section === "fundamentals" && !canViewFundamentals) return json(request, {error:"forbidden"}, 403);
     const range = url.searchParams.get("range") ?? "1y";
     const months = ({ "3m": 3, "6m": 6, "1y": 12, "3y": 36, "5y": 60 } as Record<string, number>)[range] ?? 12;
-    const start = new Date(); start.setMonth(start.getMonth() - months);
-    const historyResult = section === "fundamentals" ? {data: [], error: null} : await admin.from("asset_daily_signals")
-      .select("trade_date,close,ma20,ma60,ma120,ma200,short_trend,mid_trend,long_trend,pe,pe_percentile,valuation_status")
-      .eq("security_id", security.security_id).gte("trade_date", start.toISOString().slice(0, 10)).order("trade_date");
-    if (historyResult.error) return json(request, { error: "asset_detail_query_failed" }, 500);
+    const historyEnd = String(asset.last_valid_trade_date || asset.trade_date || "").slice(0, 10);
+    if (section !== "fundamentals" && !/^\d{4}-\d{2}-\d{2}$/.test(historyEnd)) return json(request, {error:"asset_market_date_missing"}, 503);
+    const start = new Date(`${historyEnd}T00:00:00Z`); start.setUTCMonth(start.getUTCMonth() - months);
+    const history: Array<Record<string, unknown>> = [];
+    if (section !== "fundamentals") {
+      for (let offset = 0; ; offset += 1000) {
+        const page = await admin.from("asset_daily_signals")
+          .select("trade_date,close,ma20,ma60,ma120,ma200,short_trend,mid_trend,long_trend,pe,pe_percentile,valuation_status")
+          .eq("security_id", security.security_id).gte("trade_date", start.toISOString().slice(0, 10))
+          .lte("trade_date", historyEnd).order("trade_date").range(offset, offset + 999);
+        if (page.error) return json(request, { error: "asset_detail_query_failed" }, 500);
+        history.push(...(page.data ?? []));
+        if ((page.data ?? []).length < 1000) break;
+      }
+    }
     const peHistory: Array<{ trade_date: string; pe: number | null; pe_percentile: number | null; valuation_status: string | null }> = [];
     if (asset.asset_type === "指数" && section !== "fundamentals") {
-      const peEnd = String(asset.trade_date ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
+      const peEnd = historyEnd;
       const peStart = new Date(peEnd);
       peStart.setFullYear(peStart.getFullYear() - 10);
       for (let offset = 0; ; offset += 1000) {
@@ -97,7 +108,7 @@ Deno.serve(async (request) => {
       }
     }
     if (!canViewFundamentals || section === "history") {
-      return json(request, { version: version.dashboard_version_id, asset: withoutQuarterly(asset), range, history: historyResult.data ?? [], pe_history: peHistory, fundamentals_access: false });
+      return json(request, { version: version.dashboard_version_id, asset: withoutQuarterly(asset), range, history, pe_history: peHistory, fundamentals_access: false });
     }
     const [assessmentResult, factsResult, dividendsResult, industryResult, sourcesResult] = await Promise.all([
       admin.from("fundamental_assessments").select("report_period,dividend_safety_status,operating_quality_status,cash_reinvestment_status,capital_structure_status,fundamental_status,evidence,main_risk,calculation_version,created_at").eq("security_id", security.security_id).order("report_period", { ascending: false }).order("created_at", { ascending: false }).limit(1).maybeSingle(),
@@ -114,7 +125,7 @@ Deno.serve(async (request) => {
       asset: withoutQuarterly(asset),
       quarterly: asset.asset_type === "股票" ? asset.quarterly ?? null : null,
       range,
-      history: historyResult.data ?? [],
+      history,
       pe_history: peHistory,
       fundamentals_access: true,
       fundamental_assessment: assessmentResult.data,

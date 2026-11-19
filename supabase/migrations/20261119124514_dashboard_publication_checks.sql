@@ -128,12 +128,16 @@ create function public.finish_dashboard_publication(p_check uuid, p_payload json
   p_complete boolean, p_completeness jsonb, p_calculation_version text, p_content_hash text,
   p_source_run uuid default null)
 returns jsonb language plpgsql set search_path = '' as $$
-declare state public.dashboard_publication_state; attempt public.dashboard_publication_checks; version public.dashboard_versions;
+declare state public.dashboard_publication_state; attempt public.dashboard_publication_checks; version public.dashboard_versions; tasks jsonb;
 begin
   select * into state from public.dashboard_publication_state where singleton for update;
   select * into attempt from public.dashboard_publication_checks where check_id = p_check;
   if state.lease_id is distinct from p_check or state.lease_until <= now() then raise exception 'publication lease lost'; end if;
   if state.input_revision <> attempt.input_revision then raise exception 'publication inputs changed; retry required'; end if;
+  select b.tasks into tasks from public.dashboard_batches b where b.batch_id = attempt.batch_id for share;
+  if exists (select 1 from jsonb_each_text(tasks) where value not in ('succeeded','degraded')) then
+    raise exception 'upstream batch changed during publication';
+  end if;
   if not p_complete then raise exception 'dashboard completeness validation failed'; end if;
   insert into public.dashboard_versions(latest_market_date,is_complete,completeness,payload,calculation_version,source_run_id,content_hash)
     values((p_payload->>'latest_market_date')::date,p_complete,p_completeness,p_payload,p_calculation_version,p_source_run,p_content_hash)
@@ -183,6 +187,18 @@ alter table public.notification_dispatches drop constraint if exists notificatio
 alter table public.notification_dispatches add constraint notification_dispatches_status_check
   check(status in ('sending','succeeded','failed','skipped'));
 alter table public.notification_dispatches add column if not exists claimed_at timestamptz;
+
+-- Keep today's previously sent legacy version-keyed report from being replayed
+-- when switching to business-date keys. All original records and versions stay.
+with sent as (
+  select distinct on (message_type, (sent_at at time zone 'Asia/Shanghai')::date)
+    notification_dispatch_id, message_type || ':' || (sent_at at time zone 'Asia/Shanghai')::date as dated_key
+  from public.notification_dispatches where status = 'succeeded'
+  order by message_type, (sent_at at time zone 'Asia/Shanghai')::date, sent_at desc
+)
+update public.notification_dispatches dispatch set dispatch_key = sent.dated_key
+from sent where dispatch.notification_dispatch_id = sent.notification_dispatch_id
+  and not exists (select 1 from public.notification_dispatches existing where existing.dispatch_key = sent.dated_key);
 
 create function public.claim_dashboard_dispatch(p_key text, p_version uuid, p_type text)
 returns boolean language plpgsql set search_path = '' as $$

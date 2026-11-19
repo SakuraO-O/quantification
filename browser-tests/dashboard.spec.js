@@ -80,7 +80,7 @@ async function mockBackend(page, options = {}) {
       return json(route, {
         version: 'local-fixed-version-1', asset, range: url.searchParams.get('range'),
         history: state.customDetailHistory || ['2026-10-08', '2026-10-09', '2026-10-10'].map((date, index) => ({
-          trade_date: date, close: (asset?.close || 30) + index, ma20: 29 + index,
+          trade_date: date, close: (asset?.close || 30) + index + (url.searchParams.get("range") === "5y" ? 100 : 0), ma20: 29 + index,
           ma60: 28 + index, ma120: 27 + index, ma200: 26 + index,
           short_trend: '短期强势', mid_trend: '中期上升', long_trend: '长期上升',
           pe: 12, pe_percentile: 40
@@ -363,6 +363,12 @@ test('renders published quarterly figures, switches metrics, and shows source la
   await page.waitForFunction(() => window.__trendDashboardRuntime.histories.has('600900'));
   await expect(page.locator('#pane-quarter')).toBeVisible();
   await expect(page.locator('[data-quarter-metric="asset_liability_ratio"]')).toHaveClass(/active/);
+  await page.locator('[data-close="detail-modal"]').click();
+  await page.evaluate(() => window.dispatchEvent(new Event('trend-dashboard-authenticated')));
+  await expect(page.locator('#dashboard-source')).toHaveClass(/api/);
+  await page.locator('#stock-body tr').click();
+  await page.locator('.modal-tab[data-pane="quarter"]').click();
+  await expect(page.locator('#pane-quarter')).toContainText('2025报告年度');
   expect(state.unexpected).toEqual([]);
 });
 
@@ -405,4 +411,19 @@ test('shows publication time, independent check state and market cutoff dates', 
   await expect(status).toContainText('美股行情截至 2026-10-08～2026-10-09 · 源数据延迟');
   await page.locator('#dashboard-logout').click();
   await expect(status).not.toBeVisible();
+});
+
+test('redraws chart after changing its time range without JavaScript errors', async ({page}) => {
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await mockBackend(page);
+  await login(page);
+  await page.locator('.tab[data-view="stock"]').click();
+  await page.locator('#stock-body tr').click();
+  await page.waitForFunction(() => window.__trendDashboardRuntime.historyRanges.get('600900') === '1y');
+  await page.locator('[data-range="60"]').click();
+  await page.waitForFunction(() => window.__trendDashboardRuntime.historyRanges.get('600900') === '5y');
+  await page.locator('#price-chart').hover();
+  await expect(page.locator('#dashboard-chart-tooltip')).toContainText(/13[0-2]\.00/);
+  expect(errors).toEqual([]);
 });

@@ -730,11 +730,28 @@
     const key = detailRequestKey(asset, months);
     return runtimeState.detailRequests.has(key) || (!hasLoadedDetailRange(asset, months) && !runtimeState.detailErrors.has(key));
   };
+  function applyFundamentalDetail(asset, detail) {
+    if (detail.fundamental_assessment) {
+      asset.assessment = detail.fundamental_assessment;
+      asset.dividendSafety = detail.fundamental_assessment.dividend_safety_status || asset.dividendSafety;
+      asset.fund = detail.fundamental_assessment.fundamental_status || asset.fund;
+      asset.period = detail.fundamental_assessment.report_period || asset.period;
+      asset.change = detail.fundamental_assessment.main_risk || asset.change;
+    }
+    asset.financialFacts = detail.financial_facts || [];
+    asset.quarterly = detail.quarterly || null;
+    asset.dividendEvents = detail.dividend_events || [];
+    asset.industryMetrics = detail.industry_metrics || [];
+    asset.sources = detail.sources || [];
+  }
   async function loadAssetDetail(asset, months, section = "history") {
     if (runtimeState.source !== "api") return;
     const key = detailRequestKey(asset, section === "fundamentals" ? 12 : months, section);
     if (runtimeState.detailRequests.has(key)) return runtimeState.detailRequests.get(key);
-    if (section === "fundamentals" && runtimeState.fundamentalDetails.has(key)) return;
+    if (section === "fundamentals" && runtimeState.fundamentalDetails.has(key)) {
+      applyFundamentalDetail(asset, runtimeState.fundamentalDetails.get(key));
+      return;
+    }
     if (section === "history" && runtimeState.historyCache.has(key)) {
       runtimeState.histories.set(asset.code, runtimeState.historyCache.get(key));
       runtimeState.historyRanges.set(asset.code, rangeKey(months));
@@ -754,18 +771,7 @@
           return detail;
         }
         runtimeState.fundamentalDetails.set(key, detail);
-        if (detail.fundamental_assessment) {
-          asset.assessment = detail.fundamental_assessment;
-          asset.dividendSafety = detail.fundamental_assessment.dividend_safety_status || asset.dividendSafety;
-          asset.fund = detail.fundamental_assessment.fundamental_status || asset.fund;
-          asset.period = detail.fundamental_assessment.report_period || asset.period;
-          asset.change = detail.fundamental_assessment.main_risk || asset.change;
-        }
-        asset.financialFacts = detail.financial_facts || [];
-        asset.quarterly = detail.quarterly || null;
-        asset.dividendEvents = detail.dividend_events || [];
-        asset.industryMetrics = detail.industry_metrics || [];
-        asset.sources = detail.sources || [];
+        applyFundamentalDetail(asset, detail);
         return detail;
       })
       .catch(error => {
@@ -1085,6 +1091,15 @@
     context.fillStyle = "#687684"; context.font = "13px sans-serif"; context.textAlign = "left";
     context.fillText(message, x + 18, y + 2); context.textAlign = "left";
     canvas.onmousemove = null; canvas.onmouseleave = null;
+  }
+
+  function redrawActivePriceChart() {
+    if (!document.querySelector("#detail-modal").open) return;
+    const asset = (detailType === "index" ? indices : stocks)[detailIndex];
+    if (!asset) return;
+    const pricePane = document.querySelector("#pane-price");
+    if (!pricePane || pricePane.classList.contains("active")) drawPriceChart(asset, detailType);
+    if (detailType === "index") drawPeChart(asset);
   }
 
   document.addEventListener("click", event => {

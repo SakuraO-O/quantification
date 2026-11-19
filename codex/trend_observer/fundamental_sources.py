@@ -143,6 +143,33 @@ class FundamentalSource:
         )
 
 
+def _exchange_listing_loader():
+    """Load each official exchange directory once, including failed requests."""
+    import akshare as ak
+    cache = {}
+    def load(symbol):
+        shanghai = symbol.startswith("6")
+        board = "科创板" if symbol.startswith("688") else "主板A股"
+        key = board if shanghai else "深圳A股"
+        if key not in cache:
+            try:
+                cache[key] = ak.stock_info_sh_name_code(board) if shanghai else ak.stock_info_sz_name_code()
+            except Exception as exc:
+                cache[key] = exc
+        table = cache[key]
+        if isinstance(table, Exception):
+            raise table
+        code_column, date_column = ("证券代码", "上市日期") if shanghai else ("A股代码", "A股上市日期")
+        matches = table[table[code_column].astype(str).str.zfill(6) == symbol]
+        if len(matches) != 1:
+            raise ValueError("交易所上市名录未唯一匹配证券")
+        listed = _date(matches.iloc[0][date_column])
+        if listed is None:
+            raise ValueError("交易所上市日期缺失")
+        return {"item": ["股票代码", "上市时间"], "value": [symbol, listed.strftime("%Y%m%d")]}
+    return load
+
+
 class FundamentalSynchronizer:
     """Fetch financial facts and dividend events without coupling assets together."""
 
@@ -511,9 +538,8 @@ class FundamentalSynchronizer:
 
     def sync_listing_dates(self, *, force: bool = False, loader=None) -> list[SyncResult]:
         """One-time metadata backfill; listing dates never come from price-history bounds."""
-        if loader is None:
-            from akshare import stock_individual_info_em
-            loader = stock_individual_info_em
+        exchange_source = loader is None
+        loader = loader or _exchange_listing_loader()
         results = []
         rows = self.store.select("securities", filters={"asset_type": "eq.股票", "market": "eq.CN", "is_active": "eq.true"})
         for row in rows:
@@ -530,10 +556,14 @@ class FundamentalSynchronizer:
                 raw = str(values.get("上市时间", "")).split(".")[0]
                 listed = datetime.strptime(raw, "%Y%m%d").date()
                 asset = {"symbol": symbol, "market": "CN", "name": row["name"]}
-                document_id = self._source_document(asset, source="eastmoney",
+                source = ("sse" if symbol.startswith("sh") else "szse") if exchange_source else "eastmoney"
+                source_url = ("https://www.sse.com.cn/assortment/stock/list/share/" if source == "sse"
+                              else "https://www.szse.cn/market/product/stock/list/index.html" if source == "szse"
+                              else f"https://quote.eastmoney.com/{symbol}.html")
+                document_id = self._source_document(asset, source=source,
                     record_id=f"{symbol}:listing-date", title=f"{row['name']} A股上市日期",
                     document_type="structured_security_metadata", report_period=None, announcement_date=None,
-                    url=f"https://quote.eastmoney.com/{symbol}.html",
+                    url=source_url,
                     evidence={"symbol": symbol, "listing_date": listed.isoformat()})
                 self.store.patch("securities", {"security_id": f"eq.{row['security_id']}"},
                                  {"listing_date": listed.isoformat(), "listing_source_document_id": document_id})
