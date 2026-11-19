@@ -52,6 +52,19 @@ def dispatch_morning_report(store: SupabaseStore, now: datetime | None = None) -
         latest = store.latest_dashboard_version()
         missing = (latest or {}).get("completeness", {}).get("missing_asset_signals", ["当日早间同步／发布就绪检查"])
         missing_labels = [item.get("symbol", str(item)) if isinstance(item, dict) else str(item) for item in missing]
+        runtime = store.dashboard_runtime_status()
+        batch = runtime.get("latest_batch") or {}
+        task_labels = {
+            "sync-market:CN":"境内行情", "sync-market:HK":"港股行情", "sync-market:US":"美股行情",
+            "sync-valuation:HK":"港股估值", "sync-valuation:US":"美股估值",
+            "sync-fundamentals:all":"财报与分红",
+        }
+        if batch.get("phase") == "morning" and batch.get("business_date") == day:
+            missing_labels.extend(task_labels.get(task, "上游数据同步") for task, status in batch.get("tasks", {}).items()
+                                  if status not in ("succeeded", "degraded"))
+        if (runtime.get("latest_attempt") or {}).get("status") in ("running", "failed"):
+            missing_labels.append("看板计算与发布")
+        missing_labels = list(dict.fromkeys(missing_labels)) or ["当日早间就绪检查"]
         status_code = send_text_message(format_delay_message(missing_labels, now))
     except (requests.Timeout, requests.ConnectionError, ValueError) as exc:
         raise RuntimeError("延迟提示发送结果未知，保留发送占用，请核查飞书回执") from exc
