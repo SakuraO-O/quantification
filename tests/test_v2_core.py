@@ -284,6 +284,9 @@ class V2CoreTest(unittest.TestCase):
 
             def ready_morning_version(self, _day): return None
             def claim_dispatch(self, *_args): return True
+            def dashboard_runtime_status(self):
+                return {"latest_batch": {"phase":"morning", "business_date":"2026-07-18",
+                                          "tasks":{"sync-market:US":"running"}}}
 
             def latest_dashboard_version(self):
                 return {"is_complete": False, "completeness": {"missing_asset_signals": [{"symbol": "沪深300"}]}}
@@ -300,6 +303,7 @@ class V2CoreTest(unittest.TestCase):
             result = dispatch_morning_report(store, now)
         self.assertEqual(result.status, "delayed")
         self.assertIn("沪深300", send.call_args.args[0])
+        self.assertIn("美股行情", send.call_args.args[0])
 
     def test_dispatch_keeps_waiting_before_0930(self):
         class Store:
