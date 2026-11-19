@@ -178,7 +178,8 @@ def build_quarterly(
     # Report documents establish disclosure even when the selected metric is absent.
     disclosed = {(year, quarter) for year, quarter, _ in reported}
     for document in documents:
-        if document.get("document_type") in ("annual_report", "quarterly_report", "semi_annual_report", "financial_report"):
+        if document.get("document_type") in ("annual_report", "quarterly_report", "semi_annual_report", "financial_report",
+                                              "structured_financial_snapshot", "structured_cashflow_snapshot"):
             year, quarter = _year(document.get("report_period")), _quarter(document.get("report_period"))
             if year and quarter:
                 disclosed.add((year, quarter))

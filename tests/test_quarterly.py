@@ -76,6 +76,16 @@ class QuarterlyTest(unittest.TestCase):
         unknown = build_quarterly(facts, [], self.docs, [])
         self.assertEqual(len(unknown["years"]), 10)
 
+    def test_report_document_preserves_year_even_when_selected_metrics_are_missing(self):
+        documents = self.docs + [{"source_document_id":"legacy-report", "report_period":"2018-06-30",
+                                  "document_type":"structured_financial_snapshot"}]
+        result = build_quarterly([fact("2026-03-31", "net_profit", 100)], [], documents, [], listing_date="2022-04-21")
+        self.assertIn(2018, result["years"])
+        self.assertNotIn(2017, result["years"])
+        year = result["metrics"]["net_profit"]["years"][result["years"].index(2018)]
+        self.assertEqual(year["quarters"][1]["status"], "数据不足")
+        self.assertEqual(year["quarters"][1]["reason"], "报告未提供该指标")
+
     def test_approved_amount_and_complete_year_payout(self):
         facts = [fact("2025-12-31", "net_profit", 1000),
                  fact("2026-03-31", "net_profit", 100)]
