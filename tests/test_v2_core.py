@@ -282,6 +282,9 @@ class V2CoreTest(unittest.TestCase):
             def __init__(self):
                 self.records = []
 
+            def ready_morning_version(self, _day): return None
+            def claim_dispatch(self, *_args): return True
+
             def latest_dashboard_version(self):
                 return {"is_complete": False, "completeness": {"missing_asset_signals": [{"symbol": "沪深300"}]}}
 
@@ -300,6 +303,7 @@ class V2CoreTest(unittest.TestCase):
 
     def test_dispatch_keeps_waiting_before_0930(self):
         class Store:
+            def ready_morning_version(self, _day): return None
             def latest_dashboard_version(self): return None
 
         result = dispatch_morning_report(Store(), datetime(2026, 7, 18, 9, 20, tzinfo=ZoneInfo("Asia/Shanghai")))

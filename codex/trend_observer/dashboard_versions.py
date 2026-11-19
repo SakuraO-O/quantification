@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from contextlib import nullcontext
 
 import pandas as pd
 
@@ -13,6 +14,9 @@ from .quarterly import build_quarterly
 from .style_compass import calculate_style_compass, style_recommendation_details
 from .supabase_store import SupabaseStore
 from .total_return import stock_three_year_returns
+
+
+PUBLICATION_CALCULATION_VERSION = CALCULATION_VERSION + ":publication-20261119"
 
 
 CURRENT_SIGNAL_FIELDS = (
@@ -48,7 +52,7 @@ class DashboardPublisher:
             filters={"security_id": f"eq.{sid}", "report_period": "not.is.null", "is_current": "eq.true"},
         )
 
-    def _quarterly(self, sid: str) -> dict:
+    def _quarterly(self, sid: str, listing_date: str | None = None) -> dict:
         filters = {"security_id": f"eq.{sid}"}
         facts = self.store.select(
             "financial_facts",
@@ -63,7 +67,7 @@ class DashboardPublisher:
         )
         documents = self.store.select(
             "source_documents",
-            select="source_document_id,source,announcement_date,document_url",
+            select="source_document_id,source,announcement_date,document_url,document_type,report_period",
             filters=filters,
         )
         reviews = self.store.select(
@@ -71,7 +75,7 @@ class DashboardPublisher:
             select="fiscal_year,status,source_document_id",
             filters=filters,
         )
-        return build_quarterly(facts, events, documents, reviews)
+        return build_quarterly(facts, events, documents, reviews, listing_date)
 
     def _dividend_history_current(self, asset: dict, trade_date: str) -> bool:
         watermark = getattr(self.store, "get_watermark", lambda _key: None)(
@@ -149,7 +153,12 @@ class DashboardPublisher:
             "last_valid_trade_date": last_valid_date,
         } | {field: None for field in CURRENT_SIGNAL_FIELDS}
 
-    def publish(self, source_run_id: str | None = None) -> dict:
+    def publish(self, source_run_id: str | None = None, batch_id: str | None = None) -> dict:
+        publication = getattr(self.store, "publication", lambda _batch: nullcontext())
+        with publication(batch_id):
+            return self._publish(source_run_id)
+
+    def _publish(self, source_run_id: str | None) -> dict:
         assets = self._active_assets()
         records = []
         asset_issues = []
@@ -168,7 +177,9 @@ class DashboardPublisher:
             )
         for asset in assets:
             signal = self._latest_signal(asset["security_id"])
-            expected_date = self.store.previous_trading_date(asset["market"], now.date())
+            expected_date = (self.store.last_completed_trading_date(asset["market"], now)
+                             if hasattr(self.store, "last_completed_trading_date")
+                             else self.store.previous_trading_date(asset["market"], now.date()))
             if not signal:
                 issue = {"symbol": asset["symbol"], "reason": "缺少派生信号", "expected": expected_date.isoformat()}
                 asset_issues.append(issue)
@@ -197,6 +208,7 @@ class DashboardPublisher:
                         "data_issue": None,
                         "last_valid_trade_date": actual_date.isoformat(),
                     }
+            signal = {key: value for key, value in signal.items() if key != "updated_at"}
             record = {
                 "name": asset["name"], "symbol": asset["symbol"], "market": asset["market"], "asset_type": asset["asset_type"],
                 "industry_template": asset.get("industry_template"),
@@ -207,7 +219,7 @@ class DashboardPublisher:
                 record |= {
                     "latest_announcement_date": max((row.get("announcement_date") for row in dividends if row.get("announcement_date")), default=None),
                     "fundamental_assessment": assessment,
-                    "quarterly": self._quarterly(asset["security_id"]),
+                    "quarterly": self._quarterly(asset["security_id"], asset.get("listing_date")),
                 }
                 if signal.get("data_status") == "current":
                     verified = self._dividend_history_current(asset, signal["trade_date"])
@@ -216,8 +228,21 @@ class DashboardPublisher:
                         by_year.setdefault(int(event["fiscal_year"]), set()).add(event.get("verification_status") or "candidate")
                     if any(len(statuses) > 1 for statuses in by_year.values()):
                         verified = False
-                    if verified:
-                        record |= annual_dividend_summary(dividends, signal["trade_date"], signal.get("close"))
+                    if self._dividend_history_current(asset, signal["trade_date"]):
+                        yield_events = self.store.select(
+                            "dividend_events",
+                            select="fiscal_year,report_period,plan_key,version,event_stage,cash_dividend_per_share,announcement_id,announcement_date,approval_date,approval_basis,ex_date,verification_status,superseded_by_plan_key,is_current",
+                            filters={"security_id": f"eq.{asset['security_id']}", "report_period": "not.is.null"},
+                        )
+                        record |= annual_dividend_summary(yield_events, signal["trade_date"], signal.get("close"))
+                        annual_review = record["quarterly"].get("dividends", {}).get(str(record["dividend_fiscal_year"]), {})
+                        complete = (record["quarterly"].get("dividend_year_complete", {}).get(str(record["dividend_fiscal_year"]))
+                                    and annual_review.get("per_share") is not None
+                                    and annual_review.get("status") not in ("待核对", "方案待批准"))
+                        record["dividend_scope_status"] = "全年已核验" if complete else "已确认部分／年度待确认"
+                        if complete and annual_review.get("per_share") == 0:
+                            record.update(last_year_dividend=0, dividend_yield=0, implemented_dividend_per_share=0,
+                                          approved_dividend_per_share=0, dividend_yield_status="已计算", dividend_yield_issue=None)
                     else:
                         record |= {
                             "last_year_dividend": None, "dividend_yield": None,
@@ -266,5 +291,5 @@ class DashboardPublisher:
         has_stale_calculation = any(issue.get("reason") == "信号版本待重算" for issue in asset_issues)
         is_complete = catalog_valid and not has_stale_calculation
         return self.store.publish_dashboard_version(
-            payload, is_complete=is_complete, completeness=completeness, calculation_version=CALCULATION_VERSION, source_run_id=source_run_id
+            payload, is_complete=is_complete, completeness=completeness, calculation_version=PUBLICATION_CALCULATION_VERSION, source_run_id=source_run_id
         )

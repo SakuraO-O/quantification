@@ -38,6 +38,25 @@ class DividendYieldV2Test(unittest.TestCase):
         self.assertIsNone(result["dividend_yield"])
         self.assertEqual(result["dividend_yield_status"], "数据不足")
 
+    def test_approved_plan_is_counted_once_and_respects_approval_and_correction_dates(self):
+        base = {"report_period": "2025-12-31", "plan_key": "annual", "version": 1,
+                "announcement_id": "approved", "announcement_date": "2026-05-01", "approval_date": "2026-05-01",
+                "event_stage": "approved", "cash_dividend_per_share": 0.5,
+                "approval_basis": "shareholder_resolution", "verification_status": "verified", "is_current": False}
+        implementation = dict(base, version=2, event_stage="implemented", announcement_id="implementation",
+                              announcement_date="2026-06-01", ex_date="2026-06-10", is_current=True)
+        self.assertIsNone(annual_dividend_summary([base, implementation], "2026-04-30", 10)["dividend_yield"])
+        approved = annual_dividend_summary([base, implementation], "2026-05-10", 10)
+        self.assertEqual(approved["last_year_dividend"], 0.5)
+        self.assertEqual(approved["approved_dividend_per_share"], 0.5)
+        self.assertEqual(approved["implemented_dividend_per_share"], 0)
+        done = annual_dividend_summary([base, implementation], "2026-06-11", 10)
+        self.assertEqual(done["last_year_dividend"], 0.5)
+        self.assertEqual(done["implemented_dividend_per_share"], 0.5)
+        correction = dict(implementation, version=3, cash_dividend_per_share=0.6, announcement_date="2026-07-01")
+        self.assertEqual(annual_dividend_summary([base, implementation, correction], "2026-06-11", 10)["last_year_dividend"], 0.5)
+        self.assertEqual(annual_dividend_summary([base, implementation, correction], "2026-07-02", 10)["last_year_dividend"], 0.6)
+
     def test_publisher_replaces_legacy_signal_yield_with_report_year_sum(self):
         class Store:
             def select(self, table, **_kwargs):

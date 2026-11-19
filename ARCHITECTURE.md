@@ -54,7 +54,7 @@ python -B -m codex.trend_observer.cli dispatch-feishu
 
 `sync-market` 在没有水位时执行历史初始化；之后只请求从数据库最新日期向前重叠两个交易日的窗口。连续三次失败后水位进入退避状态。资金风格建议由 Python 在发布时计算并写入 `dashboard_versions`，包括占优侧投资建议与 PE 百分位不高于 50% 的约束及原因。六类配置的比例、偏离四档、理论调整额与摘要由 `compute_portfolio_allocation()` RPC 实时统一计算，Edge API 与前端只转发和渲染。`dispatch-feishu` 不调用任何行情来源，只读取完整且尚未发送过的 `dashboard_versions`。
 
-股票股息率也由 Python 发布器独占计算：`sync-fundamentals` 保存来源报告期明确的分红事件，发布时按交易日前一报告年度汇总已实施且已除息的每股现金分红，再除以当日收盘价。`last_year_dividend`、`dividend_fiscal_year`、`dividend_yield`、状态和缺数原因一并写入版本；Edge、前端和飞书只消费版本。历史 `asset_daily_signals.dividend_yield` 不作为看板股息率依据。旧事件报告期不明时保持缺数，须回填后重新发布。
+股票股息率也由 Python 发布器独占计算：`sync-fundamentals` 保存来源报告期明确的分红事件，发布时按交易日前一报告年度汇总已实施及已批准未实施的税前每股现金分红，再除以当日收盘价。`last_year_dividend`、`dividend_fiscal_year`、`dividend_yield`、状态和缺数原因一并写入版本；Edge、前端和飞书只消费版本。历史 `asset_daily_signals.dividend_yield` 不作为看板股息率依据。旧事件报告期不明时保持缺数，须回填后重新发布。
 
 季度经营与股利支付率同样由 Python 发布器计算。自动同步的财报、分红记录先作为候选事实；只有依据正式报告或公告核验后的数值进入季度图表和确定的分红合计。同一分红方案跨阶段只保留一个当前版本，原候选记录与正式方案关联后退出当前计算。季度结果随 `dashboard_versions` 保存，Edge 只向有基本面权限的资产详情返回对应结果；前端只做展示和图表切换。
 
@@ -74,3 +74,11 @@ GitHub Pages 只部署 `dashboard_example.html` 及配置、登录、季度展�
 | 国证指数 | `hq.cnindex.com.cn` | 国证自由现金流指数 |
 
 飞书通知依赖环境变量 `FEISHU_WEBHOOK_URL`（必填）和 `FEISHU_SECRET`（可选签名）。
+
+## 发布检查与详情区域读取
+
+Python 发布器先通过 `begin_dashboard_publication` 获得有期限的数据库租约及输入修订号，再读取事实并计算。所有发布输入表的写入通过语句触发器递增修订号。`finish_dashboard_publication` 在同一数据库事务中核对租约、输入修订号和完整性，写入或复用不可变内容版本，并更新当前版本指针与检查记录；输入变化或全局错误时失败，后续检查重算。局部来源失败按既有资产降级规则展示。
+
+`dashboard_batches` 登记早间、晚间或手动批次及上游任务终态；`dashboard_publication_checks` 留存尝试、成功检查时间及输入修订号。07:30早间批次、20:30晚间批次在各自依赖完成后发布。早报独立按当日早间成功检查就绪，按业务日期和消息类型去重。运行状态通过只允许服务端调用的 `dashboard_runtime_status` RPC 提供，由已鉴权 Edge API 转发。
+
+资产详情保留兼容的整包入口，并支持分区域请求。前端以资产、快照版本、区域和行情区间缓存；基本面不等待行情查询，区域更新保留页签及当前选择，过期请求不得重开弹窗。季度图表和金额明细仅格式化 Python 发布值，尚未披露与已披露缺数由后端状态区分。上市日期通过一次性元数据同步入库，带来源文档引用；日期不明时保留年份并说明原因。

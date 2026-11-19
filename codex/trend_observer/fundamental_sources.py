@@ -509,6 +509,39 @@ class FundamentalSynchronizer:
                                     rows_changed=result.rows_changed, first_affected_date=result.first_affected_date, message=result.message)
         return result
 
+    def sync_listing_dates(self, *, force: bool = False, loader=None) -> list[SyncResult]:
+        """One-time metadata backfill; listing dates never come from price-history bounds."""
+        if loader is None:
+            from akshare import stock_individual_info_em
+            loader = stock_individual_info_em
+        results = []
+        rows = self.store.select("securities", filters={"asset_type": "eq.股票", "market": "eq.CN", "is_active": "eq.true"})
+        for row in rows:
+            if row.get("listing_date") and not force:
+                continue
+            symbol = row["symbol"]
+            try:
+                with _source_timeout(SOURCE_TIMEOUT_SECONDS):
+                    info = loader(symbol[-6:])
+                values = dict(zip(info["item"], info["value"]))
+                reported_symbol = str(values.get("股票代码", "")).zfill(6)
+                if reported_symbol != symbol[-6:]:
+                    raise ValueError("上市信息证券代码不一致")
+                raw = str(values.get("上市时间", "")).split(".")[0]
+                listed = datetime.strptime(raw, "%Y%m%d").date()
+                asset = {"symbol": symbol, "market": "CN", "name": row["name"]}
+                document_id = self._source_document(asset, source="eastmoney",
+                    record_id=f"{symbol}:listing-date", title=f"{row['name']} A股上市日期",
+                    document_type="structured_security_metadata", report_period=None, announcement_date=None,
+                    url=f"https://quote.eastmoney.com/{symbol}.html",
+                    evidence={"symbol": symbol, "listing_date": listed.isoformat()})
+                self.store.patch("securities", {"security_id": f"eq.{row['security_id']}"},
+                                 {"listing_date": listed.isoformat(), "listing_source_document_id": document_id})
+                results.append(SyncResult(symbol, f"metadata:CN:{symbol}", "succeeded", rows_changed=1))
+            except Exception as exc:
+                results.append(SyncResult(symbol, f"metadata:CN:{symbol}", "failed", message=str(exc)))
+        return results
+
     def sync_assets(self, assets: list[dict], *, trigger_type: str = "schedule", today: date | None = None, force: bool = False) -> list[SyncResult]:
         run_id = self.store.start_run("sync_fundamentals", trigger_type)
         results = [self.sync_asset(asset, today=today, force=force, run_id=run_id) for asset in assets if asset.get("asset_type") == "股票" and asset.get("market") == "CN"]

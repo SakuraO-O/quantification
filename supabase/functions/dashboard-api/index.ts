@@ -28,19 +28,27 @@ Deno.serve(async (request) => {
       : ["view_dashboard", "view_fundamentals", ...(role === "editor" ? ["edit_configuration"] : [])],
   );
   const canViewFundamentals = permissions.has("view_fundamentals");
-  const { data: version, error } = await admin
+  const {data: runtime, error: runtimeError} = await admin.rpc("dashboard_runtime_status");
+  if (runtimeError) return json(request, {error:"dashboard_runtime_query_failed"}, 500);
+  let versionQuery = admin
     .from("dashboard_versions")
     .select("dashboard_version_id,generated_at,latest_market_date,completeness,payload")
     .eq("is_complete", true)
-    .order("generated_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .order("generated_at", { ascending: false }).limit(1);
+  const requestedVersion = url.searchParams.get("version");
+  if (requestedVersion || runtime?.current_version_id) versionQuery = versionQuery.eq("dashboard_version_id", requestedVersion || runtime.current_version_id);
+  const { data: version, error } = await versionQuery.maybeSingle();
   if (error) return json(request, { error: "dashboard_query_failed" }, 500);
   if (!version) return json(request, { error: "dashboard_not_ready" }, 503);
 
   const path = url.pathname.replace(/^.*dashboard-api/, "") || "/overview";
   const payload = version.payload as Record<string, unknown>;
   const assets = Array.isArray(payload.assets) ? payload.assets as Array<Record<string, unknown>> : [];
+  const marketDates = ["CN", "HK", "US"].filter(market => assets.some(asset => asset.market === market)).map(market => ({
+    market,
+    dates: [...new Set(assets.filter(asset => asset.market === market).map(asset => asset.last_valid_trade_date || asset.trade_date).filter(Boolean))].sort(),
+    delayed: assets.some(asset => asset.market === market && asset.data_status === "delayed"),
+  }));
   const withoutQuarterly = (item: Record<string, unknown>) => {
     const { quarterly: _quarterly, ...summary } = item;
     return summary;
@@ -50,12 +58,12 @@ Deno.serve(async (request) => {
     // Do not derive these values from a dashboard-version snapshot in Edge.
     const { data: allocation, error: allocationError } = await admin.rpc("compute_portfolio_allocation");
     if (allocationError) return json(request, { error: "allocation_query_failed" }, 500);
-    return json(request, { version: version.dashboard_version_id, generated_at: version.generated_at, latest_market_date: version.latest_market_date, completeness: version.completeness, permissions: [...permissions], ...payload, assets: assets.map(withoutQuarterly), allocation });
+    return json(request, { version: version.dashboard_version_id, generated_at: version.generated_at, latest_market_date: version.latest_market_date, completeness: version.completeness, permissions: [...permissions], ...payload, runtime, market_dates: marketDates, assets: assets.map(withoutQuarterly), allocation });
   }
   if (path === "/indexes") return json(request, { version: version.dashboard_version_id, assets: assets.filter((asset) => asset.asset_type === "指数").map(withoutQuarterly) });
   if (path === "/stocks") return json(request, { version: version.dashboard_version_id, assets: assets.filter((asset) => asset.asset_type === "股票").map(withoutQuarterly) });
   if (path === "/style-compass") return json(request, { version: version.dashboard_version_id, results: payload.style_compass ?? [] });
-  if (path === "/data-status") return json(request, { version: version.dashboard_version_id, generated_at: version.generated_at, completeness: version.completeness });
+  if (path === "/data-status") return json(request, { version: version.dashboard_version_id, generated_at: version.generated_at, runtime, market_dates: marketDates, completeness: version.completeness });
   if (path.startsWith("/asset/")) {
     const symbol = decodeURIComponent(path.slice("/asset/".length));
     const asset = assets.find((item) => item.symbol === symbol);
@@ -63,15 +71,18 @@ Deno.serve(async (request) => {
     const { data: security } = await admin.from("securities").select("security_id")
       .eq("symbol", symbol).eq("market", String(asset.market ?? "")).eq("is_active", true).maybeSingle();
     if (!security) return json(request, { error: "asset_not_found" }, 404);
+    const section = url.searchParams.get("section") ?? "all";
+    if (!["all", "history", "fundamentals"].includes(section)) return json(request, {error:"invalid_section"}, 400);
+    if (section === "fundamentals" && !canViewFundamentals) return json(request, {error:"forbidden"}, 403);
     const range = url.searchParams.get("range") ?? "1y";
     const months = ({ "3m": 3, "6m": 6, "1y": 12, "3y": 36, "5y": 60 } as Record<string, number>)[range] ?? 12;
     const start = new Date(); start.setMonth(start.getMonth() - months);
-    const historyResult = await admin.from("asset_daily_signals")
+    const historyResult = section === "fundamentals" ? {data: [], error: null} : await admin.from("asset_daily_signals")
       .select("trade_date,close,ma20,ma60,ma120,ma200,short_trend,mid_trend,long_trend,pe,pe_percentile,valuation_status")
       .eq("security_id", security.security_id).gte("trade_date", start.toISOString().slice(0, 10)).order("trade_date");
     if (historyResult.error) return json(request, { error: "asset_detail_query_failed" }, 500);
     const peHistory: Array<{ trade_date: string; pe: number | null; pe_percentile: number | null; valuation_status: string | null }> = [];
-    if (asset.asset_type === "指数") {
+    if (asset.asset_type === "指数" && section !== "fundamentals") {
       const peEnd = String(asset.trade_date ?? new Date().toISOString().slice(0, 10)).slice(0, 10);
       const peStart = new Date(peEnd);
       peStart.setFullYear(peStart.getFullYear() - 10);
@@ -85,7 +96,7 @@ Deno.serve(async (request) => {
         if ((page.data ?? []).length < 1000) break;
       }
     }
-    if (!canViewFundamentals) {
+    if (!canViewFundamentals || section === "history") {
       return json(request, { version: version.dashboard_version_id, asset: withoutQuarterly(asset), range, history: historyResult.data ?? [], pe_history: peHistory, fundamentals_access: false });
     }
     const [assessmentResult, factsResult, dividendsResult, industryResult, sourcesResult] = await Promise.all([

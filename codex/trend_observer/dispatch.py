@@ -1,6 +1,8 @@
-"""Version-deduplicated, Monday-to-Saturday Feishu morning dispatch."""
+"""Business-date-deduplicated, Monday-to-Saturday Feishu morning dispatch."""
 
 from __future__ import annotations
+
+import requests
 
 from dataclasses import dataclass
 from datetime import datetime, time
@@ -26,29 +28,35 @@ def dispatch_morning_report(store: SupabaseStore, now: datetime | None = None) -
         return DispatchResult("skipped", "周日不推送")
     if now.time() < TARGET_TIME:
         return DispatchResult("skipped", "未到08:00发送窗口")
-    version = store.latest_dashboard_version()
-    if version and version.get("is_complete"):
-        key = f"morning_report:{version['dashboard_version_id']}"
-        if store.has_dispatch_key(key):
-            return DispatchResult("skipped", "该数据版本已发送")
+    day = now.date().isoformat()
+    version = store.ready_morning_version(day)
+    if version:
+        key = f"morning_report:{day}"
+        if not store.claim_dispatch(key, version["dashboard_version_id"], "morning_report"):
+            return DispatchResult("skipped", "当日晨报已发送或正在发送")
         try:
             status_code = send_text_message(format_dashboard_version_message(version))
-            store.record_dispatch(version["dashboard_version_id"], "morning_report", "succeeded", dispatch_key=key, response_code=status_code)
-            return DispatchResult("succeeded", "飞书晨报已发送")
+        except (requests.Timeout, requests.ConnectionError, ValueError) as exc:
+            raise RuntimeError("晨报发送结果未知，保留发送占用，请核查飞书回执") from exc
         except Exception as exc:
             store.record_dispatch(version["dashboard_version_id"], "morning_report", "failed", dispatch_key=key, error=str(exc))
             raise
+        store.record_dispatch(version["dashboard_version_id"], "morning_report", "succeeded", dispatch_key=key, response_code=status_code)
+        return DispatchResult("succeeded", "飞书晨报已发送")
     if now.time() < DELAY_DEADLINE:
         return DispatchResult("waiting", "等待完整数据版本，09:30前将继续每10分钟检查")
     key = f"delay_notice:{now:%Y-%m-%d}"
-    if store.has_dispatch_key(key):
-        return DispatchResult("skipped", "当日延迟提示已发送")
+    if not store.claim_dispatch(key, None, "delay_notice"):
+        return DispatchResult("skipped", "当日延迟提示已发送或正在发送")
     try:
-        missing = (version or {}).get("completeness", {}).get("missing_asset_signals", ["必要行情数据集"])
+        latest = store.latest_dashboard_version()
+        missing = (latest or {}).get("completeness", {}).get("missing_asset_signals", ["当日早间同步／发布就绪检查"])
         missing_labels = [item.get("symbol", str(item)) if isinstance(item, dict) else str(item) for item in missing]
         status_code = send_text_message(format_delay_message(missing_labels, now))
-        store.record_dispatch(None, "delay_notice", "succeeded", dispatch_key=key, response_code=status_code)
-        return DispatchResult("delayed", "数据延迟提示已发送")
+    except (requests.Timeout, requests.ConnectionError, ValueError) as exc:
+        raise RuntimeError("延迟提示发送结果未知，保留发送占用，请核查飞书回执") from exc
     except Exception as exc:
         store.record_dispatch(None, "delay_notice", "failed", dispatch_key=key, error=str(exc))
         raise
+    store.record_dispatch(None, "delay_notice", "succeeded", dispatch_key=key, response_code=status_code)
+    return DispatchResult("delayed", "数据延迟提示已发送")
