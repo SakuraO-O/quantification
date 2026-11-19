@@ -338,7 +338,7 @@ test('renders published quarterly figures, switches metrics, and shows source la
     }
   };
   quarterly.metrics.asset_liability_ratio.years[0].quarters[3] = {
-    value:null, status:'数据不足', reason:'报告未提供该指标'
+    value:null, status:'数据不足', reason:'指标数据缺失'
   };
   const state = await mockBackend(page, { detailQuarterly: quarterly, holdDetails: true });
   await login(page);
@@ -359,7 +359,7 @@ test('renders published quarterly figures, switches metrics, and shows source la
   expect(tooltipOnTop).toBe(true);
   await page.locator('[data-quarter-metric="asset_liability_ratio"]').click();
   await expect(page.locator('#quarter-content .quarter-line-chart')).toBeVisible();
-  await expect(page.locator('.quarter-matrix tbody tr').filter({hasText:'年末资产负债率'}).locator('td').first()).toHaveText('报告未提供该指标');
+  await expect(page.locator('.quarter-matrix tbody tr').filter({hasText:'年末资产负债率'}).locator('td').first()).toHaveText('指标数据缺失');
   await page.locator('.quarter-line-chart circle').first().hover();
   await expect(page.locator('#quarter-tooltip')).toBeVisible();
   await expect.poll(() => state.detailGates.length).toBe(1);

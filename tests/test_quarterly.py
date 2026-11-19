@@ -72,7 +72,7 @@ class QuarterlyTest(unittest.TestCase):
         listed = build_quarterly(facts, [], self.docs, [], listing_date="2022-04-21")
         self.assertEqual(listed["years"], [2021, 2022, 2023, 2024, 2025, 2026])
         self.assertEqual(listed["metrics"]["net_profit"]["years"][-1]["quarters"][3]["status"], "未披露")
-        self.assertEqual(listed["metrics"]["roe"]["years"][-1]["quarters"][1]["reason"], "报告未提供该指标")
+        self.assertEqual(listed["metrics"]["roe"]["years"][-1]["quarters"][1]["reason"], "指标数据缺失")
         unknown = build_quarterly(facts, [], self.docs, [])
         self.assertEqual(len(unknown["years"]), 10)
 
@@ -84,7 +84,7 @@ class QuarterlyTest(unittest.TestCase):
         self.assertNotIn(2017, result["years"])
         year = result["metrics"]["net_profit"]["years"][result["years"].index(2018)]
         self.assertEqual(year["quarters"][1]["status"], "数据不足")
-        self.assertEqual(year["quarters"][1]["reason"], "报告未提供该指标")
+        self.assertEqual(year["quarters"][1]["reason"], "指标数据缺失")
 
     def test_approved_amount_and_complete_year_payout(self):
         facts = [fact("2025-12-31", "net_profit", 1000),
