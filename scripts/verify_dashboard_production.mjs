@@ -71,9 +71,11 @@ try {
     }
     return route.continue();
   });
-  const overviewResponse = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/dashboard-api/overview'));
+  const overviewResponse = page.waitForResponse(response => response.request().method() === 'GET' && new URL(response.url()).pathname.endsWith('/dashboard-api/overview'));
   await page.goto(`${pageUrl}?verify=${revision}`, {waitUntil:'domcontentloaded'});
-  const overview = await (await overviewResponse).json();
+  const receivedOverview = await overviewResponse;
+  assert.equal(receivedOverview.status(), 200, "Production overview request failed");
+  const overview = await receivedOverview.json();
   assert.equal(overview.completeness.asset_catalog_valid, true);
   const counts = {
     index:overview.assets.filter(asset => asset.asset_type === '指数').length,
