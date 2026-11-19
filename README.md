@@ -180,7 +180,7 @@ npm run test:browser
 
 部署顺序如下。
 
-1. 应用 `20261119124514_dashboard_publication_checks.sql`。迁移新增上市日期及来源引用、批准日期、发布批次与检查记录、输入修订号及服务端发布锁，并调整发送去重约束。
+1. 应用 `20261119133748_dashboard_publication_checks.sql`。迁移新增上市日期及来源引用、批准日期、发布批次与检查记录、输入修订号及服务端发布锁，并调整发送去重约束。
 2. 部署对应 Python 代码，按需运行 `sync-security-metadata` 补齐上市日期。该命令按交易所批量读取官方上市名录，保存来源引用，只对缺失日期补录，`--force` 可重新检查；逐股失败会报告并保留现有年份范围。该项与财务核验工具分开执行。
 3. 部署 `dashboard-api`，运行 `publish-dashboard` 生成新快照，然后发布静态 Pages。生产以同一版本核对分红构成、季度明细、标签、发布时间及运行状态。
 4. 手动演练晚间和早间任务，核对 `dashboard_batches`、`dashboard_publication_checks` 的任务终态、输入修订号和关联版本。早间派发只接受当日早间成功检查，不能由一个历史完整快照替代。
