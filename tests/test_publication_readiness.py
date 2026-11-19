@@ -13,6 +13,16 @@ from codex.trend_observer.supabase_store import SupabaseSettings, SupabaseStore
 
 
 class PublicationReadinessTest(unittest.TestCase):
+    def test_publication_respects_explicit_closed_day_in_sparse_calendar(self):
+        store = SupabaseStore(SupabaseSettings('https://example.invalid', 'test'))
+        def calendar_rows(_table, **kwargs):
+            if kwargs['filters'].get('trade_date') == 'eq.2026-11-19':
+                return [{'is_trading_day': False}]
+            return []
+        store.select = Mock(side_effect=calendar_rows)
+        now = datetime(2026, 11, 19, 22, tzinfo=ZoneInfo('Asia/Shanghai'))
+        self.assertEqual(store.last_completed_trading_date('CN', now).isoformat(), '2026-11-18')
+
     def test_latest_failed_morning_attempt_does_not_reuse_earlier_success(self):
         store = SupabaseStore(SupabaseSettings('https://example.invalid', 'test'))
         store.select = Mock(side_effect=[

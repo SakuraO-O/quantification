@@ -9,8 +9,7 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, time, timezone
-from zoneinfo import ZoneInfo
+from datetime import date, datetime, timezone
 import hashlib
 import json
 import math
@@ -18,6 +17,8 @@ import os
 from typing import Any
 
 import requests
+
+from .freshness import expected_market_date
 
 
 def _json_value(value: Any) -> Any:
@@ -268,11 +269,7 @@ class SupabaseStore:
                 return candidate
 
     def last_completed_trading_date(self, market: str, now: datetime) -> date:
-        zone, close = {"CN": ("Asia/Shanghai", time(15)), "HK": ("Asia/Hong_Kong", time(16)),
-                       "US": ("America/New_York", time(16))}[market]
-        local = now.astimezone(ZoneInfo(zone))
-        boundary = local.date() + timedelta(days=1) if local.time() >= close else local.date()
-        return self.previous_trading_date(market, boundary)
+        return expected_market_date(market, now, self.calendar_is_trading_day)
 
     def valuation_history(self, security_id: str, valuation_type: str = "pe") -> list[dict]:
         return self.select(
