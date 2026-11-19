@@ -71,11 +71,18 @@ try {
     }
     return route.continue();
   });
+  const overviewResponse = page.waitForResponse(response => new URL(response.url()).pathname.endsWith('/dashboard-api/overview'));
   await page.goto(`${pageUrl}?verify=${revision}`, {waitUntil:'domcontentloaded'});
+  const overview = await (await overviewResponse).json();
+  assert.equal(overview.completeness.asset_catalog_valid, true);
+  const counts = {
+    index:overview.assets.filter(asset => asset.asset_type === '指数').length,
+    stock:overview.assets.filter(asset => asset.asset_type === '股票').length
+  };
   await expect(page.locator('#dashboard-source')).toHaveClass(/api/, {timeout:90000});
-  await expect(page.locator('#index-body tr')).toHaveCount(13);
+  await expect(page.locator('#index-body tr')).toHaveCount(counts.index);
   await page.locator('.tab[data-view="stock"]').click();
-  await expect(page.locator('#stock-body tr')).toHaveCount(14);
+  await expect(page.locator('#stock-body tr')).toHaveCount(counts.stock);
   await expect(page.locator('#dashboard-publication-status')).toContainText('最近成功检查');
   await page.locator('#stock-body tr').filter({hasText:'中国海油'}).click();
   await page.locator('.modal-tab[data-pane="quarter"]').click();
@@ -84,6 +91,23 @@ try {
   await expect(page.locator('#detail-modal #quarter-tooltip')).toBeVisible();
   await expect(page.locator('.quarter-annual-total td').first()).toHaveCSS('font-weight','700');
   await expect(page.locator('.quarter-matrix tbody')).not.toContainText('亿元');
+  await expect(page.locator('.quarter-matrix thead th').first()).toContainText('亿元');
+  const quarterly = await page.evaluate(() => window.__trendDashboardRuntime.fundamentalDetails.values().next().value.quarterly);
+  await expect(page.locator('.quarter-matrix thead th')).toHaveCount(quarterly.years.length + 1);
+  if (quarterly.metrics.net_profit.years.at(-1).quarters[3].status === '未披露') {
+    await expect(page.locator('.quarter-matrix tbody tr').filter({hasText:'Q4'}).locator('td').last()).toHaveText('-');
+  }
+  for (const key of ['roe','asset_liability_ratio']) {
+    await page.locator(`[data-quarter-metric="${key}"]`).click();
+    const cells = page.locator('.quarter-annual-total td');
+    for (const [index,year] of quarterly.metrics[key].years.entries()) {
+      const cell = year.quarters[3];
+      if (cell.value == null) {
+        const expected = cell.status === '未披露' ? '-' : cell.reason || cell.status || '数据不足';
+        await expect(cells.nth(index)).toHaveText(expected);
+      }
+    }
+  }
   holdHistory = false;
   releaseHistory();
   await page.waitForFunction(() => window.__trendDashboardRuntime.historyRanges.get('sh600938') === '1y', null, {timeout:90000});
