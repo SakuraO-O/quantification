@@ -35,13 +35,11 @@ export function supabaseClients(authHeader: string) {
   };
 }
 
-export async function authorizedClients(authHeader: string, allowedRoles: string[]) {
+export async function authorizedClients(authHeader: string) {
   const clients = supabaseClients(authHeader);
   const { data, error } = await clients.viewer.auth.getUser();
   if (error || !data.user) return { error: "unauthorized" as const, status: 401, ...clients };
-  const role = String(data.user.app_metadata?.role || "");
-  if (!allowedRoles.includes(role)) return { error: "forbidden" as const, status: 403, ...clients };
-  return { user: data.user, role, ...clients };
+  return { user: data.user, ...clients };
 }
 
 function normalizedOrigin(value: string): string | null {

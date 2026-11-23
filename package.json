@@ -4,7 +4,7 @@
   "scripts": {
     "test:browser": "playwright test",
     "browser:setup": "playwright install chromium",
-    "test:database": "node --test tests/publication_sql.test.mjs"
+    "test:database": "node --test tests/*_sql.test.mjs"
   },
   "devDependencies": {
     "@electric-sql/pglite": "0.5.17",

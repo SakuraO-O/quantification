@@ -33,7 +33,7 @@ supabase functions deploy portfolio-config
 托管的 Edge Function 会自动获得 `SUPABASE_PUBLISHABLE_KEYS` 和 `SUPABASE_SECRET_KEYS`，无需手工复制密钥。只需额外设置
 `DASHBOARD_ALLOWED_ORIGINS=https://sakurao-o.github.io,http://127.0.0.1:8766`。函数自行校验 Supabase Auth，因此服务端密钥不会下发到浏览器。
 
-本项目采用单用户模式：`supabase/config.toml` 已关闭邮箱公开注册。数据库和函数部署后，在 Supabase Dashboard 的 Authentication → Users 中由管理员创建唯一用户，再把该用户的 **App Metadata** 设置为 `{"role":"editor"}`。不要把角色写入可由用户修改的 User Metadata。`viewer` 仅可读取看板，`editor` 才可保存资产配置。
+本项目采用单用户模式：`supabase/config.toml` 已关闭邮箱公开注册。在 Supabase Dashboard 的 Authentication → Users 中创建唯一用户；登录后即可查看、保存配置和处理季度核实，无需业务角色或权限字段。服务端仍校验登录令牌，数据库服务密钥不下发浏览器。
 
 接着初始化资产主数据、运行增量同步、发布看板版本：
 
@@ -139,7 +139,7 @@ http://127.0.0.1:8766/
 当前标签页的 `sessionStorage`。不要把 secret key 或 `service_role` key 填入页面或
 提交到仓库。
 
-看板只通过受控 Edge API 读取数据；资产配置编辑会通过 editor 专用 API 原子写入 Supabase，并在重新加载时读取最新版本。详情弹窗打开时才按需请求历史行情、结构化财务指标、分红事件、行业指标及来源元数据。API 不可用或认证缺失时，页面会明确标记并回退到 Mock。
+看板只通过受控 Edge API 读取数据；资产配置编辑会通过 已鉴权 API 原子写入 Supabase，并在重新加载时读取最新版本。详情弹窗打开时才按需请求历史行情、结构化财务指标、分红事件、行业指标及来源元数据。API 不可用或认证缺失时，页面会明确标记并回退到 Mock。
 
 ## 运行测试
 
@@ -191,4 +191,32 @@ npm run test:browser
 
 ### 生产回归验收
 
-`Trend Observer CI` 在拉取请求及主分支执行 Python、浏览器与 Edge 处理函数测试。手动运行并勾选 `verify_production` 可检查已部署的 Pages 文件与提交一致性、真实 Auth 和 Edge、慢行情下切换基本面、季度标签及明细、五年行情切换。此验收使用现有唯一 editor 的临时登录会话，通过管理员生成登录令牌并验证；测试结束只注销该临时会话。不会发送登录邮件，浏览器仅放行只读请求，运行日志不输出登录令牌，不上传认证响应或浏览器追踪。
+`Trend Observer CI` 在拉取请求及主分支执行 Python、浏览器与 Edge 处理函数测试。手动运行并勾选 `verify_production` 可检查已部署的 Pages 文件与提交一致性、真实 Auth 和 Edge、慢行情下切换基本面、季度标签及明细、五年行情切换。此验收使用现有唯一用户的临时登录会话，通过管理员生成登录令牌并验证；测试结束只注销该临时会话。不会发送登录邮件，浏览器仅放行只读请求，运行日志不输出登录令牌，不上传认证响应或浏览器追踪。
+
+
+### 季度财报与分红核实
+
+本分支实现股票六项季度财务指标及现金分红核实，不自动部署或改写生产数据。页面入口为顶部“季度核实”；有待处理项才显示数量提醒。工作台分需处理、自动通过、人工记录、年度查全，报告期独立成列，绝对时间统一显示北京时间及完整年份。
+
+- 候选、参考和采用值分别保存；自动核实只由 Python 比对规则决定，采用十进制计算。两源同值或有明确展示精度支持的舍入差，且证券、报告期、单位、币种、口径与修订元数据相符时，直接成为 verified。元数据未知或失败均不会默认为通过。
+- 人工确认、修正与口径补齐通过数据库事务保留旧版本。口径修正保存原输入及单位，换算为标准单位的新候选；批量仅支持已查证的候选值，任一版本冲突整批回滚。财务金额标准单位为元（最多14位小数），百分比和每股金额最多6位小数。
+- 来源同步与来源自己的观察快照比较；不以人工采用值作为来源基线。初次无法重建来源历史时仅建立基线，保留既有 verified 状态。后续来源有效变化创建新候选；已知更正未发布期间，API遮蔽受影响旧值及派生结论，晨报等待新版本。
+- 单笔分红通过不能代替全年查全。年度任务有独立版本；未披露等待，不计入需处理数量。全年零分红必须明确勾选不分配依据；来源或方案变化后重新查全。正式证据可以从巨潮、上交所、深交所链接登记，保存 SHA-256 与来源，不保存报告全文。
+
+#### 部署依赖（本轮尚未执行）
+
+1. 先核对目标项目迁移记录，应用 `supabase/migrations/20261123054746_quarterly_review.sql`。该迁移保留现有 verified 事实，不批量重置历史数据。
+2. 部署 `quarterly-review`、`dashboard-api`、`portfolio-config`，均由函数内部校验 Auth；CORS沿用 `DASHBOARD_ALLOWED_ORIGINS`。
+3. 在 Edge 服务端设置 `REVIEW_GITHUB_REPOSITORY=SakuraO-O/quantification`、`REVIEW_GITHUB_REF=main` 与仅对该仓库有 Actions 写入能力的 `REVIEW_GITHUB_TOKEN`。令牌仅用于触发已有工作流。缺少配置会明确记为发布失败，允许重试。不要将令牌写入页面、日志或代码。
+4. 发布 Python 与 Pages 静态资源，运行一次 `publish-dashboard` 生成带核实修订号及依赖信息的快照，再验收同一版本页面。工作流新增 `review-publish`，绑定 `review_job`、`review_attempt`；该任务不发送飞书消息。
+5. 在已具备 Wind 本地授权与 Node CLI 的机器上运行执行器。沿用本机凭据环境中的 `SUPABASE_URL`、`SUPABASE_SECRET_KEY`；下列路径须替换为实际可用 CLI，不能把本地 Wind 凭据上传 GitHub。
+
+```bash
+python -B -m codex.trend_observer.verification --wind-cli /absolute/path/to/wind/bin/cli.js --watch
+```
+
+默认每300秒领取最多20项，串行调用；领取租约10分钟。取数失败后记录失败并停止执行器，检查授权、网络或回执后重启，避免把同一故障扩散到其他股票。原始回执只缓存本机15分钟；同报告期共享缓存，显式重试换新缓存代次。返回列未明确币种或修订口径时进入人工核对，不因请求里写过这些条件就认定成立。需补充真实 Wind 回执验收后才可报告线上自动化已验证；本轮没有安装开机服务。
+
+发布排队启动期限10分钟，运行租约30分钟；本地执行器离线不阻断云端发布。发布失败保留待更新变更；新修订不会因旧请求完成而被提前清除。页面每15秒更新核实状态，普通行情与既有投资分析布局沿用原系统。
+
+验证入口：`python -B -m unittest discover -s tests`、`npm run test:database`（PGlite实际执行迁移与事务）、`npm run test:browser`，以及 `deno test --no-lock --node-modules-dir=none --allow-env supabase/functions/dashboard-api/index_test.ts supabase/functions/quarterly-review/index_test.ts`。这些隔离验证不代表已上线或真实 Wind 已取数成功。

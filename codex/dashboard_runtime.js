@@ -20,6 +20,7 @@
     portfolioApiBase: "",
     token: "",
     version: null,
+    reviewRevision: null,
     source: "mock",
     histories: new Map(),
     historyRanges: new Map(),
@@ -120,6 +121,8 @@
       logout.textContent = "退出";
       parts.push(logout);
     }
+    const reviewEntry = document.querySelector("#review-entry");
+    if (reviewEntry) parts.push(reviewEntry);
     meta.replaceChildren(...parts);
   }
 
@@ -180,7 +183,7 @@
   }
 
   function applyOverview(payload) {
-    runtimeState.permissions = new Set(Array.isArray(payload.permissions) ? payload.permissions : ["view_dashboard", "view_fundamentals", "edit_configuration"]);
+    runtimeState.permissions = new Set(["view_dashboard", "view_fundamentals", "edit_configuration"]);
     const assets = Array.isArray(payload.assets) ? payload.assets : [];
     const apiIndices = assets.filter(item => item.asset_type === "指数").map(item => mapAsset(item, "index"));
     const apiStocks = assets.filter(item => item.asset_type === "股票").map(item => mapAsset(item, "stock"));
@@ -253,6 +256,12 @@
       runtimeState.fundamentalDetails.clear();
       runtimeState.detailErrors.clear();
     }
+    if (runtimeState.reviewRevision !== (payload.review?.revision ?? null)) {
+      runtimeState.fundamentalDetails.clear();
+      runtimeState.detailErrors.clear();
+      detailGeneration += 1;
+    }
+    runtimeState.reviewRevision = payload.review?.revision ?? null;
     runtimeState.version = payload.version || null;
     runtimeState.completeness = payload.completeness || {};
     renderPublicationStatus(payload);
@@ -589,8 +598,8 @@
     }
     if (runtimeState.source === "api" && assessment.report_period) {
       const profile = profileFor(asset);
-      const factRows = facts.slice(0, 60).map(row => `<tr><td>${escapeHtml(row.report_period)}</td><td>${escapeHtml(row.metric_code)}</td><td class="num">${escapeHtml(row.value)}</td><td>${escapeHtml(row.unit)}</td><td>${escapeHtml(row.period_type)}</td><td>${escapeHtml(row.announcement_date)}</td></tr>`).join("");
-      const dividendRows = dividends.slice(0, 12).map(row => `<tr><td>${escapeHtml(row.report_period || row.fiscal_year)}</td><td>${escapeHtml(row.event_stage)}</td><td class="num">${dividendAmount(row.cash_dividend_per_share)}</td><td>${escapeHtml(row.announcement_date)}</td><td>${escapeHtml(row.announcement_id)}</td></tr>`).join("");
+      const factRows = facts.slice(0, 60).map(row => `<tr><td>${escapeHtml(row.report_period)}</td><td>${escapeHtml(row.metric_code)}</td><td class="num">${escapeHtml(row.value)}${row.verification_status==='candidate'?' <small>待核实</small>':''}</td><td>${escapeHtml(row.unit)}</td><td>${escapeHtml(row.period_type)}</td><td>${escapeHtml(row.announcement_date)}</td></tr>`).join("");
+      const dividendRows = dividends.slice(0, 12).map(row => `<tr><td>${escapeHtml(row.report_period || row.fiscal_year)}</td><td>${escapeHtml(row.event_stage)}</td><td class="num">${dividendAmount(row.cash_dividend_per_share)}${row.verification_status==='candidate'?' <small>待核实</small>':''}</td><td>${escapeHtml(row.announcement_date)}</td><td>${escapeHtml(row.announcement_id)}</td></tr>`).join("");
       const industryRows = industry.slice(0, 24).map(row => `<div class="anchor-item"><small>${escapeHtml(row.metric_code)} · ${escapeHtml(row.period)}</small><b>${escapeHtml(row.value)} ${escapeHtml(row.unit)}</b></div>`).join("");
       const sourceRows = sources.slice(0, 12).map(row => {
         const href = safeExternalHref(row.document_url);
@@ -715,7 +724,7 @@
         auth.clearSession();
         auth.showGate("登录已失效，请重新登录。");
       }
-      if (response.status === 403) throw new Error("当前账号没有 editor 权限。");
+      if (response.status === 403) throw new Error("配置请求未被接受，请检查登录状态。");
       throw new Error(body.error || `HTTP ${response.status}`);
     }
     return body;
@@ -724,7 +733,7 @@
   runtimeState.saveAllocation = saveAllocation;
 
   const rangeKey = months => ({3:"3m",6:"6m",12:"1y",36:"3y",60:"5y"})[months] || "1y";
-  const detailRequestKey = (asset, months, section = "history") => `${runtimeState.version}:${asset.code}:${section}:${rangeKey(months)}`;
+  const detailRequestKey = (asset, months, section = "history") => `${runtimeState.version}:${asset.code}:${section}:${rangeKey(months)}:${section === "fundamentals" ? runtimeState.reviewRevision : ""}`;
   const hasLoadedDetailRange = (asset, months = detailRange) => runtimeState.historyRanges.get(asset.code) === rangeKey(months);
   const isDetailLoading = (asset, months = detailRange) => {
     const key = detailRequestKey(asset, months);
@@ -758,9 +767,10 @@
       return;
     }
     const version = runtimeState.version;
+    const reviewRevision = runtimeState.reviewRevision;
     const request = apiFetch(`/asset/${encodeURIComponent(asset.code)}?range=${rangeKey(months)}&section=${section}&version=${encodeURIComponent(version || "")}`)
       .then(detail => {
-        if (version !== runtimeState.version) return;
+        if (version !== runtimeState.version || (section === "fundamentals" && reviewRevision !== runtimeState.reviewRevision)) return;
         runtimeState.detailErrors.delete(key);
         if (section === "history") {
           runtimeState.historyCache.set(key, detail);
@@ -1132,12 +1142,19 @@
     setSourceStatus("mock", "正在读取 Edge API…");
     try {
       const payload = await apiFetch("/overview");
+      const activeCode = document.querySelector("#detail-modal").open && detailType === "stock" ? stocks[detailIndex]?.code : null;
       applyOverview(payload);
       const issues = payload.completeness && (payload.completeness.asset_issues || payload.completeness.missing_asset_signals);
       const issueLabels = Array.isArray(issues) ? issues.map(item => item && item.symbol).filter(Boolean) : [];
       const suffix = issueLabels.length ? ` · ${issueLabels.join("、")} 数据延迟` : "";
       setSourceStatus("api", `Edge API · 版本 ${String(payload.version || "—").slice(0, 8)}${suffix}`, payload.generated_at);
       renderAll();
+      if (activeCode) {
+        const activeIndex = stocks.findIndex(item => item.code === activeCode);
+        if (activeIndex >= 0) openDetail("stock", activeIndex);
+        else document.querySelector("#detail-modal").close();
+      }
+      window.dispatchEvent(new CustomEvent("trend-dashboard-overview", {detail:payload}));
     } catch (error) {
       if (String(error.message).includes("unauthorized")) {
         window.TrendDashboardAuth.clearSession();
@@ -1160,6 +1177,7 @@
     await loadOverview();
   }
 
+  window.TrendDashboardRuntime = {refresh:loadOverview};
   window.addEventListener("trend-dashboard-authenticated", () => loadOverview());
   window.addEventListener("trend-dashboard-signed-out", () => {
     runtimeState.source = "mock";

@@ -32,6 +32,7 @@ globalThis.fetch = ((input: RequestInfo | URL) => {
   calls.push(url);
   const json = (data: unknown, status = 200) => Promise.resolve(new Response(JSON.stringify(data), {status, headers:{"Content-Type":"application/json"}}));
   if (url.pathname === "/auth/v1/user") return json({id:"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa", app_metadata:{role:"viewer", permissions}});
+  if (url.pathname === "/rest/v1/rpc/review_overview") return json({invalidations:[]});
   if (url.pathname === "/rest/v1/rpc/dashboard_runtime_status") return json({current_version_id:"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"});
   if (url.pathname === "/rest/v1/dashboard_versions") return json([{
     dashboard_version_id:"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb", payload:{assets:[{
@@ -73,19 +74,19 @@ Deno.test("fundamentals succeeds independently of missing or failing market hist
   assertEquals((await response.json()).quarterly.years, [2026]);
   assertEquals(calls.filter(url => url.pathname.endsWith("asset_daily_signals")).length, 0);
 });
-Deno.test("view-only access cannot read quarterly fundamentals", async () => {
+Deno.test("logged-in single user can read fundamentals without named permissions", async () => {
   reset(); permissions = ["view_dashboard"];
   const response = await handler(request("fundamentals"));
-  assertEquals(response.status, 403);
+  assertEquals(response.status, 200);
   await response.body?.cancel();
-  assertEquals(calls.filter(url => url.pathname.endsWith("financial_facts")).length, 0);
+  assertEquals(calls.filter(url => url.pathname.endsWith("financial_facts")).length, 1);
 });
-Deno.test("role without dashboard permission cannot read any dashboard data", async () => {
+Deno.test("logged-in single user can read history with an empty permissions array", async () => {
   reset(); permissions = [];
   const response = await handler(request("history"));
-  assertEquals(response.status, 403);
+  assertEquals(response.status, 200);
   await response.body?.cancel();
-  assertEquals(calls.filter(url => url.pathname.startsWith("/rest/")).length, 0);
+  assert(calls.some(url => url.pathname.startsWith("/rest/")));
 });
 Deno.test("history query failure remains local to the history response", async () => {
   reset(); historyFailure = true;

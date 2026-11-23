@@ -17,7 +17,9 @@ from .supabase_store import SupabaseStore
 
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="趋势观察台数据管道。")
-    parser.add_argument("command", choices=("begin-batch", "retry-morning-publication", "sync-security-metadata", "bootstrap", "sync-market", "sync-valuation", "sync-fundamentals", "rebuild-gem100", "rebuild-manual-index", "publish-dashboard", "dispatch-feishu"))
+    parser.add_argument("command", choices=("begin-batch", "retry-morning-publication", "sync-security-metadata", "bootstrap", "sync-market", "sync-valuation", "sync-fundamentals", "rebuild-gem100", "rebuild-manual-index", "publish-dashboard", "review-publish", "dispatch-feishu"))
+    parser.add_argument("--review-job")
+    parser.add_argument("--review-attempt", type=int)
     parser.add_argument("--phase", choices=("morning", "evening", "manual"), default="manual")
     parser.add_argument("--symbol", choices=("sz399006", "980092", "hkHSTECH", "hkHSI"), help="rebuild-manual-index 时指定手动 PE 指数。")
     parser.add_argument("--market", choices=("CN", "HK", "US"), help="sync-market 时仅同步指定市场。")
@@ -116,6 +118,11 @@ def main(argv=None):
         elif args.command == "publish-dashboard":
             version = DashboardPublisher(store).publish(batch_id=batch_id)
             print(f"已发布看板版本：{version['dashboard_version_id']}")
+        elif args.command == "review-publish":
+            from .verification import run_publish_request
+            if not args.review_job or not args.review_attempt:
+                raise RuntimeError("缺少核实发布任务编号或尝试序号")
+            print(run_publish_request(store, args.review_job, args.review_attempt, DashboardPublisher(store)))
         elif args.command == "dispatch-feishu":
             result = dispatch_morning_report(store)
             print(result.message)

@@ -57,6 +57,8 @@ async function mockBackend(page, options = {}) {
         publishableKey: 'sb_publishable_local_browser_test'
       });` });
     }
+    if (url.pathname.startsWith('/functions/v1/quarterly-review/') && state.reviewHandler) return state.reviewHandler(route,url,request);
+    if (url.pathname.startsWith('/functions/v1/quarterly-review/')) return json(route,{pending_facts:0,pending_years:0,pending_publish:0,auto:0,manual:0,items:[],stocks:[],periods:[]});
     if (url.pathname === '/auth/v1/token') {
       if (state.badLogin) return json(route, { error_description: '测试账号无效' }, 400);
       return json(route, { access_token: 'local-test-token', refresh_token: 'local-test-refresh', expires_in: 3600 });
@@ -69,6 +71,7 @@ async function mockBackend(page, options = {}) {
         version: 'local-fixed-version-1', generated_at: '2026-10-10T10:00:00Z',
         runtime: state.runtime || null, market_dates: state.marketDates || [],
         completeness: { asset_catalog_valid: true }, permissions: ['view_dashboard', 'view_fundamentals', 'edit_configuration'],
+        review: state.reviewSummary,
         assets: state.incompleteCatalog ? assets.slice(0, 1) : (state.customAssets || assets),
         style_compass: state.styleCompass || [], allocation: state.allocation
       });
@@ -99,7 +102,7 @@ async function mockBackend(page, options = {}) {
       return json(route, { allocation_type: payload.allocation_type, data_date: payload.data_date,
         version: state.writes.length, allocation: state.allocation });
     }
-    if (['/', '/dashboard_auth.js', '/dashboard_quarterly.js', '/dashboard_runtime.js'].includes(url.pathname)) return route.continue();
+    if (['/', '/dashboard_review.js', '/dashboard_review.css', '/dashboard_auth.js', '/dashboard_quarterly.js', '/dashboard_runtime.js'].includes(url.pathname)) return route.continue();
     state.unexpected.push(`${request.method()} ${url.pathname}`);
     return route.abort();
   });
@@ -113,6 +116,121 @@ async function login(page) {
   await page.locator('#auth-password').fill('test-only-password');
   await page.locator('#auth-submit').click();
 }
+
+async function reviewBackend(page) {
+  const summary={pending_facts:3,pending_years:1,auto:1,manual:0,pending_publish:0,published_revision:0,revision:0,worker:null};
+  const source={source_document_id:'doc',document_url:'https://static.cninfo.com.cn/test.pdf',content_hash:'a'.repeat(64),source:'official-review',title:'2025年度报告',document_type:'annual_report',report_period:'2025-12-31',announcement_date:'2026-03-01'};
+  let records=[0,1,2].map(i=>({id:`fact-${i}`,kind:'financial',security_id:'sid',symbol:'sh600900',name:'长江电力',report_period:'2025-12-31',metric_code:'net_profit',metric_name:i?'营业收入':'归母净利润',value:'100.123456',unit:'CNY',period_type:'annual',status:i===2?'failed':'diff',version:1,fact_hash:`hash-${i}`,source:'eastmoney',document_url:source.document_url,source_document_id:'doc',metadata_complete:true,verification_status:'candidate',fields:{},review_data:{ready:i<2,note:'已查阅年报',evidence_id:'doc',checked_at:'2026-11-23T02:14:00Z',reference:{value:'99.123456',source:'Wind',unit:'CNY',difference:'1',difference_ratio:'1.01'},reason:i===2?'本地授权失效':'数值存在差异'}}));
+  records.push({...records[0],id:'auto',status:'auto',verification_status:'verified',review_data:{checked_at:'2026-11-23T02:14:00Z',reference:{value:'100.123456',source:'Wind',unit:'CNY'}}});
+  const years=[{security_id:'sid',name:'长江电力',symbol:'sh600900',fiscal_year:2025,version:0,ready:true,status:'pending',positive_plans:0,unresolved:0},{security_id:'sid',name:'长江电力',symbol:'sh600900',fiscal_year:2026,version:0,ready:false,status:'pending',positive_plans:0,unresolved:0}];
+  const review={writes:[],conflict:false,readError:false,records,summary};
+  const state=await mockBackend(page,{reviewSummary:summary,reviewHandler:async(route,url,request)=>{
+    const path=url.pathname.replace('/functions/v1/quarterly-review','');
+    if(review.readError)return json(route,{error:'review_status_failed'},500);
+    if(request.method()==='POST') {
+      const body=JSON.parse(request.postData());review.writes.push({path,body});
+      if(review.conflict)return json(route,{error:'review_version_changed'},409);
+      if(path==='/confirm'){for(const update of body.items){const item=records.find(r=>r.id===update.id);item.verification_status='verified';item.status='manual';if(update.mode==='custom')item.value=update.value;}summary.pending_facts-=body.items.length;summary.manual+=body.items.length;summary.pending_publish++;}
+      if(path==='/metadata'){const item=records.find(r=>r.id===body.items[0].id);Object.assign(item,body.items[0].changes);item.review_data={};item.status='pending';item.version++;}
+      if(path==='/mark_ready'){for(const update of body.items){const item=records.find(r=>r.id===update.id);item.review_data={...item.review_data,ready:true,note:update.note,evidence_id:update.evidence_id};}}
+      if(path==='/annual'){summary.pending_years=0;years[0].status='complete';summary.pending_publish++;}
+      if(path==='/enqueue')review.active=true;
+      return json(route,{result:[]});
+    }
+    if(path==='/summary')return json(route,summary);
+    if(path==='/filters')return json(route,{stocks:[{security_id:'sid',name:'长江电力',symbol:'sh600900'}],periods:['2025-12-31']});
+    if(path==='/records'){const tab=url.searchParams.get('tab');let items=records.filter(r=>tab==='pending'?r.verification_status!=='verified':tab==='auto'?r.status==='auto':r.status==='manual');const status=url.searchParams.get('status');if(status)items=items.filter(r=>r.status===status);return json(route,{items,total:items.length});}
+    if(path==='/annual')return json(route,{items:years});
+    if(path==='/sources')return json(route,{items:[source]});
+    if(path.startsWith('/detail/'))return json(route,{item:records.find(r=>r.id===path.split('/').pop()),sources:[source],jobs:review.active?[{state:'queued'}]:[],events:[{event_type:'verification',created_at:'2026-11-23T02:14:00Z',data:{reason:'校验发现差异',original:{value:'100.123456'}}}]});
+    return json(route,{items:[]});
+  }});
+  return {...state,review};
+}
+
+test('review workbench separates report period, shows full years, and preserves normal dashboard layout',async({page})=>{
+  const state=await reviewBackend(page);await login(page);
+  await expect(page.locator('#review-entry')).toHaveText('待核实 4');
+  await page.locator('#review-entry').click();
+  await expect(page.locator('#review-list th').filter({hasText:/^股票$/})).toBeVisible();
+  await expect(page.locator('#review-list th').filter({hasText:/^报告期$/})).toBeVisible();
+  await expect(page.locator('#review-list')).toContainText('2026-11-23 10:14:00');
+  await page.screenshot({path:'/private/tmp/trend-review-workbench.png'});
+  await page.locator('[data-detail-index="0"]').click();await expect(page.locator('#review-detail')).toContainText('2026-11-23 10:14:00');
+  await expect(page.locator('#review-detail')).toContainText('100.123456');
+  await page.locator('#review-detail [data-action=close]').first().click();
+  await page.locator('[data-review-tab=auto]').click();await expect(page.locator('#review-list')).toContainText('自动通过');
+  expect(state.review.writes).toEqual([]);
+});
+
+test('manual edit previews old and new values, cancellation preserves input, and success changes category',async({page})=>{
+  const {review}=await reviewBackend(page);await login(page);await page.locator('#review-entry').click();await page.locator('[data-detail-index="0"]').click();
+  await page.locator('#review-adopt-form [name=mode]').selectOption('custom');
+  await expect(page.locator('[data-action=ready]')).toBeDisabled();
+  await page.locator('#review-adopt-form [name=value]').fill('110.000001');await page.locator('#review-adopt-form [name=note]').fill('核对原始年报后修正');await page.locator('#review-adopt-form [name=reviewed]').check();
+  await page.locator('#review-adopt-form [type=submit]').click();await expect(page.locator('#review-confirm')).toContainText('100.123456 → 采用值 110.000001');
+  await page.locator('[data-confirm=cancel]').click();expect(review.writes).toEqual([]);await expect(page.locator('#review-adopt-form [name=value]')).toHaveValue('110.000001');
+  await page.locator('#review-adopt-form [type=submit]').click();await page.locator('[data-confirm=submit]').click();
+  await expect(page.locator('#review-detail')).not.toBeVisible();await expect(page.locator('#review-entry')).toHaveText('待核实 3');
+  expect(review.writes[0].body.items[0].value).toBe('110.000001');
+  await page.locator('[data-review-tab=manual]').click();await page.locator('[data-detail-index="0"]').click();await expect(page.locator('#review-detail')).toContainText('110.000001');
+});
+
+test('batch selection excludes unchecked records and transaction conflicts keep the confirmation open',async({page})=>{
+  const {review}=await reviewBackend(page);await login(page);await page.locator('#review-entry').click();
+  await expect(page.locator('[data-review-select="fact-2"]')).toBeDisabled();await page.locator('#review-select-all').check();
+  await page.locator('[data-review=batch]').click();await expect(page.locator('#review-confirm')).toContainText('2 项');
+  review.conflict=true;await page.locator('[data-confirm=submit]').click();await expect(page.locator('#review-confirm-error')).toContainText('数据版本已变化');
+  expect(review.summary.pending_facts).toBe(3);review.conflict=false;await page.locator('[data-confirm=submit]').click();await expect(page.locator('#review-entry')).toHaveText('待核实 2');
+});
+
+test('metadata repair submits a new candidate with full source precision',async({page})=>{
+  const {review}=await reviewBackend(page);await login(page);await page.locator('#review-entry').click();await page.locator('[data-detail-index="0"]').click();await page.locator('[data-action=metadata]').click();
+  await page.locator('#review-metadata-form [name=value]').fill('100.12345678901234');await page.locator('#review-metadata-form [name=note]').fill('修正原始来源转录');await page.locator('#review-metadata-form [name=reviewed]').check();
+  await page.locator('#review-metadata-form [type=submit]').click();await expect(page.locator('#review-confirm')).toContainText('保存后仍需重新核实');await page.locator('[data-confirm=submit]').click();
+  await expect(page.locator('#review-detail')).not.toBeVisible();expect(review.writes[0].path).toBe('/metadata');expect(review.writes[0].body.items[0].changes.value).toBe('100.12345678901234');
+});
+
+test('annual zero conclusion is explicit and waiting years do not allow completion',async({page})=>{
+  const {review}=await reviewBackend(page);await login(page);await page.locator('#review-entry').click();await page.locator('[data-review-tab=annual]').click();
+  await page.locator('[data-annual-index="1"]').click();await expect(page.locator('#review-annual-form [type=submit]')).toBeDisabled();await page.locator('#review-detail [data-action=close]').click();
+  await page.locator('[data-annual-index="0"]').click();await page.locator('#review-annual-form [name=conclusion]').selectOption('zero');await page.locator('#review-annual-form [name=evidence_id]').selectOption('doc');
+  await page.locator('#review-annual-form [name=note]').fill('年报及全年公告明确无现金分红');await page.locator('#review-annual-form [name=reviewed]').check();await page.locator('#review-annual-form [name=scope_checked]').check();await page.locator('#review-annual-form [name=zero_confirmed]').check();
+  await page.locator('#review-annual-form [type=submit]').click();await expect(page.locator('#review-confirm')).toContainText('全年无现金分红');await page.locator('[data-confirm=submit]').click();await expect(page.locator('#review-detail')).not.toBeVisible();expect(review.writes[0].body.zero_confirmed).toBe(true);
+});
+
+test('failed validation can retry while offline, and queued tasks block manual overwrites',async({page})=>{
+  const {review}=await reviewBackend(page);await login(page);await page.locator('#review-entry').click();await page.locator('[data-detail-index="2"]').click();await expect(page.locator('#review-detail')).toContainText('校验失败');await page.locator('[data-action=retry]').click();
+  await expect(page.locator('[data-action=retry]')).toHaveText('已排队 / 校验中');await expect(page.locator('#review-adopt-form [type=submit]')).toBeDisabled();expect(review.writes[0].path).toBe('/enqueue');
+});
+
+test('review read failures never become a false zero or completed state',async({page})=>{
+  const {review}=await reviewBackend(page);await login(page);review.readError=true;await page.locator('#review-entry').click();await expect(page.locator('#review-list')).toContainText('读取失败');await expect(page.locator('#review-message')).toContainText('操作未完成');
+  await page.locator('[data-review=close-work]').click();await page.locator('#dashboard-logout').click();await expect(page.locator('#review-entry')).not.toBeVisible();expect(review.writes).toEqual([]);
+});
+
+test('new review revision invalidates fundamentals cache even when publication version is unchanged',async({page})=>{
+  const state=await mockBackend(page,{reviewSummary:{revision:1,pending_facts:0,pending_years:0,pending_publish:0}});
+  await login(page);await page.locator('.tab[data-view="stock"]').click();await page.locator('#stock-body tr').click();
+  await expect.poll(()=>state.requests.filter(p=>p.includes('dashboard-api/asset/600900')).length).toBe(2);
+  const count=state.requests.length;state.reviewSummary.revision=2;state.reviewSummary.pending_facts=1;
+  await page.evaluate(()=>window.TrendDashboardRuntime.refresh());
+  await expect(page.locator('#detail-modal')).toBeVisible();
+  await expect.poll(()=>state.requests.slice(count).filter(p=>p.includes('dashboard-api/asset/600900')).length).toBe(1);
+  await expect(page.locator('#review-entry')).toHaveText('待核实 1');
+});
+
+test('no pending data removes the reminder and renders an explicit empty state',async({page})=>{
+  const {review}=await reviewBackend(page);review.records.splice(0,3);review.summary.pending_facts=0;review.summary.pending_years=0;
+  await login(page);await expect(page.locator('#review-entry')).toHaveText('季度核实');await page.locator('#review-entry').click();
+  await expect(page.locator('#review-list')).toContainText('当前筛选下没有记录');await expect(page.locator('[data-review=batch]')).toBeDisabled();
+});
+
+test('marking evidence checked automatically selects that fact for the next batch',async({page})=>{
+  const {review}=await reviewBackend(page);await login(page);await page.locator('#review-entry').click();await page.locator('[data-detail-index="2"]').click();
+  await page.locator('#review-adopt-form [name=note]').fill('已核对年报，候选金额正确');await page.locator('#review-adopt-form [name=reviewed]').check();await page.locator('[data-action=ready]').click();
+  await expect(page.locator('[data-review-select="fact-2"]')).toBeChecked();await expect(page.locator('[data-review=batch]')).toContainText('（1）');expect(review.writes[0].path).toBe('/mark_ready');
+});
 
 test('loads the exact preview bundle, logs in, reads a version, and logs out', async ({ page }) => {
   const errors = [];

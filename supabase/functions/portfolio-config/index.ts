@@ -14,7 +14,7 @@ Deno.serve(async (request) => {
   if (request.method !== "POST") return json(request, { error: "method_not_allowed" }, 405);
   const authHeader = request.headers.get("Authorization");
   if (!authHeader) return json(request, { error: "unauthorized" }, 401);
-  const authorized = await authorizedClients(authHeader, ["editor"]);
+  const authorized = await authorizedClients(authHeader);
   if ("error" in authorized) return json(request, { error: authorized.error }, authorized.status);
   const { admin, user } = authorized;
 

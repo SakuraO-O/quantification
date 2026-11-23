@@ -13,7 +13,7 @@ const secret = process.env.SUPABASE_SECRET_KEY;
 assert(secret, 'Missing production server key');
 assert.equal(config.supabaseUrl, process.env.SUPABASE_URL?.replace(/\/$/, ''));
 const revision = process.env.GITHUB_SHA || 'acceptance';
-for (const file of ['dashboard_auth.js', 'dashboard_quarterly.js', 'dashboard_runtime.js']) {
+for (const file of ['dashboard_auth.js', 'dashboard_quarterly.js', 'dashboard_runtime.js', 'dashboard_review.js', 'dashboard_review.css']) {
   const response = await fetch(`${pageUrl}${file}?verify=${revision}`, {signal:AbortSignal.timeout(30000)});
   assert(response.ok, `Deployed asset unavailable: ${file}`);
   const digest = value => createHash('sha256').update(value).digest('hex');
@@ -31,7 +31,7 @@ async function authRequest(path, body, headers = adminHeaders) {
 }
 
 const {users} = await authRequest('/auth/v1/admin/users?page=1&per_page=100');
-const owners = users.filter(user => user.app_metadata?.role === 'editor');
+const owners = users.filter(user => user.email && !user.deleted_at);
 assert.equal(owners.length, 1, 'Production acceptance requires one configured owner');
 const link = await authRequest('/auth/v1/admin/generate_link', {type:'magiclink',email:owners[0].email});
 const session = await authRequest('/auth/v1/verify', {type:'magiclink',token_hash:link.hashed_token}, {

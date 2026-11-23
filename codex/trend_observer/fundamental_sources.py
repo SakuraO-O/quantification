@@ -277,6 +277,20 @@ class FundamentalSynchronizer:
                     "announcement_date": notice_date, "document_key": (record_id, content_hash)})
         saved_documents = self.store.upsert("source_documents", documents, "source,source_record_id,content_hash")
         document_ids = {(row["source_record_id"], row["content_hash"]): row["source_document_id"] for row in saved_documents}
+        received = len(candidates)
+        review_changed = 0
+        observe = getattr(self.store, "observe_review_fact", None)
+        if observe:
+            from .quarterly import METRICS
+            remaining = []
+            for item in candidates:
+                if item["metric_code"] not in METRICS:
+                    remaining.append(item)
+                    continue
+                fact = {key: value for key, value in item.items() if key != "document_key"}
+                result = observe("financial", sid, fact, document_ids[item["document_key"]])
+                review_changed += bool(result.get("changed"))
+            candidates = remaining
         history = self.store.select("financial_facts", select="financial_fact_id,report_period,metric_code,value,version,source_document_id,verification_status,is_current",
             filters={"security_id": f"eq.{sid}"}, order="report_period.asc,metric_code.asc,version.asc")
         current = {(str(row["report_period"]), row["metric_code"]): row for row in history if row.get("is_current")}
@@ -309,7 +323,7 @@ class FundamentalSynchronizer:
             for fact_id in replaced:
                 self.store.patch("financial_facts", {"financial_fact_id": f"eq.{fact_id}"}, {"is_current": True})
             raise
-        return len(candidates), len(changed_rows)
+        return received, len(changed_rows) + review_changed
 
     def _write_dividends(self, asset: dict, frame: Any) -> tuple[int, int]:
         sid = security_id(asset["symbol"], asset["market"])
@@ -369,7 +383,7 @@ class FundamentalSynchronizer:
         if len(identities) != len(set(identities)):
             raise ValueError("分红来源存在无法区分的重复事件")
         existing = {row["announcement_id"]: row for row in self.store.select(
-            "dividend_events", select="announcement_id,report_period,fiscal_year,event_stage,is_current,announcement_date,ex_date,bonus_shares_per_share,transfer_shares_per_share,cash_dividend_per_share,source_document_id,verification_status,superseded_by_plan_key",
+            "dividend_events", select="dividend_event_id,plan_key,announcement_id,report_period,fiscal_year,event_stage,is_current,announcement_date,ex_date,bonus_shares_per_share,transfer_shares_per_share,cash_dividend_per_share,source_document_id,verification_status,superseded_by_plan_key",
             filters={"security_id": f"eq.{sid}", "report_period": "not.is.null"})}
         incoming_counts = Counter(str(row["report_period"]) for row in candidates
                                   if row["event_stage"] == "implemented")
@@ -389,6 +403,20 @@ class FundamentalSynchronizer:
             document_key = payload.pop("document_key")
             payload["source_document_id"] = document_ids[document_key]
             rows.append(payload)
+        observe = getattr(self.store, "observe_review_fact", None)
+        if observe:
+            changed = 0
+            for row in rows:
+                previous = existing.get(row["announcement_id"], {})
+                # Explicit links established by a reviewed plan survive later
+                # provider polling; never guess a plan from its year alone.
+                plan_key = previous.get("superseded_by_plan_key") or previous.get("plan_key")
+                fact = {key: row.get(key) for key in ("report_period", "fiscal_year", "event_stage",
+                    "announcement_id", "ex_date", "announcement_date", "bonus_shares_per_share", "transfer_shares_per_share")}
+                fact |= {"value": row["cash_dividend_per_share"], "plan_key": plan_key}
+                result = observe("dividend", sid, fact, row["source_document_id"])
+                changed += bool(result.get("changed"))
+            return len(rows), changed
         new_rows = [row for row in rows if row["announcement_id"] not in existing]
         updated = 0
         changed_years = {row["fiscal_year"] for row in new_rows}
@@ -437,20 +465,20 @@ class FundamentalSynchronizer:
         annual = [(period, values) for period, values in grouped.items() if values]
         return max(annual, default=(None, {}), key=lambda item: item[0] or date.min)
 
-    def _write_assessment(self, asset: dict) -> bool:
+    def current_assessment(self, asset: dict) -> dict | None:
         sid = security_id(asset["symbol"], asset["market"])
         rows = self.store.select("financial_facts", select="report_period,metric_code,value", filters={
-            "security_id": f"eq.{sid}", "is_current": "eq.true", "period_type": "eq.annual"}, order="report_period.asc")
+            "security_id": f"eq.{sid}", "is_current": "eq.true", "period_type": "eq.annual", "verification_status": "eq.verified"}, order="report_period.asc")
         latest_period, current = self._latest_by_metric(rows)
         if latest_period is None:
-            return False
+            return None
         prior_periods = sorted({_date(row.get("report_period")) for row in rows if _date(row.get("report_period")) and _date(row.get("report_period")) < latest_period})
         prior = {}
         if prior_periods:
             prior = self._latest_by_metric([row for row in rows if _date(row.get("report_period")) == prior_periods[-1]])[1]
         dividends = self.store.select("dividend_events", select="cash_dividend_per_share", filters={
             "security_id": f"eq.{sid}", "fiscal_year": f"eq.{latest_period.year}",
-            "event_stage": "eq.implemented", "report_period": "not.is.null", "is_current": "eq.true"})
+            "event_stage": "eq.implemented", "verification_status": "eq.verified", "report_period": "not.is.null", "is_current": "eq.true"})
         dividend_per_share = sum(_number(row.get("cash_dividend_per_share")) or 0 for row in dividends)
         eps = current.get("earnings_per_share")
         ocf_ps = current.get("operating_cashflow_per_share")
@@ -473,6 +501,14 @@ class FundamentalSynchronizer:
                    "capital_structure_status": assessment.capital_structure_status,
                    "fundamental_status": assessment.fundamental_status, "evidence": assessment.evidence,
                    "main_risk": assessment.main_risk, "calculation_version": self.calculation_version}
+        return payload
+
+    def _write_assessment(self, asset: dict) -> bool:
+        payload = self.current_assessment(asset)
+        if payload is None:
+            return False
+        sid = payload["security_id"]
+        latest_period = payload["report_period"]
         existing = self.store.select("fundamental_assessments", select="fundamental_assessment_id", filters={
             "security_id": f"eq.{sid}", "report_period": f"eq.{latest_period.isoformat()}",
             "calculation_version": f"eq.{self.calculation_version}"}, limit=1)

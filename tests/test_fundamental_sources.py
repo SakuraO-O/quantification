@@ -154,6 +154,10 @@ class FundamentalSourceTest(unittest.TestCase):
         self.assertEqual(event["bonus_shares_per_share"], 0)
         self.assertEqual(event["transfer_shares_per_share"], 0)
         self.assertNotIn("document_key", event)
+        self.assertEqual(store.tables["fundamental_assessments"], [])
+        for row in store.tables["financial_facts"] + store.tables["dividend_events"]:
+            row["verification_status"] = "verified"
+        sync._write_assessment(asset)
         assessment = store.tables["fundamental_assessments"][0]
         self.assertEqual(assessment["report_period"], date(2025, 12, 31))
         self.assertEqual(assessment["dividend_safety_status"], "稳健")
@@ -217,6 +221,10 @@ class FundamentalSourceTest(unittest.TestCase):
         sync = FundamentalSynchronizer(store, FundamentalSource(lambda _: finance_frame(bank=True), lambda _: dividend_frame()))
         result = sync.sync_asset(asset, today=date(2026, 7, 19), force=True)
         self.assertEqual(result.status, "succeeded")
+        self.assertEqual(store.tables["fundamental_assessments"], [])
+        for row in store.tables["financial_facts"] + store.tables["dividend_events"]:
+            row["verification_status"] = "verified"
+        sync._write_assessment(asset)
         assessment = store.tables["fundamental_assessments"][0]
         self.assertEqual(assessment["cash_reinvestment_status"], "稳健")
         self.assertEqual(assessment["capital_structure_status"], "稳健")
@@ -231,7 +239,8 @@ class FundamentalSourceTest(unittest.TestCase):
         sync = FundamentalSynchronizer(store, FundamentalSource(finance, lambda _: dividend_frame()))
         results = [sync.sync_asset(asset, today=date(2026, 7, 19), force=True) for asset in (good, bad)]
         self.assertEqual([result.status for result in results], ["succeeded", "failed"])
-        self.assertTrue(store.tables["fundamental_assessments"])
+        self.assertTrue(store.tables["financial_facts"])
+        self.assertEqual(store.tables["fundamental_assessments"], [])
         self.assertTrue(store.issues)
 
     def test_skips_non_disclosure_day_without_network_request(self):

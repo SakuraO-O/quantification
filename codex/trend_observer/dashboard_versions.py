@@ -11,12 +11,13 @@ from .config import ASSETS, MARKET_TIMEZONE, STYLE_COMPASS_PAIRS
 from .dividends import annual_dividend_summary
 from .ingestion import CALCULATION_VERSION
 from .quarterly import build_quarterly
+from .review_dependencies import bind_dependencies
 from .style_compass import calculate_style_compass, style_recommendation_details
 from .supabase_store import SupabaseStore
 from .total_return import stock_three_year_returns
 
 
-PUBLICATION_CALCULATION_VERSION = CALCULATION_VERSION + ":publication-20261119"
+PUBLICATION_CALCULATION_VERSION = CALCULATION_VERSION + ":publication-20261123:review-v1"
 
 
 CURRENT_SIGNAL_FIELDS = (
@@ -62,7 +63,7 @@ class DashboardPublisher:
         )
         events = self.store.select(
             "dividend_events",
-            select="report_period,fiscal_year,plan_key,event_stage,cash_dividend_per_share,cash_dividend_total,approval_basis,is_current,verification_status",
+            select="report_period,fiscal_year,announcement_id,plan_key,event_stage,cash_dividend_per_share,cash_dividend_total,approval_basis,is_current,verification_status",
             filters=filters | {"is_current": "eq.true"},
         )
         documents = self.store.select(
@@ -75,7 +76,7 @@ class DashboardPublisher:
             select="fiscal_year,status,source_document_id",
             filters=filters,
         )
-        return build_quarterly(facts, events, documents, reviews, listing_date)
+        return bind_dependencies(build_quarterly(facts, events, documents, reviews, listing_date), sid, events)
 
     def _dividend_history_current(self, asset: dict, trade_date: str) -> bool:
         watermark = getattr(self.store, "get_watermark", lambda _key: None)(
@@ -210,15 +211,23 @@ class DashboardPublisher:
                     }
             signal = {key: value for key, value in signal.items() if key != "updated_at"}
             record = {
-                "name": asset["name"], "symbol": asset["symbol"], "market": asset["market"], "asset_type": asset["asset_type"],
+                "security_id": asset["security_id"], "name": asset["name"], "symbol": asset["symbol"], "market": asset["market"], "asset_type": asset["asset_type"],
                 "industry_template": asset.get("industry_template"),
             } | signal
             if asset["asset_type"] == "股票":
                 dividends = self._dividend_events(asset["security_id"])
-                assessment = self._latest_fundamental_assessment(asset["security_id"])
+                # Review edits must not reuse an assessment computed before the
+                # fact change. Reuse the existing Python calculation at publish.
+                if callable(getattr(self.store, "observe_review_fact", None)):
+                    from .fundamental_sources import FundamentalSynchronizer
+                    assessment = FundamentalSynchronizer(self.store).current_assessment(asset)
+                else:
+                    assessment = self._latest_fundamental_assessment(asset["security_id"])
                 record |= {
                     "latest_announcement_date": max((row.get("announcement_date") for row in dividends if row.get("announcement_date")), default=None),
                     "fundamental_assessment": assessment,
+                    "fundamental_status": (assessment or {}).get("fundamental_status", "数据不足"),
+                    "dividend_safety_status": (assessment or {}).get("dividend_safety_status", "数据不足"),
                     "quarterly": self._quarterly(asset["security_id"], asset.get("listing_date")),
                 }
                 if signal.get("data_status") == "current":
@@ -270,6 +279,7 @@ class DashboardPublisher:
         allocation = self._allocation()
         payload = {
             "schema_version": 2,
+            "review_revision": getattr(self.store, "review_revision", lambda: 0)(),
             "latest_market_date": max(valid_dates) if valid_dates else None,
             "assets": records,
             "allocation": allocation,
