@@ -119,11 +119,30 @@ try {
   await page.waitForFunction(() => window.__trendDashboardRuntime.historyRanges.get('sh600938') === '5y', null, {timeout:90000});
   await page.locator('#price-chart').hover();
   await expect(page.locator('#dashboard-chart-tooltip')).toBeVisible();
+  await page.locator('[data-close="detail-modal"]').click();
+  assert(overview.review && Number.isInteger(overview.review.pending_facts), 'Live review summary missing');
+  await page.locator('#review-entry').click();
+  await expect(page.locator('#review-workbench')).toBeVisible();
+  await expect(page.locator('#review-count-pending')).toHaveText(String(overview.review.pending_facts));
+  await expect(page.locator('#review-count-annual')).toHaveText(String(overview.review.pending_years));
+  if (overview.review.pending_facts > 0) {
+    await expect(page.locator('#review-list th').filter({hasText:/^报告期$/})).toBeVisible();
+    await page.locator('[data-detail-index="0"]').click();
+    await expect(page.locator('#review-detail #review-detail-title')).toBeVisible();
+    await expect(page.locator('#review-detail')).toContainText('事实 v');
+    await page.locator('#review-detail [data-action="close"]').first().click();
+  } else {
+    await expect(page.locator('#review-list')).toContainText('当前筛选下没有记录');
+  }
+  await page.locator('[data-review-tab="annual"]').click();
+  await expect(page.locator('#review-list th').filter({hasText:/^报告年度$/})).toBeVisible();
+  await page.locator('[data-review="close-work"]').click();
   assert.deepEqual(errors, []);
   const result = await page.evaluate(() => ({
     version:window.__trendDashboardRuntime.version,
     five_year_rows:window.__trendDashboardRuntime.histories.get('sh600938').history.length,
-    status:document.querySelector('#dashboard-publication-status').textContent
+    status:document.querySelector('#dashboard-publication-status').textContent,
+    review_counts:overview.review
   }));
   console.log(JSON.stringify({production_acceptance:'passed',...result}));
 } finally {

@@ -155,7 +155,7 @@ test('review workbench separates report period, shows full years, and preserves 
   await expect(page.locator('#review-list th').filter({hasText:/^股票$/})).toBeVisible();
   await expect(page.locator('#review-list th').filter({hasText:/^报告期$/})).toBeVisible();
   await expect(page.locator('#review-list')).toContainText('2026-11-23 10:14:00');
-  await page.screenshot({path:'/private/tmp/trend-review-workbench.png'});
+  await page.screenshot({path:test.info().outputPath('trend-review-workbench.png')});
   await page.locator('[data-detail-index="0"]').click();await expect(page.locator('#review-detail')).toContainText('2026-11-23 10:14:00');
   await expect(page.locator('#review-detail')).toContainText('100.123456');
   await page.locator('#review-detail [data-action=close]').first().click();
