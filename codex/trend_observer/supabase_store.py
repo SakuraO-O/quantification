@@ -163,6 +163,23 @@ class SupabaseStore:
 
         return self._request("POST", f"/rest/v1/rpc/{function}", data=params or {})
 
+    def observe_review_fact(self, kind: str, security: str, fact: dict, document_id: str) -> dict:
+        normalized = _json_value(fact)
+        # Numeric strings compare canonically across pandas floats / CSV / RPC.
+        from decimal import Decimal
+        for key in ("value", "cash_dividend_total", "bonus_shares_per_share", "transfer_shares_per_share"):
+            if normalized.get(key) is not None:
+                normalized[key] = format(Decimal(str(normalized[key])).normalize(), "f")
+        return self.rpc("review_observe", {"p_kind": kind, "p_security": security,
+            "p_payload": {"fact": normalized, "source_document_id": document_id,
+                          "observation_hash": payload_hash({"fact": normalized, "document": document_id})}})
+
+    def review_revision(self) -> int:
+        return int(self.rpc("review_revision") or 0)
+
+    def review_status(self, version_id: str | None = None) -> dict:
+        return self.rpc("review_overview", {"p_version": version_id}) or {}
+
     def seed_asset_master(self, securities: list[dict], mappings: list[dict]) -> None:
         self.upsert("securities", securities, "security_id")
         self.upsert("provider_symbol_map", mappings, "security_id,provider")

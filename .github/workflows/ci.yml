@@ -33,6 +33,7 @@ jobs:
         run: |
           node --check codex/dashboard_auth.js
           node --check codex/dashboard_runtime.js
+          node --check codex/dashboard_review.js
 
   browser-and-edge:
     runs-on: ubuntu-latest
@@ -53,7 +54,7 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - run: deno test --no-lock --node-modules-dir=none --allow-env supabase/functions/dashboard-api/index_test.ts
+      - run: deno test --no-lock --node-modules-dir=none --allow-env supabase/functions/dashboard-api/index_test.ts supabase/functions/quarterly-review/index_test.ts
 
   production-acceptance:
     if: github.event_name == 'workflow_dispatch' && inputs.verify_production

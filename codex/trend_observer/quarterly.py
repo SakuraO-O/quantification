@@ -1,7 +1,7 @@
 """Published quarterly research figures. All arithmetic lives on the server.
 
-Structured provider rows are candidates. Only facts backed by reviewed formal
-reports and dividend announcements can enter the published numerical series.
+Structured provider rows start as candidates. Only current verified facts,
+backed by an automatic cross-check or a recorded human review, enter the series.
 """
 
 from __future__ import annotations

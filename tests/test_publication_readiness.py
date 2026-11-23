@@ -34,6 +34,7 @@ class PublicationReadinessTest(unittest.TestCase):
 
     def test_unchanged_version_can_send_on_two_business_dates(self):
         store = Mock()
+        store.review_status.return_value = {"invalidations": []}
         store.ready_morning_version.return_value = {'dashboard_version_id': 'same', 'payload': {'assets': []}}
         store.claim_dispatch.return_value = True
         with patch('codex.trend_observer.dispatch.send_text_message', return_value=200):
@@ -45,6 +46,7 @@ class PublicationReadinessTest(unittest.TestCase):
 
     def test_unknown_webhook_result_retains_claim_without_marking_retryable(self):
         store = Mock()
+        store.review_status.return_value = {"invalidations": []}
         store.ready_morning_version.return_value = {'dashboard_version_id': 'v', 'payload': {'assets': []}}
         store.claim_dispatch.return_value = True
         with patch('codex.trend_observer.dispatch.send_text_message', side_effect=requests.Timeout('unknown')):

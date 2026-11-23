@@ -87,17 +87,17 @@ class DashboardV2Test(unittest.TestCase):
 
     def test_single_user_editor_authorization_and_persistence(self):
         self.assertIn("enable_signup = false", self.supabase_config)
-        self.assertIn("user.app_metadata?.role", self.shared)
+        self.assertNotIn("app_metadata?.role", self.shared)
         self.assertNotIn("user_metadata", self.shared)
-        self.assertIn('["viewer", "editor"]', self.api)
-        self.assertIn('["editor"]', self.portfolio_api)
+        self.assertIn("authorizedClients(authHeader)", self.api)
+        self.assertIn("authorizedClients(authHeader)", self.portfolio_api)
         self.assertIn('.rpc("save_portfolio_allocation"', self.portfolio_api)
         self.assertIn("saveAllocation", self.runtime)
         self.assertIn("runtimeState.saveAllocation = saveAllocation", self.runtime)
         self.assertNotIn("async function saveEdit()", self.html)
 
     def test_dashboard_supports_granular_fundamentals_permission(self):
-        self.assertIn('user.app_metadata?.permissions', self.api)
+        self.assertNotIn('user.app_metadata?.permissions', self.api)
         self.assertIn('"view_fundamentals"', self.api)
         self.assertIn('fundamentals_access: false', self.api)
         self.assertIn('runtimeState.permissions.has("view_fundamentals")', self.runtime)

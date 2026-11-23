@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.portfolio-config]
 verify_jwt = false
+
+[functions.quarterly-review]
+verify_jwt = false

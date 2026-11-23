@@ -30,6 +30,9 @@ def dispatch_morning_report(store: SupabaseStore, now: datetime | None = None) -
         return DispatchResult("skipped", "未到08:00发送窗口")
     day = now.date().isoformat()
     version = store.ready_morning_version(day)
+    if version and hasattr(store, "review_status"):
+        if store.review_status(version["dashboard_version_id"]).get("invalidations"):
+            version = None
     if version:
         key = f"morning_report:{day}"
         if not store.claim_dispatch(key, version["dashboard_version_id"], "morning_report"):
