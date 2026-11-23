@@ -141,10 +141,9 @@ try {
   const result = await page.evaluate(() => ({
     version:window.__trendDashboardRuntime.version,
     five_year_rows:window.__trendDashboardRuntime.histories.get('sh600938').history.length,
-    status:document.querySelector('#dashboard-publication-status').textContent,
-    review_counts:overview.review
+    status:document.querySelector('#dashboard-publication-status').textContent
   }));
-  console.log(JSON.stringify({production_acceptance:'passed',...result}));
+  console.log(JSON.stringify({production_acceptance:'passed',...result,review_counts:{pending_facts:overview.review.pending_facts,pending_years:overview.review.pending_years}}));
 } finally {
   if (browser) await browser.close();
   const response = await fetch(config.supabaseUrl+'/auth/v1/logout?scope=local', {
